@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import shutil
 import unittest
+from pathlib import Path
 
 from neuropixel import trace_header
 import spikeglx
@@ -10,7 +11,6 @@ from neurodsp import voltage, utils
 
 _logger = logging.getLogger(__name__)
 
-from pathlib import Path
 DATA_PATH = Path("/datadisk/Data/tests-ibl-neuropixel")
 
 

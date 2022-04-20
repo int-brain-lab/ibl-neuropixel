@@ -4,5 +4,3 @@ mtscomp
 numpy
 one-api
 scipy
-cupy
-cudatoolkit <= 11.0
