@@ -51,7 +51,6 @@ def destripe_array(data, fs=30000, fshigh=300., taper_size=64, sample_shifts=Non
         inside_brain = cp.where(channel_labels != 3)[0]
         data[inside_brain, :] = kfilt(data[inside_brain, :], gpu=True, **kfilt_kwargs)  # apply the k-filter / CAR
     else:
-        print(data.dtype)
         data = kfilt(data, gpu=True, **kfilt_kwargs)  # apply the k-filter / CAR
 
     return data
