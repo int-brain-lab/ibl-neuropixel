@@ -1,5 +1,9 @@
 import numpy as np
 
+# sample to volt conversion factors
+S2V_AP = 2.34375e-06
+S2V_LFP = 4.6875e-06
+
 TIP_SIZE_UM = 200
 
 SYNC_PIN_OUT = {'3A': {"pin01": 0,

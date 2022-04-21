@@ -2,24 +2,18 @@ import json
 import logging
 from pathlib import Path
 import re
-import shutil
 
 import numpy as np
 
 import mtscomp
 from iblutil.io import hashfile
 from iblutil.util import Bunch
-from one.alf.io import remove_uuid_file
-from one.api import ONE
 
 import neuropixel
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger('ibllib')
-# provided as convenience if no meta-data is provided, always better to read from meta
-S2V_AP = 2.34375e-06
-S2V_LFP = 4.6875e-06
 
 
 class Reader:
@@ -37,7 +31,7 @@ class Reader:
     one can provide more options to the reader:
     sr = spikeglx.Reader(..., dtype='int16, s2mv=2.34375e-06)
 
-    usual sample 2 mv conversion factors:
+    usual sample 2 mv conversion factors (cf. neuropixel module):
         s2mv = 2.34375e-06 (NP1 ap banc) : default value used
         s2mv = 4.6875e-06 (NP1 lfp band)
 
@@ -45,16 +39,21 @@ class Reader:
     """
 
     def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2v=None,
-                 nsync=None):
+                 nsync=None, ignore_warnings=False):
         """
         An interface for reading data from a SpikeGLX file
-        :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
+        :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
         :param open: when True the file is opened
         """
-        self.file_bin = Path(sglx_file)
-        self.nbytes = self.file_bin.stat().st_size
-        self.dtype = np.dtype(dtype)
+        self.ignore_warnings = ignore_warnings
         file_meta_data = Path(sglx_file).with_suffix('.meta')
+        self.file_bin = Path(sglx_file)
+        if file_meta_data == sglx_file:
+            # if a meta-data file is provided, try to get the binary file
+            self.file_bin = next(self.file_bin.parent.glob(f'{self.file_bin.stem}.*bin'), None)
+        self.nbytes = self.file_bin.stat().st_size if self.file_bin else None
+        self.dtype = np.dtype(dtype)
+
         if not file_meta_data.exists():
             err_str = "Instantiating an Reader without meta data requires providing nc, fs and nc parameters"
             assert (nc is not None and fs is not None and nc is not None), err_str
@@ -67,7 +66,7 @@ class Reader:
                 nsync = 1 if self.dtype == np.dtype('int16') else 0
             self._nsync = nsync
             if s2v is None:
-                s2v = S2V_AP if self.dtype == np.dtype('int16') else 1.0
+                s2v = neuropixel.S2V_AP if self.dtype == np.dtype('int16') else 1.0
             self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2v}
             self.channel_conversion_sample2v['samples'][-nsync:] = 1
         else:
@@ -76,7 +75,7 @@ class Reader:
             self.meta = read_meta_data(file_meta_data)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
-        if open:
+        if open and self.file_bin:
             self.open()
 
     def open(self):
@@ -88,7 +87,7 @@ class Reader:
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
                 self.meta['fileTimeSecs'] = ftsec
-                if ftsec > 1:  # avoid the checks for streaming data
+                if not self.ignore_warnings:  # avoid the checks for streaming data
                     _logger.warning(f"{sglx_file} : meta data and compressed chunks dont checkout\n"
                                     f"File duration: expected {self.meta['fileTimeSecs']},"
                                     f" actual {ftsec}\n"
@@ -96,13 +95,14 @@ class Reader:
         else:
             if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
                 ftsec = self.file_bin.stat().st_size / self.dtype.itemsize / self.nc / self.fs
-                _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
-                                f"File size: expected {self.meta['fileSizeBytes']},"
-                                f" actual {self.file_bin.stat().st_size}\n"
-                                f"File duration: expected {self.meta['fileTimeSecs']},"
-                                f" actual {ftsec}\n"
-                                f"Will attempt to fudge the meta-data information.")
                 self.meta['fileTimeSecs'] = ftsec
+                if not self.ignore_warnings:
+                    _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
+                                    f"File size: expected {self.meta['fileSizeBytes']},"
+                                    f" actual {self.file_bin.stat().st_size}\n"
+                                    f"File duration: expected {self.meta['fileTimeSecs']},"
+                                    f" actual {ftsec}\n"
+                                    f"Will attempt to fudge the meta-data information.")
             self._raw = np.memmap(sglx_file, dtype=self.dtype, mode='r', shape=(self.ns, self.nc))
 
     def close(self):
@@ -332,6 +332,10 @@ class Reader:
         log_func(f"SHA1 metadata: {sm}")
         log_func(f"SHA1 computed: {sc}")
         return sm == sc
+
+
+class Streamer(Reader):
+    pass
 
 
 def read(sglx_file, first_sample=0, last_sample=10000):
@@ -786,95 +790,3 @@ def get_sync_map(folder_ephys):
         return None
     else:
         return _sync_map_from_hardware_config(hc)
-
-
-def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None, cache_dir=None):
-    """
-    TODO Document
-    :param url_cbin:
-    :param url_ch:
-    :param first_chunk:
-    :param last_chunk:
-    :return:
-    """
-    assert str(url_cbin).endswith('.cbin')
-    assert str(url_ch).endswith('.ch')
-    one = one or ONE()
-    webclient = one.alyx
-    cache_dir = cache_dir or webclient.cache_dir
-    relpath = Path(url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
-    # write the temp file into a subdirectory
-    tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
-    target_dir = Path(cache_dir, relpath, tdir_chunk)
-    Path(target_dir).mkdir(parents=True, exist_ok=True)
-
-    # First, download the .ch file if necessary
-    if isinstance(url_ch, Path):
-        ch_file = url_ch
-    else:
-        ch_file = Path(webclient.download_file(
-            url_ch, target_dir=target_dir, clobber=True, return_md5=False))
-        ch_file = remove_uuid_file(ch_file)
-    ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
-
-    # Load the .ch file.
-    with open(ch_file, 'r') as f:
-        cmeta = json.load(f)
-
-    # Get the first sample index, and the number of samples to download.
-    i0 = cmeta['chunk_bounds'][first_chunk]
-    ns_stream = cmeta['chunk_bounds'][last_chunk + 1] - i0
-    total_samples = cmeta['chunk_bounds'][-1]
-
-    # handles the meta file
-    meta_local_path = ch_file_stream.with_suffix('.meta')
-    if not meta_local_path.exists():
-        shutil.copy(ch_file.with_suffix('.meta'), meta_local_path)
-
-    # if the cached version happens to be the same as the one on disk, just load it
-    if ch_file_stream.exists():
-        with open(ch_file_stream, 'r') as f:
-            cmeta_stream = json.load(f)
-        if (cmeta_stream.get('chopped_first_sample', None) == i0 and
-                cmeta_stream.get('chopped_total_samples', None) == total_samples):
-            return Reader(ch_file_stream.with_suffix('.cbin'))
-    else:
-        shutil.copy(ch_file, ch_file_stream)
-    assert ch_file_stream.exists()
-
-    # prepare the metadata file
-    cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
-    cmeta['chunk_bounds'] = [_ - i0 for _ in cmeta['chunk_bounds']]
-    assert len(cmeta['chunk_bounds']) >= 2
-    assert cmeta['chunk_bounds'][0] == 0
-
-    first_byte = cmeta['chunk_offsets'][first_chunk]
-    cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
-    cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
-    assert len(cmeta['chunk_offsets']) >= 2
-    assert cmeta['chunk_offsets'][0] == 0
-    n_bytes = cmeta['chunk_offsets'][-1]
-    assert n_bytes > 0
-
-    # Save the chopped chunk bounds and offsets.
-    cmeta['sha1_compressed'] = None
-    cmeta['sha1_uncompressed'] = None
-    cmeta['chopped'] = True
-    cmeta['chopped_first_sample'] = i0
-    cmeta['chopped_samples'] = ns_stream
-    cmeta['chopped_total_samples'] = total_samples
-
-    with open(ch_file_stream, 'w') as f:
-        json.dump(cmeta, f, indent=2, sort_keys=True)
-
-    # Download the requested chunks
-    cbin_local_path = webclient.download_file(
-        url_cbin, chunks=(first_byte, n_bytes),
-        target_dir=target_dir, clobber=True, return_md5=False)
-    cbin_local_path = remove_uuid_file(cbin_local_path)
-    cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
-    cbin_local_path.replace(cbin_local_path_renamed)
-    assert cbin_local_path_renamed.exists()
-
-    reader = Reader(cbin_local_path_renamed)
-    return reader

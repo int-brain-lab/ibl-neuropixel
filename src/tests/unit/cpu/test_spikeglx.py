@@ -501,7 +501,7 @@ class TestsBasicReader(unittest.TestCase):
         # here we expect scaling on all channels but the sync channel
         np.random.seed(42)
         kwargs = dict(ns=60000, nc=385, fs=30000, dtype=np.int16)
-        s2v = np.ones(385) * spikeglx.S2V_AP
+        s2v = np.ones(385) * neuropixel.S2V_AP
         s2v[-1] = 1
         data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
         data[:, -1] = 1
@@ -510,6 +510,12 @@ class TestsBasicReader(unittest.TestCase):
             with open(tf.name, mode='w') as fp:
                 data.tofile(fp)
             sr = spikeglx.Reader(tf.name, **kwargs)
-            assert np.all(np.isclose(sr[:, :-1], data[:, :-1].astype(np.float32) * spikeglx.S2V_AP))
+            assert np.all(np.isclose(sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP))
             assert sr.nsync == 1
             assert np.all(sr.sample2volts == s2v)
+
+    def test_load_meta_file_only(self):
+        # here we load only a meta-file
+        meta_file = Path(TEST_PATH).joinpath('sample3B_g0_t0.imec1.ap.meta')
+        sr = spikeglx.Reader(meta_file)
+        assert sr.shape == (24734244, 385)

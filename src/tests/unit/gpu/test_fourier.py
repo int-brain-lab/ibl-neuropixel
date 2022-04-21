@@ -4,6 +4,7 @@ import unittest
 
 from neurodsp.fourier import fshift, channel_shift
 
+
 class TestFourierAlignmentGpuCpuParity(unittest.TestCase):
 
     def test_parity(self):
