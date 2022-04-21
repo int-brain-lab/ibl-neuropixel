@@ -46,11 +46,14 @@ class Reader:
         :param open: when True the file is opened
         """
         self.ignore_warnings = ignore_warnings
-        file_meta_data = Path(sglx_file).with_suffix('.meta')
-        self.file_bin = Path(sglx_file)
+        sglx_file = Path(sglx_file)
+        file_meta_data = sglx_file.with_suffix('.meta')
         if file_meta_data == sglx_file:
             # if a meta-data file is provided, try to get the binary file
-            self.file_bin = next(self.file_bin.parent.glob(f'{self.file_bin.stem}.*bin'), None)
+            self.file_bin = sglx_file.with_suffix('.cbin') if sglx_file.with_suffix('.cbin').exists() else None
+            self.file_bin = sglx_file.with_suffix('.bin') if sglx_file.with_suffix('.bin').exists() else None
+        else:
+            self.file_bin = sglx_file
         self.nbytes = self.file_bin.stat().st_size if self.file_bin else None
         self.dtype = np.dtype(dtype)
 
@@ -86,12 +89,12 @@ class Reader:
             self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
-                self.meta['fileTimeSecs'] = ftsec
                 if not self.ignore_warnings:  # avoid the checks for streaming data
                     _logger.warning(f"{sglx_file} : meta data and compressed chunks dont checkout\n"
                                     f"File duration: expected {self.meta['fileTimeSecs']},"
                                     f" actual {ftsec}\n"
                                     f"Will attempt to fudge the meta-data information.")
+                self.meta['fileTimeSecs'] = ftsec
         else:
             if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
                 ftsec = self.file_bin.stat().st_size / self.dtype.itemsize / self.nc / self.fs
