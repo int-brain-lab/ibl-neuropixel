@@ -560,6 +560,13 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
         return r
 
     def detrend(x, nmed):
+        """
+        Subtract the trend from a vector
+        The trend is a median filtered version of the said vector with tapering
+        :param x: input vector
+        :param nmed: number of points of the median filter
+        :return: np.array
+        """
         ntap = int(np.ceil(nmed / 2))
         xf = np.r_[np.zeros(ntap) + x[0], x, np.zeros(ntap) + x[-1]]
         # assert np.all(xcorf[ntap:-ntap] == xcor)
@@ -580,7 +587,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
         def nxcor(x, ref):
             ref = ref - np.mean(ref)
             apeak = fxcor(ref, ref)[0]
-            x = x - np.mean(x, axis=-1)[:, np.newaxis]
+            x = x - np.mean(x, axis=-1)[:, np.newaxis]  # remove DC component
             return fxcor(x, ref)[:, 0] / apeak
 
         ref = np.median(raw, axis=0)
