@@ -5,9 +5,12 @@ Collection of tools to handle Neuropixel 1.0 and 2.0 data
 ## Installation
 `pip install ibl-neuropixel`
 
+
+
 ## Destriping
+### Getting started
 Minimal working example to destripe a neuropixel binary file. 
-```
+```python
 from pathlib import Path
 from neurodsp.voltage import decompress_destripe_cbin
 sr_file = Path('/datadisk/Data/spike_sorting/pykilosort_tests/imec_385_100s.ap.bin')
@@ -15,6 +18,23 @@ out_file = Path('/datadisk/scratch/imec_385_100s.ap.bin')
 
 decompress_destripe_cbin(sr_file=sr_file, output_file=out_file, nprocesses=8)
 ```
+
+### Viewer
+
+The best way to look at the results is to use [viewephys](https://github.com/oliche/viewephys),
+open an ephys viewer on the raw data.
+
+- tick the destipe box.
+- move to a desired location in the file
+- ctr+P will make the gain and axis the same on both windows
+
+![alt text](./docs/raw_bin_viewer_destripe.png "Ephys viewer")
+
+You can then move within the raw data file.
+
+### White Paper
+The following describes the methods implemented in this repository.
+https://doi.org/10.6084/m9.figshare.19705522
 
 ## Contribution
 
@@ -27,7 +47,3 @@ python setup.py sdist bdist_wheel
 twine upload dist/*
 #twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 ```
-
-### White Paper
-The following describes the methods implemented in this repository.
-https://doi.org/10.6084/m9.figshare.19705522
