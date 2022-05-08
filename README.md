@@ -6,9 +6,10 @@ Collection of tools to handle Neuropixel 1.0 and 2.0 data
 `pip install ibl-neuropixel`
 
 
-
 ## Destriping
 ### Getting started
+This relies on a fast fourier transform external library: `pip install pyfftw`.
+
 Minimal working example to destripe a neuropixel binary file. 
 ```python
 from pathlib import Path
