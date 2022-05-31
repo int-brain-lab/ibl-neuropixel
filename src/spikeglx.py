@@ -503,6 +503,20 @@ def _get_type_from_meta(md):
         return 'nidq'
 
 
+def _split_geometry_into_shanks(th, meta_data):
+    """
+    Reduces the geometry information to that pertaining to specific shank
+    :param th:
+    :param meta_data:
+    :return:
+    """
+    if 'NP2.4_shank' in meta_data.keys():
+        shank_idx = np.where(th['shank'] == int(meta_data['NP2.4_shank']))[0]
+        th = {key: th[key][shank_idx] for key in th.keys()}
+
+    return th
+
+
 def _geometry_from_meta(meta_data):
     """
     Gets the geometry, ie. the full trace header for the recording
@@ -520,9 +534,13 @@ def _geometry_from_meta(meta_data):
     if major_version == 1:
         # the spike sorting channel maps have a flipped version of the channel map
         th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
+
     th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
     th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version)
-    th['ind'] = np.arange(cm['col'].size)
+
+    th = _split_geometry_into_shanks(th, meta_data)
+    th['ind'] = np.arange(th['col'].size)
+
     return th
 
 
