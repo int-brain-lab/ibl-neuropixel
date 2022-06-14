@@ -4,6 +4,7 @@ import shutil
 import logging
 from typing import Any
 import warnings
+import traceback
 
 import scipy.signal
 import numpy as np
@@ -29,6 +30,9 @@ def _deprecated_sites_coordinates() -> np.array:
                   "according to the probe versions: see help(neuropixel.trace_header)."
                   "\n If possible the reommended approach is to directly read the probe geometry"
                   "from the metadata using spigeglx.Reader")
+    for line in traceback.format_stack():
+        if 'ibllib' in line:
+            print(line.strip())
     refch_3a = np.array([36, 75, 112, 151, 188, 227, 264, 303, 340, 379])
     th = trace_header(version=1)
     SITES_COORDINATES = np.delete(np.c_[th['x'], th['y']], refch_3a, axis=0)
