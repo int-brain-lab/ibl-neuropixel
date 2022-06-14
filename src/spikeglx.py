@@ -282,7 +282,7 @@ class Reader:
                          outmeta=self.file_bin.with_suffix('.ch'),
                          sample_rate=self.fs,
                          n_channels=self.nc,
-                         dtype=np.int16,
+                         dtype=self.dtype,
                          **kwargs)
         file_out = file_tmp.with_suffix('.cbin')
         file_tmp.rename(file_out)
