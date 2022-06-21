@@ -255,7 +255,8 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
     if butter_kwargs is None:
         butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
     if k_kwargs is None:
-        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+        lagc = None if fs < 3000 else int(fs / 10)
+        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': lagc,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     if k_filter:
         spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
