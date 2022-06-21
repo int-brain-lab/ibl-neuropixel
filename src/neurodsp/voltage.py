@@ -708,3 +708,23 @@ def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
     # viewephys(sr[int(first * sr.fs) : int(last * sr.fs), :-sr.nsync].T, sr.fs, title='orig')
     # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
 
+
+def stack(data, word, fcn_agg=np.mean):
+    """
+    Stack numpy array traces according to the word vector
+    :param data: (ntr, ns) numpy array of sample values
+    :param word: (ntr) label according to which the traces will be aggregated (usually cdp)
+    :param fcn_agg: function, defaults to np.mean but could be np.sum or np.median
+    :return: stack (ntr_stack, ns): aggregated numpy array
+             fold ( ntr_stack): number of stacked traces
+    """
+    (ntr, ns) = data.shape
+    group, uinds, fold = np.unique(word, return_inverse=True, return_counts=True)
+    ntrs = group.size
+
+    stack = np.zeros((ntrs, ns), dtype=data.dtype)
+    for sind in np.arange(ntrs):
+        i2stack = sind == uinds
+        stack[sind, :] = fcn_agg(data[i2stack, :], axis=0)
+
+    return stack, fold
