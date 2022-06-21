@@ -665,3 +665,46 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
         from ibllib.plots.figures import ephys_bad_channels
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
+
+
+def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
+    """
+    Downsamples an LFP file and apply dstriping
+    ```
+    nc = 384
+    ns = int(lf_file_out.stat().st_size / nc / 4)
+    sr_ = spikeglx.Reader(lf_file_out, nc=nc, fs=sr.fs / RESAMPLE_FACTOR, ns=ns,  dtype=np.float32)
+    ```
+    :param lf_file:
+    :param RESAMPLE_FACTOR:
+    :param output: Path
+    :return: None
+    """
+
+    output = output or Path(lf_file).parent.joinpath('lf_resampled.bin')
+    sr = spikeglx.Reader(lf_file)
+    wg = utils.WindowGenerator(ns=sr.ns, nswin=65536, overlap=1024)
+    cflags = detect_bad_channels_cbin(lf_file)
+
+    c = 0
+    with open(output, 'wb') as f:
+        for first, last in wg.firstlast:
+            butter_kwargs = {'N': 3, 'Wn': np.array([2, 200]) / sr.fs * 2, 'btype': 'bandpass'}
+            sos = scipy.signal.butter(**butter_kwargs, output='sos')
+            raw = sr[first:last, :-sr.nsync]
+            raw = scipy.signal.sosfiltfilt(sos, raw, axis=0)
+            destripe = destripe_lfp(raw.T, fs=sr.fs, channel_labels=cflags)
+            # viewephys(raw.T, fs=sr.fs, title='raw')
+            # viewephys(destripe, fs=sr.fs, title='destripe')
+            rsamp = scipy.signal.decimate(destripe, RESAMPLE_FACTOR, axis=1, ftype='fir').T
+            # viewephys(rsamp, fs=sr.fs / RESAMPLE_FACTOR, title='rsamp')
+            first_valid = 0 if first == 0 else int(wg.overlap / 2 / RESAMPLE_FACTOR)
+            last_valid = rsamp.shape[0] if last == sr.ns else int(rsamp.shape[0] - wg.overlap / 2 / RESAMPLE_FACTOR)
+            rsamp = rsamp[first_valid:last_valid, :]
+            c += rsamp.shape[0]
+            print(first, last, last - first, first_valid, last_valid, c)
+            rsamp.astype(np.float32).tofile(f)
+    # first, last = (500, 550)
+    # viewephys(sr[int(first * sr.fs) : int(last * sr.fs), :-sr.nsync].T, sr.fs, title='orig')
+    # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
+
