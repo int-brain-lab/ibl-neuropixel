@@ -382,3 +382,8 @@ class TestStack(unittest.TestCase):
         stack, fold = voltage.stack(data, word=word)
         assert(np.all(fold == 3))
         assert(np.all(np.squeeze(np.unique(stack, axis=-1)) == np.arange(8) * 10))
+        # test with a header
+        header = {'toto': np.random.randn(ntr)}
+        stack, hstack = voltage.stack(data, word=word, header=header)
+        assert(list(hstack.keys()) == ['toto', 'fold'])
+        assert (np.all(hstack['fold'] == 3))

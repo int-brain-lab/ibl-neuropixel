@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import scipy.signal
 import scipy.stats
+import pandas as pd
 from joblib import Parallel, delayed, cpu_count
 
 import spikeglx
@@ -709,14 +710,15 @@ def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
     # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
 
 
-def stack(data, word, fcn_agg=np.mean):
+def stack(data, word, fcn_agg=np.mean, header=None):
     """
     Stack numpy array traces according to the word vector
     :param data: (ntr, ns) numpy array of sample values
     :param word: (ntr) label according to which the traces will be aggregated (usually cdp)
+    :param header: dictionary of vectors (ntr): header labels, will be aggregated as average
     :param fcn_agg: function, defaults to np.mean but could be np.sum or np.median
     :return: stack (ntr_stack, ns): aggregated numpy array
-             fold ( ntr_stack): number of stacked traces
+             header ( ntr_stack): aggregated header. If no header is provided, fold of coverage
     """
     (ntr, ns) = data.shape
     group, uinds, fold = np.unique(word, return_inverse=True, return_counts=True)
@@ -727,4 +729,14 @@ def stack(data, word, fcn_agg=np.mean):
         i2stack = sind == uinds
         stack[sind, :] = fcn_agg(data[i2stack, :], axis=0)
 
-    return stack, fold
+    # aggregate the header using pandas
+    if header is None:
+        hstack = fold
+    else:
+        header['stack_word'] = word
+        dfh = pd.DataFrame(header).groupby('stack_word')
+        hstack = dfh.aggregate('mean').to_dict(orient='series')
+        hstack = {k:hstack[k].values for k in hstack.keys()}
+        hstack['fold'] = fold
+
+    return stack, hstack
