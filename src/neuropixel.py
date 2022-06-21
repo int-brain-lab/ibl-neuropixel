@@ -1,6 +1,5 @@
 from pathlib import Path
 import copy
-import shutil
 import logging
 from typing import Any
 import warnings
@@ -480,9 +479,10 @@ class NP2Converter:
         :return:
         """
         if self.check_completed and self.delete_original:
-            _logger.info(f'Removing original files in folder {self.ap_file.parent}')
+            _logger.info(f'Removing original file in folder {self.ap_file}')
             self.sr.close()
-            shutil.rmtree(self.ap_file.parent)
+            self.ap_file.unlink()
+            # shutil.rmtree(self.ap_file.parent) #  should we remove the whole folder?
 
     def _split2shanks(self, chunk, etype='ap'):
         """
@@ -615,3 +615,26 @@ class NP2Converter:
             meta_shank[f'{self.np_version}_shank'] = int(sh[-1])
             meta_file = self.shank_info[sh]['lf_file'].with_suffix('.meta')
             spikeglx.write_meta_data(meta_shank, meta_file)
+
+    def get_processed_files(self):
+        """
+        Function to return full list of files output from the NP conversion
+        :return:
+        """
+        out_files = []
+        for sh in self.shank_info.keys():
+            ap_file = self.shank_info[sh]['ap_file']
+            out_files.append(ap_file)
+            out_files.append(ap_file.with_suffix('.meta'))
+
+            if ap_file.suffix == '.cbin':
+                out_files.append(ap_file.with_suffix('.ch'))
+
+            lf_file = self.shank_info[sh]['lf_file']
+            out_files.append(lf_file)
+            out_files.append(lf_file.with_suffix('.meta'))
+
+            if lf_file.suffix == '.cbin':
+                out_files.append(lf_file.with_suffix('.ch'))
+
+        return out_files
