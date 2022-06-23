@@ -130,6 +130,19 @@ def trace_header(version=1, nshank=1):
     return h
 
 
+def split_trace_header(h, shank=0):
+    """
+    Split the trace header into values for a specific shank. Applicable for NP2.4 probes
+    :param h:
+    :param shank:
+    :return:
+    """
+    shank_idx = np.where(h['shank'] == shank)[0]
+    h_shank = {key: h[key][shank_idx] for key in h.keys()}
+    return h_shank
+
+
+
 class NP2Converter:
     """
     Class used to 1. Extract LFP data from NP2 data and 2. If NP2.4 split the data into
@@ -217,7 +230,7 @@ class NP2Converter:
             status = self._process_NP21(overwrite=overwrite)
         else:
             _logger.warning('Meta file is not of type NP2.1 or NP2.4, cannot process')
-            status = 0
+            status = -1
         return status
 
     def _process_NP24(self, overwrite=False):
@@ -308,11 +321,12 @@ class NP2Converter:
                 _shank_info['lf_file'] = probe_path.joinpath(
                     ap_file_bin.replace('ap', 'lf'))
                 _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
+
+                shank_info[f'shank{sh}'] = _shank_info
             else:
                 self.already_exists = True
                 _logger.warning('One or more of the sub shank folders already exists, '
                                 'to force reprocessing set overwrite to True')
-            shank_info[f'shank{sh}'] = _shank_info
 
         return shank_info
 
@@ -324,15 +338,11 @@ class NP2Converter:
         :param overwrite: set to True to force rerunning even if lf.bin file already exists
         :return:
         """
-        if self.already_processed:
-            _logger.warning('This ap file is an NP2.4 that has already been split into shanks, '
-                            'nothing to do here')
-            return 0
 
         self.shank_info = self._prepare_files_NP21(overwrite=overwrite)
         if self.already_exists:
-            _logger.warning('One or more of the sub shank folders already exists, '
-                            'to force reprocessing set overwrite to True')
+            _logger.warning('This ap file is an NP2.1 that already has lfp extracted, '
+                            'nothing to do here')
             return 0
 
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
@@ -616,7 +626,7 @@ class NP2Converter:
             meta_file = self.shank_info[sh]['lf_file'].with_suffix('.meta')
             spikeglx.write_meta_data(meta_shank, meta_file)
 
-    def get_processed_files(self):
+    def get_processed_files_NP24(self):
         """
         Function to return full list of files output from the NP conversion
         :return:
@@ -636,5 +646,23 @@ class NP2Converter:
 
             if lf_file.suffix == '.cbin':
                 out_files.append(lf_file.with_suffix('.ch'))
+
+        return out_files
+
+    def get_processed_files_NP21(self):
+
+        out_files = []
+        for sh in self.shank_info.keys():
+            lf_file = self.shank_info[sh]['lf_file']
+            out_files.append(lf_file)
+            out_files.append(lf_file.with_suffix('.meta'))
+
+            if lf_file.suffix == '.cbin':
+                out_files.append(lf_file.with_suffix('.ch'))
+
+        out_files.append(self.ap_file)
+        out_files.append(self.ap_file.with_suffix('.meta'))
+        if self.ap_file.suffix == '.cbin':
+            out_files.append(self.ap_file.with_suffix('.ch'))
 
         return out_files

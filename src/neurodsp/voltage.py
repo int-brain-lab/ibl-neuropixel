@@ -264,7 +264,7 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
     return butter_kwargs, k_kwargs, spatial_fcn
 
 
-def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
+def destripe(x, fs, h=None, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (nc, ns)
     :param fs: sampling frequency
@@ -286,7 +286,8 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     :return: x, filtered array
     """
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter)
-    h = neuropixel.trace_header(version=neuropixel_version)
+    if h is None:
+        h = neuropixel.trace_header(version=neuropixel_version)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
     # butterworth
