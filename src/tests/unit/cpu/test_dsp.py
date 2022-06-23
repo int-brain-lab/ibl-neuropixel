@@ -349,6 +349,7 @@ class TestVoltage(unittest.TestCase):
         assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > .98
         # test the K option
         kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
+        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
         fk = voltage.fk(data_v1 + data_v2 + noise + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
                         ntr_pad=10, ntr_tap=15, lagc=.25,
                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
@@ -369,3 +370,20 @@ class TestCadzow(unittest.TestCase):
     def test_trajectory_matrixes(self):
         assert np.all(cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]]))
         assert np.all(cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]]))
+
+
+class TestStack(unittest.TestCase):
+
+    def test_simple_stack(self):
+        ntr, ns = (24, 400)
+        data = np.zeros((ntr, ns), dtype=np.float32)
+        word = np.flipud(np.floor(np.arange(ntr) / 3))
+        data += word[:, np.newaxis] * 10
+        stack, fold = voltage.stack(data, word=word)
+        assert(np.all(fold == 3))
+        assert(np.all(np.squeeze(np.unique(stack, axis=-1)) == np.arange(8) * 10))
+        # test with a header
+        header = {'toto': np.random.randn(ntr)}
+        stack, hstack = voltage.stack(data, word=word, header=header)
+        assert(list(hstack.keys()) == ['toto', 'fold'])
+        assert (np.all(hstack['fold'] == 3))
