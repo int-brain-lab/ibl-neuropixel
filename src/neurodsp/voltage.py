@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import scipy.signal
 import scipy.stats
+import pandas as pd
 from joblib import Parallel, delayed, cpu_count
 
 import spikeglx
@@ -255,7 +256,8 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
     if butter_kwargs is None:
         butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
     if k_kwargs is None:
-        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+        lagc = None if fs < 3000 else int(fs / 10)
+        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': lagc,
                     'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
     if k_filter:
         spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
@@ -264,7 +266,7 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
     return butter_kwargs, k_kwargs, spatial_fcn
 
 
-def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
+def destripe(x, fs, h=None, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (nc, ns)
     :param fs: sampling frequency
@@ -286,7 +288,8 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     :return: x, filtered array
     """
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter)
-    h = neuropixel.trace_header(version=neuropixel_version)
+    if h is None:
+        h = neuropixel.trace_header(version=neuropixel_version)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
     # butterworth
@@ -323,7 +326,7 @@ def destripe_lfp(x, fs, channel_labels=None, **kwargs):
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
                              dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
-                             k_kwargs=None, k_filter=True, reader_kwargs=None):
+                             k_kwargs=None, k_filter=True, reader_kwargs=None, output_qc_path=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -346,6 +349,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param k_kwargs: (None) arguments for the kfilter function
     :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
     :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
+    :param output_qc_path: (None) if specified, will save the QC rms in a different location than the output
     :return:
     """
     import pyfftw
@@ -507,8 +511,9 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
         assert(rms_data.shape[0] == time_data.shape[0] * ncv)
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
-        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
+        output_qc_path = output_qc_path or output_file.parent
+        np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
+        np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
 
 def rcoeff(x, y):
@@ -664,3 +669,77 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
         from ibllib.plots.figures import ephys_bad_channels
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
+
+
+def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
+    """
+    Downsamples an LFP file and apply dstriping
+    ```
+    nc = 384
+    ns = int(lf_file_out.stat().st_size / nc / 4)
+    sr_ = spikeglx.Reader(lf_file_out, nc=nc, fs=sr.fs / RESAMPLE_FACTOR, ns=ns,  dtype=np.float32)
+    ```
+    :param lf_file:
+    :param RESAMPLE_FACTOR:
+    :param output: Path
+    :return: None
+    """
+
+    output = output or Path(lf_file).parent.joinpath('lf_resampled.bin')
+    sr = spikeglx.Reader(lf_file)
+    wg = utils.WindowGenerator(ns=sr.ns, nswin=65536, overlap=1024)
+    cflags = detect_bad_channels_cbin(lf_file)
+
+    c = 0
+    with open(output, 'wb') as f:
+        for first, last in wg.firstlast:
+            butter_kwargs = {'N': 3, 'Wn': np.array([2, 200]) / sr.fs * 2, 'btype': 'bandpass'}
+            sos = scipy.signal.butter(**butter_kwargs, output='sos')
+            raw = sr[first:last, :-sr.nsync]
+            raw = scipy.signal.sosfiltfilt(sos, raw, axis=0)
+            destripe = destripe_lfp(raw.T, fs=sr.fs, channel_labels=cflags)
+            # viewephys(raw.T, fs=sr.fs, title='raw')
+            # viewephys(destripe, fs=sr.fs, title='destripe')
+            rsamp = scipy.signal.decimate(destripe, RESAMPLE_FACTOR, axis=1, ftype='fir').T
+            # viewephys(rsamp, fs=sr.fs / RESAMPLE_FACTOR, title='rsamp')
+            first_valid = 0 if first == 0 else int(wg.overlap / 2 / RESAMPLE_FACTOR)
+            last_valid = rsamp.shape[0] if last == sr.ns else int(rsamp.shape[0] - wg.overlap / 2 / RESAMPLE_FACTOR)
+            rsamp = rsamp[first_valid:last_valid, :]
+            c += rsamp.shape[0]
+            print(first, last, last - first, first_valid, last_valid, c)
+            rsamp.astype(np.float32).tofile(f)
+    # first, last = (500, 550)
+    # viewephys(sr[int(first * sr.fs) : int(last * sr.fs), :-sr.nsync].T, sr.fs, title='orig')
+    # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
+
+
+def stack(data, word, fcn_agg=np.nanmean, header=None):
+    """
+    Stack numpy array traces according to the word vector
+    :param data: (ntr, ns) numpy array of sample values
+    :param word: (ntr) label according to which the traces will be aggregated (usually cdp)
+    :param header: dictionary of vectors (ntr): header labels, will be aggregated as average
+    :param fcn_agg: function, defaults to np.mean but could be np.sum or np.median
+    :return: stack (ntr_stack, ns): aggregated numpy array
+             header ( ntr_stack): aggregated header. If no header is provided, fold of coverage
+    """
+    (ntr, ns) = data.shape
+    group, uinds, fold = np.unique(word, return_inverse=True, return_counts=True)
+    ntrs = group.size
+
+    stack = np.zeros((ntrs, ns), dtype=data.dtype)
+    for sind in np.arange(ntrs):
+        i2stack = sind == uinds
+        stack[sind, :] = fcn_agg(data[i2stack, :], axis=0)
+
+    # aggregate the header using pandas
+    if header is None:
+        hstack = fold
+    else:
+        header['stack_word'] = word
+        dfh = pd.DataFrame(header).groupby('stack_word')
+        hstack = dfh.aggregate('mean').to_dict(orient='series')
+        hstack = {k: hstack[k].values for k in hstack.keys()}
+        hstack['fold'] = fold
+
+    return stack, hstack

@@ -300,8 +300,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def test_read_NP24(self):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sampleNP2.4_g0_t0.imec.ap.bin'),
-                self.workdir / 'sampleNP2.4_g0_t0.imec.ap.meta',
+                Path(tdir).joinpath('sampleNP2.4_4shanks_g0_t0.imec.ap.bin'),
+                self.workdir / 'sampleNP2.4_4shanks_g0_t0.imec.ap.meta',
                 ns=32, nc=385, sync_depth=16)
             self.assert_read_glx(bin_3b)
 
@@ -374,15 +374,15 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 self.assertTrue(s.shape[1] == 17)
             # test the channel geometries but skip when meta data doesn't correspond to NP
             if sr.major_version is not None:
-                h = neuropixel.trace_header(sr.major_version)
                 th = sr.geometry
+                h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
                 for k in h.keys():
                     assert(np.all(th[k] == h[k])), print(k)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
         expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None,
-                    19011116954, 19011110513]
+                    19011116954, 20403308181, 19011110513]
         for meta_data_file, res in zip(self.meta_files, expected):
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertEqual(md.serial, res)

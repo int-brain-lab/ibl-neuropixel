@@ -1,425 +1,46 @@
+from pathlib import Path
+import copy
+import logging
+from typing import Any
+import warnings
+import traceback
+
+import scipy.signal
 import numpy as np
+
+import spikeglx
+from neurodsp.utils import WindowGenerator
+
+_logger = logging.getLogger('ibllib')
+
 
 # sample to volt conversion factors
 S2V_AP = 2.34375e-06
 S2V_LFP = 4.6875e-06
-
 TIP_SIZE_UM = 200
-
-SYNC_PIN_OUT = {'3A': {"pin01": 0,
-                       "pin02": 1,
-                       "pin03": 2,
-                       "pin04": 3,
-                       "pin05": None,
-                       "pin06": 4,
-                       "pin07": 5,
-                       "pin08": 6,
-                       "pin09": 7,
-                       "pin10": None,
-                       "pin11": 8,
-                       "pin12": 9,
-                       "pin13": 10,
-                       "pin14": 11,
-                       "pin15": None,
-                       "pin16": 12,
-                       "pin17": 13,
-                       "pin18": 14,
-                       "pin19": 15,
-                       "pin20": None,
-                       "pin21": None,
-                       "pin22": None,
-                       "pin23": None,
-                       "pin24": None
-                       },
-                '3B': {"P0.0": 0,
-                       "P0.1": 1,
-                       "P0.2": 2,
-                       "P0.3": 3,
-                       "P0.4": 4,
-                       "P0.5": 5,
-                       "P0.6": 6,
-                       "P0.7": 7,
-                       }
-                }
-
-# after moving to ks2.5, this should be deprecated
-SITES_COORDINATES = np.array([
-    [43., 20.],
-    [11., 20.],
-    [59., 40.],
-    [27., 40.],
-    [43., 60.],
-    [11., 60.],
-    [59., 80.],
-    [27., 80.],
-    [43., 100.],
-    [11., 100.],
-    [59., 120.],
-    [27., 120.],
-    [43., 140.],
-    [11., 140.],
-    [59., 160.],
-    [27., 160.],
-    [43., 180.],
-    [11., 180.],
-    [59., 200.],
-    [27., 200.],
-    [43., 220.],
-    [11., 220.],
-    [59., 240.],
-    [27., 240.],
-    [43., 260.],
-    [11., 260.],
-    [59., 280.],
-    [27., 280.],
-    [43., 300.],
-    [11., 300.],
-    [59., 320.],
-    [27., 320.],
-    [43., 340.],
-    [11., 340.],
-    [59., 360.],
-    [27., 360.],
-    [11., 380.],
-    [59., 400.],
-    [27., 400.],
-    [43., 420.],
-    [11., 420.],
-    [59., 440.],
-    [27., 440.],
-    [43., 460.],
-    [11., 460.],
-    [59., 480.],
-    [27., 480.],
-    [43., 500.],
-    [11., 500.],
-    [59., 520.],
-    [27., 520.],
-    [43., 540.],
-    [11., 540.],
-    [59., 560.],
-    [27., 560.],
-    [43., 580.],
-    [11., 580.],
-    [59., 600.],
-    [27., 600.],
-    [43., 620.],
-    [11., 620.],
-    [59., 640.],
-    [27., 640.],
-    [43., 660.],
-    [11., 660.],
-    [59., 680.],
-    [27., 680.],
-    [43., 700.],
-    [11., 700.],
-    [59., 720.],
-    [27., 720.],
-    [43., 740.],
-    [11., 740.],
-    [59., 760.],
-    [43., 780.],
-    [11., 780.],
-    [59., 800.],
-    [27., 800.],
-    [43., 820.],
-    [11., 820.],
-    [59., 840.],
-    [27., 840.],
-    [43., 860.],
-    [11., 860.],
-    [59., 880.],
-    [27., 880.],
-    [43., 900.],
-    [11., 900.],
-    [59., 920.],
-    [27., 920.],
-    [43., 940.],
-    [11., 940.],
-    [59., 960.],
-    [27., 960.],
-    [43., 980.],
-    [11., 980.],
-    [59., 1000.],
-    [27., 1000.],
-    [43., 1020.],
-    [11., 1020.],
-    [59., 1040.],
-    [27., 1040.],
-    [43., 1060.],
-    [11., 1060.],
-    [59., 1080.],
-    [27., 1080.],
-    [43., 1100.],
-    [11., 1100.],
-    [59., 1120.],
-    [27., 1120.],
-    [11., 1140.],
-    [59., 1160.],
-    [27., 1160.],
-    [43., 1180.],
-    [11., 1180.],
-    [59., 1200.],
-    [27., 1200.],
-    [43., 1220.],
-    [11., 1220.],
-    [59., 1240.],
-    [27., 1240.],
-    [43., 1260.],
-    [11., 1260.],
-    [59., 1280.],
-    [27., 1280.],
-    [43., 1300.],
-    [11., 1300.],
-    [59., 1320.],
-    [27., 1320.],
-    [43., 1340.],
-    [11., 1340.],
-    [59., 1360.],
-    [27., 1360.],
-    [43., 1380.],
-    [11., 1380.],
-    [59., 1400.],
-    [27., 1400.],
-    [43., 1420.],
-    [11., 1420.],
-    [59., 1440.],
-    [27., 1440.],
-    [43., 1460.],
-    [11., 1460.],
-    [59., 1480.],
-    [27., 1480.],
-    [43., 1500.],
-    [11., 1500.],
-    [59., 1520.],
-    [43., 1540.],
-    [11., 1540.],
-    [59., 1560.],
-    [27., 1560.],
-    [43., 1580.],
-    [11., 1580.],
-    [59., 1600.],
-    [27., 1600.],
-    [43., 1620.],
-    [11., 1620.],
-    [59., 1640.],
-    [27., 1640.],
-    [43., 1660.],
-    [11., 1660.],
-    [59., 1680.],
-    [27., 1680.],
-    [43., 1700.],
-    [11., 1700.],
-    [59., 1720.],
-    [27., 1720.],
-    [43., 1740.],
-    [11., 1740.],
-    [59., 1760.],
-    [27., 1760.],
-    [43., 1780.],
-    [11., 1780.],
-    [59., 1800.],
-    [27., 1800.],
-    [43., 1820.],
-    [11., 1820.],
-    [59., 1840.],
-    [27., 1840.],
-    [43., 1860.],
-    [11., 1860.],
-    [59., 1880.],
-    [27., 1880.],
-    [11., 1900.],
-    [59., 1920.],
-    [27., 1920.],
-    [43., 1940.],
-    [11., 1940.],
-    [59., 1960.],
-    [27., 1960.],
-    [43., 1980.],
-    [11., 1980.],
-    [59., 2000.],
-    [27., 2000.],
-    [43., 2020.],
-    [11., 2020.],
-    [59., 2040.],
-    [27., 2040.],
-    [43., 2060.],
-    [11., 2060.],
-    [59., 2080.],
-    [27., 2080.],
-    [43., 2100.],
-    [11., 2100.],
-    [59., 2120.],
-    [27., 2120.],
-    [43., 2140.],
-    [11., 2140.],
-    [59., 2160.],
-    [27., 2160.],
-    [43., 2180.],
-    [11., 2180.],
-    [59., 2200.],
-    [27., 2200.],
-    [43., 2220.],
-    [11., 2220.],
-    [59., 2240.],
-    [27., 2240.],
-    [43., 2260.],
-    [11., 2260.],
-    [59., 2280.],
-    [43., 2300.],
-    [11., 2300.],
-    [59., 2320.],
-    [27., 2320.],
-    [43., 2340.],
-    [11., 2340.],
-    [59., 2360.],
-    [27., 2360.],
-    [43., 2380.],
-    [11., 2380.],
-    [59., 2400.],
-    [27., 2400.],
-    [43., 2420.],
-    [11., 2420.],
-    [59., 2440.],
-    [27., 2440.],
-    [43., 2460.],
-    [11., 2460.],
-    [59., 2480.],
-    [27., 2480.],
-    [43., 2500.],
-    [11., 2500.],
-    [59., 2520.],
-    [27., 2520.],
-    [43., 2540.],
-    [11., 2540.],
-    [59., 2560.],
-    [27., 2560.],
-    [43., 2580.],
-    [11., 2580.],
-    [59., 2600.],
-    [27., 2600.],
-    [43., 2620.],
-    [11., 2620.],
-    [59., 2640.],
-    [27., 2640.],
-    [11., 2660.],
-    [59., 2680.],
-    [27., 2680.],
-    [43., 2700.],
-    [11., 2700.],
-    [59., 2720.],
-    [27., 2720.],
-    [43., 2740.],
-    [11., 2740.],
-    [59., 2760.],
-    [27., 2760.],
-    [43., 2780.],
-    [11., 2780.],
-    [59., 2800.],
-    [27., 2800.],
-    [43., 2820.],
-    [11., 2820.],
-    [59., 2840.],
-    [27., 2840.],
-    [43., 2860.],
-    [11., 2860.],
-    [59., 2880.],
-    [27., 2880.],
-    [43., 2900.],
-    [11., 2900.],
-    [59., 2920.],
-    [27., 2920.],
-    [43., 2940.],
-    [11., 2940.],
-    [59., 2960.],
-    [27., 2960.],
-    [43., 2980.],
-    [11., 2980.],
-    [59., 3000.],
-    [27., 3000.],
-    [43., 3020.],
-    [11., 3020.],
-    [59., 3040.],
-    [43., 3060.],
-    [11., 3060.],
-    [59., 3080.],
-    [27., 3080.],
-    [43., 3100.],
-    [11., 3100.],
-    [59., 3120.],
-    [27., 3120.],
-    [43., 3140.],
-    [11., 3140.],
-    [59., 3160.],
-    [27., 3160.],
-    [43., 3180.],
-    [11., 3180.],
-    [59., 3200.],
-    [27., 3200.],
-    [43., 3220.],
-    [11., 3220.],
-    [59., 3240.],
-    [27., 3240.],
-    [43., 3260.],
-    [11., 3260.],
-    [59., 3280.],
-    [27., 3280.],
-    [43., 3300.],
-    [11., 3300.],
-    [59., 3320.],
-    [27., 3320.],
-    [43., 3340.],
-    [11., 3340.],
-    [59., 3360.],
-    [27., 3360.],
-    [43., 3380.],
-    [11., 3380.],
-    [59., 3400.],
-    [27., 3400.],
-    [11., 3420.],
-    [59., 3440.],
-    [27., 3440.],
-    [43., 3460.],
-    [11., 3460.],
-    [59., 3480.],
-    [27., 3480.],
-    [43., 3500.],
-    [11., 3500.],
-    [59., 3520.],
-    [27., 3520.],
-    [43., 3540.],
-    [11., 3540.],
-    [59., 3560.],
-    [27., 3560.],
-    [43., 3580.],
-    [11., 3580.],
-    [59., 3600.],
-    [27., 3600.],
-    [43., 3620.],
-    [11., 3620.],
-    [59., 3640.],
-    [27., 3640.],
-    [43., 3660.],
-    [11., 3660.],
-    [59., 3680.],
-    [27., 3680.],
-    [43., 3700.],
-    [11., 3700.],
-    [59., 3720.],
-    [27., 3720.],
-    [43., 3740.],
-    [11., 3740.],
-    [59., 3760.],
-    [27., 3760.],
-    [43., 3780.],
-    [11., 3780.],
-    [59., 3800.],
-    [43., 3820.],
-    [11., 3820.],
-    [59., 3840.],
-    [27., 3840.]])
-
 NC = 384
+SITES_COORDINATES: np.array
+
+
+def _deprecated_sites_coordinates() -> np.array:
+    # this is used in legacy code
+    warnings.warn("the SITES_COORDINATES module attribute reflects only 374 channels and is only applicable to old"
+                  "deprecated 3A probes \n Use `neuropixel.trace_header() to get the canonical probe geometries "
+                  "according to the probe versions: see help(neuropixel.trace_header)."
+                  "\n If possible the reommended approach is to directly read the probe geometry"
+                  "from the metadata using spigeglx.Reader")
+    for line in traceback.format_stack():
+        if 'ibllib' in line:
+            print(line.strip())
+    refch_3a = np.array([36, 75, 112, 151, 188, 227, 264, 303, 340, 379])
+    th = trace_header(version=1)
+    SITES_COORDINATES = np.delete(np.c_[th['x'], th['y']], refch_3a, axis=0)
+    return SITES_COORDINATES
+
+
+def __getattr__(name: str) -> Any:
+    if name == "SITES_COORDINATES":
+        return _deprecated_sites_coordinates()
 
 
 def rc2xy(row, col, version=1):
@@ -439,7 +60,7 @@ def rc2xy(row, col, version=1):
     return {'x': x, 'y': y}
 
 
-def dense_layout(version=1):
+def dense_layout(version=1, nshank=1):
     """
     Returns a dense layout indices map for neuropixel, as used at IBL
     :param version: major version number: 1 or 2 or 2.4
@@ -449,10 +70,11 @@ def dense_layout(version=1):
           'row': np.floor(np.arange(NC) / 2),
           'shank': np.zeros(NC)}
 
-    if version == 2:
+    if version == 1:  # version 1 has a dense layout, checkerboard pattern
+        ch.update({'col': np.tile(np.array([2, 0, 3, 1]), int(NC / 4))})
+    elif np.floor(version) == 2 and nshank == 1:  # single shank NP1 has 2 columns in a dense patter
         ch.update({'col': np.tile(np.array([0, 1]), int(NC / 2))})
-    elif version == 2.4:
-        # the 4 shank version default is rather complicated
+    elif np.floor(version) == 2 and nshank == 4:  # the 4 shank version default is rather complicated
         shank_row = np.tile(np.arange(NC / 16), (2, 1)).T[:, np.newaxis].flatten()
         shank_row = np.tile(shank_row, 8)
         shank_row += np.tile(np.array([0, 0, 1, 1, 0, 0, 1, 1])[:, np.newaxis], (1, int(NC / 8))).flatten() * 24
@@ -460,8 +82,6 @@ def dense_layout(version=1):
             'col': np.tile(np.array([0, 1]), int(NC / 2)),
             'shank': np.tile(np.array([0, 1, 0, 1, 2, 3, 2, 3])[:, np.newaxis], (1, int(NC / 8))).flatten(),
             'row': shank_row})
-    elif version == 1:
-        ch.update({'col': np.tile(np.array([2, 0, 3, 1]), int(NC / 4))})
     # for all, get coordinates
     ch.update(rc2xy(ch['row'], ch['col'], version=version))
     return ch
@@ -492,13 +112,556 @@ def adc_shifts(version=1):
     return sample_shift, adc
 
 
-def trace_header(version=1):
+def trace_header(version=1, nshank=1):
     """
-    Returns the channel map for the dense layout used at IBL
+    Returns the channel map for the dense layouts used at IBL. The following pairs are commonly used:
+    version=1: NP1: returns single shank dense layout with 4 columns in checkerboard pattern
+    version=2, nshank=1: NP2: returns single shank dense layout with 2 columns in-line
+    version=2, nshank=4: NP2: returns 4 shanks dense layout with columns in-line
+    Whenever possible, it is recommended to read the geometry using `spikeglx.Reader.geometry()` method to
+     ensure the channel maps corresponds the actually read data.`
     :param version: major version number: 1 or 2
+    :param nshank: (defaults 1) number of shanks for NP2
     :return: , returns a dictionary with keys
     x, y, row, col, ind, adc and sampleshift vectors corresponding to each site
     """
-    h = dense_layout(version=version)
+    h = dense_layout(version=version, nshank=nshank)
     h['sample_shift'], h['adc'] = adc_shifts(version=version)
     return h
+
+
+def split_trace_header(h, shank=0):
+    """
+    Split the trace header into values for a specific shank. Applicable for NP2.4 probes
+    :param h:
+    :param shank:
+    :return:
+    """
+    shank_idx = np.where(h['shank'] == shank)[0]
+    h_shank = {key: h[key][shank_idx] for key in h.keys()}
+    return h_shank
+
+
+class NP2Converter:
+    """
+    Class used to 1. Extract LFP data from NP2 data and 2. If NP2.4 split the data into
+    individual shanks
+    """
+
+    def __init__(self, ap_file, post_check=True, delete_original=False, compress=True):
+        """
+        :param ap_file: ap.bin spikeglx file to process
+        :param post_check: whether to apply post-check integrity test to ensure split content is
+        identical to original content (only applicable to NP2.4)
+        :param delete_original: whether to delete the original ap file after data has been split
+        :param compress: whether to apply mtscomp to extracted .bin files
+        split into shanks (only applicable to NP2.4)
+        """
+        self.ap_file = Path(ap_file)
+        self.sr = spikeglx.Reader(ap_file)
+        self.post_check = post_check
+        self.compress = compress
+        self.delete_original = delete_original
+        self.np_version = spikeglx._get_neuropixel_version_from_meta(self.sr.meta)
+        self.check_metadata()
+        self.init_params()
+
+    def init_params(self, nsamples=None, nwindow=None, extra=None, nshank=None):
+        """
+        Initiliases parameters for processing.
+
+        :param nsamples: the number of samples to process
+        :param nwindow: the number of samples in each window when iterating through nsamples
+        :param extra: extra string to add the individual shank folder names
+        :param nshank: number of shanks to process, must be a list [0], you would only want to
+        override this for testing purposes
+        :return:
+        """
+        self.fs_ap = 30000
+        self.fs_lf = 2500
+        self.ratio = int(self.fs_ap / self.fs_lf)
+        self.nsamples = nsamples or self.sr.ns
+        self.samples_window = nwindow or 2 * self.fs_ap
+        assert np.mod(self.samples_window, self.ratio) == 0, \
+            f'nwindow must be a factor or {self.ratio}'
+        self.samples_overlap = 576
+        assert np.mod(self.samples_overlap, self.ratio) == 0, \
+            f'samples_overlap must be a factor or {self.ratio}'
+        self.samples_taper = int(self.samples_overlap / 4)
+        assert np.mod(self.samples_taper, self.ratio) == 0, \
+            f'samples_taper must be a factor or {self.ratio}'
+        self.taper = np.r_[0, scipy.signal.windows.cosine((self.samples_taper - 1) * 2), 0]
+
+        # Low pass filter (acts as both anti-aliasing and LP filter)
+        butter_lp_kwargs = {'N': 2, 'Wn': 1000 / 2500 / 2, 'btype': 'lowpass'}
+        self.sos_lp = scipy.signal.butter(**butter_lp_kwargs, output='sos')
+
+        # Number of ap channels
+        self.napch = int(self.sr.meta['snsApLfSy'][0])
+        # Position of start of sync channels in the raw data
+        self.idxsyncch = int(self.sr.meta['snsApLfSy'][0])
+
+        self.extra = extra or ''
+        self.nshank = nshank or None
+        self.check_completed = False
+
+    def check_metadata(self):
+        """
+        Checks the keys in meta data to see if we are trying to process an ap file that has already
+        been split into shanks. If we are sets flag and prevents further processing occurring
+        :return:
+        """
+        if self.sr.meta.get(f'{self.np_version}_shank', None) is not None:
+            self.already_processed = True
+        else:
+            self.already_processed = False
+
+    def process(self, overwrite=False):
+        """
+        Function to call to process NP2 data
+
+        :param overwrite:
+        :return:
+        """
+        if self.np_version == 'NP2.4':
+            status = self._process_NP24(overwrite=overwrite)
+        elif self.np_version == 'NP2.1':
+            status = self._process_NP21(overwrite=overwrite)
+        else:
+            _logger.warning('Meta file is not of type NP2.1 or NP2.4, cannot process')
+            status = -1
+        return status
+
+    def _process_NP24(self, overwrite=False):
+        """
+        Splits AP signal into individual shanks and also extracts the LFP signal. Writes ap and
+        lf data to ap.bin and lf.bin files in individual shank folders. Don't call this function
+        directly but access through process() method
+
+        :param overwrite:
+        :return:
+        """
+        if self.already_processed:
+            _logger.warning('This ap file is an NP2.4 that has already been split into shanks, '
+                            'nothing to do here')
+            return 0
+
+        self.shank_info = self._prepare_files_NP24(overwrite=overwrite)
+        if self.already_exists:
+            _logger.warning('One or more of the sub shank folders already exists, '
+                            'to force reprocessing set overwrite to True')
+            return 0
+
+        # Initial checks out the way. Let's goooo!
+        wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
+
+        for first, last in wg.firstlast:
+            chunk_ap = self.sr[first:last, :self.napch].T
+            chunk_ap_sync = self.sr[first:last, self.idxsyncch:].T
+            chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
+            chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
+
+            chunk_ap2save = self._ind2save(chunk_ap, chunk_ap_sync, wg, ratio=1, etype='ap')
+            chunk_lf2save = self._ind2save(chunk_lf, chunk_lf_sync, wg, ratio=self.ratio,
+                                           etype='lf')
+
+            self._split2shanks(chunk_ap2save, etype='ap')
+            self._split2shanks(chunk_lf2save, etype='lf')
+
+        self._closefiles(etype='ap')
+        self._closefiles(etype='lf')
+
+        self._writemetadata_ap()
+        self._writemetadata_lf()
+
+        if self.post_check:
+            self.check_NP24()
+        if self.compress:
+            self.compress_NP24(overwrite=overwrite)
+        if self.delete_original:
+            self.delete_NP24()
+
+        return 1
+
+    def _prepare_files_NP24(self, overwrite=False):
+        """
+        Creates folders for individual shanks and creates and opens ap.bin and lf.bin files for
+        each shank. Checks to see if and of the expected shank folders already exist
+        and will only rerun if overwrite=True. Don't call this function directly but access through
+        process() method
+
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+
+        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
+        n_shanks = self.nshank or np.unique(chn_info['shank']).astype(np.int16)
+        label = self.ap_file.parent.parts[-1]
+        shank_info = {}
+        self.already_exists = False
+
+        for sh in n_shanks:
+            _shank_info = {}
+            # channels for individual shank + sync channel
+            _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
+                                        np.array(spikeglx._get_sync_trace_indices_from_meta(
+                                            self.sr.meta))]
+
+            probe_path = self.ap_file.parent.parent.joinpath(label + chr(97 + int(sh)) + self.extra)
+
+            if not probe_path.exists() or overwrite:
+                if self.sr.is_mtscomp:
+                    ap_file_bin = self.ap_file.with_suffix('.bin').name
+                else:
+                    ap_file_bin = self.ap_file.name
+                probe_path.mkdir(parents=True, exist_ok=True)
+                _shank_info['ap_file'] = probe_path.joinpath(ap_file_bin)
+                _shank_info['ap_open_file'] = open(_shank_info['ap_file'], 'wb')
+                _shank_info['lf_file'] = probe_path.joinpath(
+                    ap_file_bin.replace('ap', 'lf'))
+                _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
+
+                shank_info[f'shank{sh}'] = _shank_info
+            else:
+                self.already_exists = True
+                _logger.warning('One or more of the sub shank folders already exists, '
+                                'to force reprocessing set overwrite to True')
+
+        return shank_info
+
+    def _process_NP21(self, overwrite=False):
+        """
+        Extracts LFP signal from original data and writes to lf.bin file. Also created lf.meta
+        file. Don't call this function directly but access through process() method
+
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+
+        self.shank_info = self._prepare_files_NP21(overwrite=overwrite)
+        if self.already_exists:
+            _logger.warning('This ap file is an NP2.1 that already has lfp extracted, '
+                            'nothing to do here')
+            return 0
+
+        wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
+
+        for first, last in wg.firstlast:
+
+            chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
+            chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
+
+            chunk_lf2save = self._ind2save(chunk_lf, chunk_lf_sync, wg, ratio=self.ratio,
+                                           etype='lf')
+
+            self._split2shanks(chunk_lf2save, etype='lf')
+
+        self._closefiles(etype='lf')
+
+        self._writemetadata_lf()
+
+        if self.compress:
+            self.compress_NP21(overwrite=overwrite)
+
+        return 1
+
+    def _prepare_files_NP21(self, overwrite=False):
+        """
+        Creates and opens lf.bin file in order to extract the lfp signal from full signal. Checks
+        to see if file already exists and will only rerun if overwrite=True. Don't call this
+        function directly but access through process() method
+
+        :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :return:
+        """
+
+        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
+        n_shanks = np.unique(chn_info['shank']).astype(np.int16)
+        assert (len(n_shanks) == 1)
+        shank_info = {}
+        self.already_exists = False
+
+        lf_file = self.ap_file.parent.joinpath(self.ap_file.name.replace('ap', 'lf')).with_suffix('.bin')
+        lf_cbin_file = lf_file.with_suffix('.cbin')
+        if not (lf_file.exists() or lf_cbin_file.exists()) or overwrite:
+            for sh in n_shanks:
+                _shank_info = {}
+                # channels for individual shank + sync channel
+                _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
+                                            np.array(spikeglx._get_sync_trace_indices_from_meta(
+                                                self.sr.meta))]
+                _shank_info['lf_file'] = lf_file
+                _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
+
+                shank_info[f'shank{sh}'] = _shank_info
+        else:
+            self.already_exists = True
+            _logger.warning('LF file for this probe already exists, '
+                            'to force reprocessing set overwrite to True')
+
+        return shank_info
+
+    def check_NP24(self):
+        """
+        Check that the splitting into shanks process has completed correctly. Compares the original
+        file to the reconstructed file from the individual shanks
+
+        :return:
+        """
+        for sh in self.shank_info.keys():
+            self.shank_info[sh]['sr'] = spikeglx.Reader(self.shank_info[sh]['ap_file'])
+
+        wg = WindowGenerator(self.nsamples, self.samples_window, 0)
+        for first, last in wg.firstlast:
+            expected = self.sr[first:last, :]
+            chunk = np.zeros_like(expected)
+            for ish, sh in enumerate(self.shank_info.keys()):
+                if ish == 0:
+                    chunk[:, self.shank_info[sh]['chns']] = self.shank_info[sh]['sr'][first:last, :]
+                else:
+                    chunk[:, self.shank_info[sh]['chns'][:-1]] = \
+                        self.shank_info[sh]['sr'][first:last, :-1]
+            assert np.array_equal(expected, chunk), \
+                'data in original file and split files do no match'
+
+        # close the sglx instances once we are done checking
+        for sh in self.shank_info.keys():
+            sr = self.shank_info[sh].pop('sr')
+            sr.close()
+
+        self.check_completed = True
+
+    def compress_NP24(self, overwrite=False, **kwargs):
+        """
+        Compress spikeglx files
+        :return:
+        """
+        for sh in self.shank_info.keys():
+            bin_file = self.shank_info[sh]['ap_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+
+            sr_ap = spikeglx.Reader(bin_file)
+            cbin_file = sr_ap.compress_file(**kwargs)
+            sr_ap.close()
+            bin_file.unlink()
+            self.shank_info[sh]['ap_file'] = cbin_file
+
+            bin_file = self.shank_info[sh]['lf_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+            sr_lf = spikeglx.Reader(bin_file)
+            cbin_file = sr_lf.compress_file(**kwargs)
+            sr_lf.close()
+            bin_file.unlink()
+            self.shank_info[sh]['lf_file'] = cbin_file
+
+    def compress_NP21(self, overwrite=False):
+        """
+        Compress spikeglx files
+        :return:
+        """
+        for sh in self.shank_info.keys():
+            if not self.sr.is_mtscomp:
+                cbin_file = self.sr.compress_file()
+                self.sr.close()
+                self.ap_file.unlink()
+                self.ap_file = cbin_file
+                self.sr = spikeglx.Reader(self.ap_file)
+
+            bin_file = self.shank_info[sh]['lf_file']
+            if overwrite:
+                cbin_file = bin_file.with_suffix('.cbin')
+                cbin_file.unlink()
+            sr_lf = spikeglx.Reader(bin_file)
+            cbin_file = sr_lf.compress_file()
+            sr_lf.close()
+            bin_file.unlink()
+            self.shank_info[sh]['lf_file'] = cbin_file
+
+    def delete_NP24(self):
+        """
+        Delete the original ap file that doesn't has all shanks in one file
+
+        :return:
+        """
+        if self.check_completed and self.delete_original:
+            _logger.info(f'Removing original file in folder {self.ap_file}')
+            self.sr.close()
+            self.ap_file.unlink()
+            # shutil.rmtree(self.ap_file.parent) #  should we remove the whole folder?
+
+    def _split2shanks(self, chunk, etype='ap'):
+        """
+        Splits the signal on the 384 channels into the individual shanks and saves to file
+
+        :param chunk: portion of signal with all 384 channels
+        :param type: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
+        for sh in self.shank_info.keys():
+            open = self.shank_info[sh][f'{etype}_open_file']
+            (chunk[:, self.shank_info[sh]['chns']]).tofile(open)
+
+    def _ind2save(self, chunk, chunk_sync, wg, ratio=1, etype='ap'):
+        """
+        Determines the portion of the full chunk to save based on the window and taper used. Cuts
+        off beginning and end to get rid of filtering/ decimating artefacts
+
+        :param chunk: chunk of ephys signal
+        :param chunk_sync: chunk of sync signal
+        :param wg: Window generator object
+        :param ratio: downsample ratio
+        :param etype: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
+        ind2save = [int(self.samples_taper * 2 / ratio),
+                    int((self.samples_window - self.samples_taper * 2) / ratio)]
+        if wg.iw == 0:
+            ind2save[0] = 0
+        if wg.iw == wg.nwin - 1:
+            ind2save[1] = int(self.samples_window / ratio)
+
+        chunk2save = (np.c_[chunk[:, slice(*ind2save)].T /
+                            self.sr.channel_conversion_sample2v[etype][:self.napch],
+                            chunk_sync[:, slice(*ind2save)].T /
+                            self.sr.channel_conversion_sample2v[etype][self.idxsyncch:]]).\
+            astype(np.int16)
+
+        return chunk2save
+
+    def extract_lfp(self, chunk):
+        """
+        Extracts LFP signal from full band signal, first applies low pass to anti-alias and LP,
+        then downsamples
+
+        :param chunk: portion of signal to extract LFP from
+        :return: LFP signal
+        """
+
+        chunk[:, :self.samples_taper] *= self.taper[:self.samples_taper]
+        chunk[:, -self.samples_taper:] *= self.taper[self.samples_taper:]
+        chunk = scipy.signal.sosfiltfilt(self.sos_lp, chunk)
+        chunk = chunk[:, ::self.ratio]
+        return chunk
+
+    def extract_lfp_sync(self, chunk_sync):
+        """
+        Extracts downsampled signal of imec sync trace
+
+        :param chunk_sync: portion of sync signal to downsample
+        :return: downsampled sync signal
+        """
+
+        chunk_sync = chunk_sync[:, ::self.ratio]
+        return chunk_sync
+
+    def _closefiles(self, etype='ap'):
+        """
+        Close .bin files that were being written to
+
+        :param etype: ephys type, either 'ap' or 'lf'
+        :return:
+        """
+
+        for sh in self.shank_info.keys():
+            open = self.shank_info[sh].pop(f'{etype}_open_file')
+            open.close()
+
+    def _writemetadata_ap(self):
+        """
+        Function to create ap meta data file. Adapts the relevant keys in the spikeglx meta file
+        to contain the correct number of channels. Also adds key to indicate that this is not an
+        original meta data file, but one that has been adapted
+
+        :return:
+        """
+
+        for sh in self.shank_info.keys():
+            n_chns = len(self.shank_info[sh]['chns'])
+            # First for the ap file
+            meta_shank = copy.deepcopy(self.sr.meta)
+            meta_shank['acqApLfSy'][0] = n_chns - 1
+            meta_shank['snsApLfSy'][0] = n_chns - 1
+            meta_shank['nSavedChans'] = n_chns
+            meta_shank['fileSizeBytes'] = self.shank_info[sh]['ap_file'].stat().st_size
+            meta_shank['snsSaveChanSubset_orig'] = \
+                spikeglx._get_savedChans_subset(self.shank_info[sh]['chns'])
+            meta_shank['snsSaveChanSubset'] = f'0:{n_chns-1}'
+            meta_shank['original_meta'] = False
+            meta_shank[f'{self.np_version}_shank'] = int(sh[-1])
+            meta_file = self.shank_info[sh]['ap_file'].with_suffix('.meta')
+            spikeglx.write_meta_data(meta_shank, meta_file)
+
+    def _writemetadata_lf(self):
+        """
+        Function to create lf meta data file. Adapts the relevant keys in the spikeglx meta file
+        to contain the correct number of channels. Also adds key to indicate that this is not an
+        original meta data file, but one that has been adapted
+
+        :return:
+        """
+
+        for sh in self.shank_info.keys():
+            n_chns = len(self.shank_info[sh]['chns'])
+            meta_shank = copy.deepcopy(self.sr.meta)
+            meta_shank['acqApLfSy'][0] = 0
+            meta_shank['acqApLfSy'][1] = n_chns - 1
+            meta_shank['snsApLfSy'][0] = 0
+            meta_shank['snsApLfSy'][1] = n_chns - 1
+            meta_shank['fileSizeBytes'] = self.shank_info[sh]['lf_file'].stat().st_size
+            meta_shank['imSampRate'] = self.fs_lf
+            if self.np_version == 'NP2.4':
+                meta_shank['snsSaveChanSubset_orig'] = \
+                    spikeglx._get_savedChans_subset(self.shank_info[sh]['chns'])
+                meta_shank['snsSaveChanSubset'] = f'0:{n_chns-1}'
+                meta_shank['nSavedChans'] = n_chns
+            meta_shank['original_meta'] = False
+            meta_shank[f'{self.np_version}_shank'] = int(sh[-1])
+            meta_file = self.shank_info[sh]['lf_file'].with_suffix('.meta')
+            spikeglx.write_meta_data(meta_shank, meta_file)
+
+    def get_processed_files_NP24(self):
+        """
+        Function to return full list of files output from the NP conversion
+        :return:
+        """
+        out_files = []
+        for sh in self.shank_info.keys():
+            ap_file = self.shank_info[sh]['ap_file']
+            out_files.append(ap_file)
+            out_files.append(ap_file.with_suffix('.meta'))
+
+            if ap_file.suffix == '.cbin':
+                out_files.append(ap_file.with_suffix('.ch'))
+
+            lf_file = self.shank_info[sh]['lf_file']
+            out_files.append(lf_file)
+            out_files.append(lf_file.with_suffix('.meta'))
+
+            if lf_file.suffix == '.cbin':
+                out_files.append(lf_file.with_suffix('.ch'))
+
+        return out_files
+
+    def get_processed_files_NP21(self):
+
+        out_files = []
+        for sh in self.shank_info.keys():
+            lf_file = self.shank_info[sh]['lf_file']
+            out_files.append(lf_file)
+            out_files.append(lf_file.with_suffix('.meta'))
+
+            if lf_file.suffix == '.cbin':
+                out_files.append(lf_file.with_suffix('.ch'))
+
+        out_files.append(self.ap_file)
+        out_files.append(self.ap_file.with_suffix('.meta'))
+        if self.ap_file.suffix == '.cbin':
+            out_files.append(self.ap_file.with_suffix('.ch'))
+
+        return out_files
