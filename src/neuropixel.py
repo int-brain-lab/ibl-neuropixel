@@ -142,7 +142,6 @@ def split_trace_header(h, shank=0):
     return h_shank
 
 
-
 class NP2Converter:
     """
     Class used to 1. Extract LFP data from NP2 data and 2. If NP2.4 split the data into
