@@ -1,4 +1,9 @@
 # 0.2.0
+
+## 0.2.1
+- constant SYNC_PIN_OUT re-introduced in `ibl-neuropixel`
+
+## 0.2.0
 - destripe_decompress_cbin: add a parameter to output QC in a different location to accomodate pykilosort scratch dir
 - support for NP2.4 and NP2.1 geometries on spikeGlx
 
