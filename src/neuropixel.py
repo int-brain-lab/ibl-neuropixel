@@ -75,8 +75,11 @@ def _deprecated_sites_coordinates() -> np.array:
 
 
 def __getattr__(name: str) -> Any:
+    # super hacky, once the SITES_COORDINATES values are deprecated, need to remove this function
     if name == "SITES_COORDINATES":
         return _deprecated_sites_coordinates()
+    else:
+        return getattr(globals(), name)
 
 
 def rc2xy(row, col, version=1):
