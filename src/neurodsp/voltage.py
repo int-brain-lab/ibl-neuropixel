@@ -326,7 +326,7 @@ def destripe_lfp(x, fs, channel_labels=None, **kwargs):
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
                              dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
-                             k_kwargs=None, k_filter=True, reader_kwargs=None):
+                             k_kwargs=None, k_filter=True, reader_kwargs=None, output_qc_path=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -349,6 +349,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param k_kwargs: (None) arguments for the kfilter function
     :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
     :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
+    :param output_qc_path: (None) if specified, will save the QC rms in a different location than the output
     :return:
     """
     import pyfftw
@@ -510,8 +511,9 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
         assert(rms_data.shape[0] == time_data.shape[0] * ncv)
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
-        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
+        output_qc_path = output_qc_path or output_file.parent
+        np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
+        np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
 
 def rcoeff(x, y):
@@ -711,7 +713,7 @@ def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
     # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
 
 
-def stack(data, word, fcn_agg=np.mean, header=None):
+def stack(data, word, fcn_agg=np.nanmean, header=None):
     """
     Stack numpy array traces according to the word vector
     :param data: (ntr, ns) numpy array of sample values
@@ -737,7 +739,7 @@ def stack(data, word, fcn_agg=np.mean, header=None):
         header['stack_word'] = word
         dfh = pd.DataFrame(header).groupby('stack_word')
         hstack = dfh.aggregate('mean').to_dict(orient='series')
-        hstack = {k:hstack[k].values for k in hstack.keys()}
+        hstack = {k: hstack[k].values for k in hstack.keys()}
         hstack['fold'] = fold
 
     return stack, hstack
