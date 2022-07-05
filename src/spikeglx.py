@@ -482,6 +482,9 @@ def _get_analog_sync_trace_indices_from_meta(md):
 def _get_nchannels_from_meta(md):
     return int(md.get('nSavedChans'))
 
+def _get_nshanks_from_meta(md):
+    th = _geometry_from_meta(md)
+    return len(np.unique(th['shank']))
 
 def _get_fs_from_meta(md):
     if md.get('typeThis') == 'imec':
