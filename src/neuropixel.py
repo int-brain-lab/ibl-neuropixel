@@ -13,6 +13,42 @@ from neurodsp.utils import WindowGenerator
 
 _logger = logging.getLogger('ibllib')
 
+# hardware pin to channel mapping
+SYNC_PIN_OUT = {'3A': {"pin01": 0,
+                       "pin02": 1,
+                       "pin03": 2,
+                       "pin04": 3,
+                       "pin05": None,
+                       "pin06": 4,
+                       "pin07": 5,
+                       "pin08": 6,
+                       "pin09": 7,
+                       "pin10": None,
+                       "pin11": 8,
+                       "pin12": 9,
+                       "pin13": 10,
+                       "pin14": 11,
+                       "pin15": None,
+                       "pin16": 12,
+                       "pin17": 13,
+                       "pin18": 14,
+                       "pin19": 15,
+                       "pin20": None,
+                       "pin21": None,
+                       "pin22": None,
+                       "pin23": None,
+                       "pin24": None
+                       },
+                '3B': {"P0.0": 0,
+                       "P0.1": 1,
+                       "P0.2": 2,
+                       "P0.3": 3,
+                       "P0.4": 4,
+                       "P0.5": 5,
+                       "P0.6": 6,
+                       "P0.7": 7,
+                       }
+                }
 
 # sample to volt conversion factors
 S2V_AP = 2.34375e-06
@@ -39,8 +75,11 @@ def _deprecated_sites_coordinates() -> np.array:
 
 
 def __getattr__(name: str) -> Any:
+    # super hacky, once the SITES_COORDINATES values are deprecated, need to remove this function
     if name == "SITES_COORDINATES":
         return _deprecated_sites_coordinates()
+    else:
+        return getattr(globals(), name)
 
 
 def rc2xy(row, col, version=1):
