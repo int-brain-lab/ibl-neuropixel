@@ -704,3 +704,180 @@ class NP2Converter:
             out_files.append(self.ap_file.with_suffix('.ch'))
 
         return out_files
+
+
+class NP2Reconstructor:
+    def __init__(self, raw_ephys_path, pname, compress=True):
+        """
+        Class to reconstruct original ap file from split files. Only applicable for NP2.4
+        :param raw_ephys_path: path to folder containing data from split shanks, if pname = probe00 expects folders probe00a,
+        probe00b, probe00c and probe00d to exist
+        :param pname: probe name
+        :param compress: whether to compress the reconstructed file
+        """
+        self.data_path = Path(raw_ephys_path)
+        self.pname = pname
+        self.probe_path = self.data_path.joinpath(self.pname)
+        self.probe_path.mkdir(exist_ok=True, parents=True)
+        self.compress = compress
+
+    def process(self):
+        """
+        Function to reconstruct the original ap file from split files
+        :return:
+        """
+
+        self.shank_info = self._prepare_files()
+
+        if self.shank_info is None:
+            return 0
+
+        self.get_params()
+
+        status = self._reconstruct()
+        self.write_metadata()
+        if self.compress:
+            self.compress_file()
+
+        return status
+
+    def _prepare_files(self):
+        """
+        Searches for the relevant subshank files in the raw_ephys_data directory and opens the files with spikeglx ready to be
+        accessed. Don't call this function directly but access through process() method
+        :return:
+        """
+
+        folders = list(self.data_path.glob(f'{self.pname}*'))
+        # remove any probe00 folder if present
+        folders = sorted([fold for fold in folders if fold != self.data_path.joinpath(f'{self.pname}')])
+
+        # TODO check the meta data
+        meta_file = next(folders[0].glob('*ap.meta'))
+        meta_info = spikeglx.read_meta_data(meta_file)
+        self.np_version = spikeglx._get_neuropixel_version_from_meta(meta_info)
+        if self.np_version != 'NP2.4':
+            _logger.warning('Not Neuropixel 2.4 nothing to do')
+            return
+
+        ap_file = next(folders[0].glob('*ap.*bin'))
+        self.save_file = self.probe_path.joinpath(ap_file.name).with_suffix('.bin')
+
+        chn_info = spikeglx._map_channels_from_meta(meta_info)
+        expected_shanks = np.unique(chn_info['shank'])
+
+        if len(folders) != len(expected_shanks):
+            _logger.warning('Number of expected subfolders and number of shanks do not match')
+            return
+
+        shank_info = {}
+        for iF, fold in enumerate(folders):
+            ap_file = next(fold.glob('*ap.*bin'))
+            _shank_info = {}
+
+            _shank_info['ap_file'] = ap_file
+            sr = spikeglx.Reader(ap_file)
+            sh = sr.meta.get(f'{self.np_version}_shank')
+            _shank_info['sr'] = sr
+            _shank_info['chns'] = self._get_chans(sr.meta)
+            assert all(_shank_info['chns'][:-1] == np.where(chn_info['shank'] == sh)[0])
+            shank_info[f'shank{iF}'] = _shank_info
+
+        return shank_info
+
+    def get_params(self):
+        """
+        Get some useful parameters for reconstructing file and metadata. This should only be called after _prepare_files
+        :return:
+        """
+        self.fs_ap = 30000
+        self.nch = np.max(self.shank_info['shank0']['chns']) + 1
+        self.nsamples = self.shank_info['shank0']['sr'].ns
+        self.samples_window = 2 * self.fs_ap
+
+    def _get_chans(self, meta):
+        chn_subset = meta.get('snsSaveChanSubset_orig')
+        chn_subset = chn_subset.split(',')
+        for ich, ch_sub in enumerate(chn_subset):
+            sub = ch_sub.split(':')
+            if len(sub) > 1:
+                chns = np.arange(int(sub[0]), int(sub[1]) + 1)
+            else:
+                chns = np.array(int(sub[0]))
+
+            if ich == 0:
+                chns_all = chns
+            else:
+                chns_all = np.r_[chns_all, chns]
+
+        return chns_all
+
+    def _reconstruct(self):
+        """
+        Reconstructs the original file from the subshank files
+        :return:
+        """
+
+        file_out = open(self.save_file, 'wb')
+
+        wg = WindowGenerator(self.nsamples, self.samples_window, 0)
+        for first, last in wg.firstlast:
+            ns = int(last - first)
+            chunk = np.zeros((ns, self.nch), dtype=np.int16)
+            for ish, sh in enumerate(self.shank_info.keys()):
+                if ish == 0:
+                    chunk[:, self.shank_info[sh]['chns']] = self.shank_info[sh]['sr']._raw[first:last, :]
+                else:
+                    chunk[:, self.shank_info[sh]['chns'][:-1]] = \
+                        self.shank_info[sh]['sr']._raw[first:last, :-1]
+
+            chunk.tofile(file_out)
+
+        # close the sglx instances once we are done converting
+        for sh in self.shank_info.keys():
+            sr = self.shank_info[sh].pop('sr')
+            sr.close()
+
+        file_out.close()
+
+        return 1
+
+    def write_metadata(self):
+        """
+        Write metadata for the original ap file. If it already exists and the file size matches, does not replace the original
+        file
+        :return:
+        """
+        # see if the meta file already exists
+
+        meta_file = self.save_file.with_suffix('.meta')
+        if meta_file.exists():
+            meta_info = spikeglx.read_meta_data(meta_file)
+            if meta_info['fileSizeBytes'] == self.save_file.stat().st_size:
+                _logger.info('Meta file already present won"t overwrite')
+                return
+
+        # First for the ap file
+        meta_shank = spikeglx.read_meta_data(self.shank_info['shank0']['ap_file'].with_suffix('.meta'))
+        meta_shank['acqApLfSy'][0] = self.nch - 1
+        meta_shank['snsApLfSy'][0] = self.nch - 1
+        meta_shank['nSavedChans'] = self.nch
+        meta_shank['fileSizeBytes'] = self.save_file.stat().st_size
+        meta_shank['snsSaveChanSubset'] = f'0:{self.nch - 1}'
+        _ = meta_shank.pop(f'{self.np_version}_shank')
+        _ = meta_shank.pop('snsSaveChanSubset_orig')
+
+        spikeglx.write_meta_data(meta_shank, meta_file)
+
+    def compress_file(self, **kwargs):
+        """
+        Compress the reconstructed ap file
+        :param kwargs:
+        :return:
+        """
+
+        sr = spikeglx.Reader(self.save_file)
+        cbin_file = sr.compress_file(**kwargs)
+        sr.close()
+        self.save_file.unlink()
+        self.save_file = cbin_file
