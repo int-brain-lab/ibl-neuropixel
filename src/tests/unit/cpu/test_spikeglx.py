@@ -480,6 +480,13 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         subset = spikeglx._get_savedChans_subset(chns)
         self.assertEqual(subset, '30:100,250:300,384')
 
+    def test_write_meta_file(self):
+        meta = spikeglx.read_meta_data(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        with tempfile.NamedTemporaryFile() as file_mdtest:
+            spikeglx.write_meta_data(meta, file_mdtest.name)
+            _meta = spikeglx.read_meta_data(file_mdtest.name)
+        self.assertEqual(meta, _meta)
+
 
 class TestsBasicReader(unittest.TestCase):
     """

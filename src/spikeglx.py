@@ -337,10 +337,6 @@ class Reader:
         return sm == sc
 
 
-class Streamer(Reader):
-    pass
-
-
 def read(sglx_file, first_sample=0, last_sample=10000):
     """
     Function to read from a spikeglx binary file without instantiating the class.
@@ -387,7 +383,6 @@ def read_meta_data(md_file):
 def write_meta_data(md, md_file):
     """
     Parses a dict into a spikeglx meta data file
-    TODO write a test for this function, (read in, write out and make sure it is the same)
     :param meta: meta data dict
     :param md_file: file to save meta data to
     :return:
