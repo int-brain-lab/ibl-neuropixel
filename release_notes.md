@@ -1,3 +1,10 @@
+# 0.3.0
+## 0.3.0
+- neuropixel: add functions to reconstruct original files from split NP2.4 files
+
+## minor changes
+- support for returning number of shanks from metadata
+
 # 0.2.0
 ## 0.2.2
 - BUGFIX change getattr of `neuropixel` to allow for stared imports
