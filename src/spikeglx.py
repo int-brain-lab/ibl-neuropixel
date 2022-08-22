@@ -478,6 +478,11 @@ def _get_nchannels_from_meta(md):
     return int(md.get('nSavedChans'))
 
 
+def _get_nshanks_from_meta(md):
+    th = _geometry_from_meta(md)
+    return len(np.unique(th['shank']))
+
+
 def _get_fs_from_meta(md):
     if md.get('typeThis') == 'imec':
         return md.get('imSampRate')
@@ -789,10 +794,15 @@ def _sync_map_from_hardware_config(hardware_config):
     :param hardware_config: dictonary from json read of neuropixel_wirings.json
     :return: dictionary where key names refer to object and values to sync channel index
     """
-    pin_out = neuropixel.SYNC_PIN_OUT[hardware_config['SYSTEM']]
-    sync_map = {hardware_config['SYNC_WIRING_DIGITAL'][pin]: pin_out[pin]
-                for pin in hardware_config['SYNC_WIRING_DIGITAL']
-                if pin_out[pin] is not None}
+    if hardware_config['SYSTEM'] == '3A' or hardware_config['SYSTEM'] == '3B':
+        pin_out = neuropixel.SYNC_PIN_OUT[hardware_config['SYSTEM']]
+        sync_map = {hardware_config['SYNC_WIRING_DIGITAL'][pin]: pin_out[pin]
+                    for pin in hardware_config['SYNC_WIRING_DIGITAL']
+                    if pin_out[pin] is not None}
+    else:
+        digital = hardware_config.get('SYNC_WIRING_DIGITAL')
+        sync_map = {digital[pin]: int(pin[3:]) for pin in digital}
+
     analog = hardware_config.get('SYNC_WIRING_ANALOG')
     if analog:
         sync_map.update({analog[pin]: int(pin[2:]) + 16 for pin in analog})
