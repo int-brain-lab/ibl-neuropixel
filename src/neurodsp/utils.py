@@ -157,27 +157,34 @@ def fronts(x, axis=-1, step=1):
         return ind, sign
 
 
-def falls(x, axis=-1, step=-1):
+def falls(x, axis=-1, step=-1, analog=False):
     """
     Detects Falling edges of a voltage signal, returns indices
 
     :param x: array on which to compute RMS
     :param axis: (optional, -1) negative value
     :param step: (optional, -1) value of the step to detect
+    :param analog: (optional, False) in case the signal is analog, converts the voltage to boolean (> step) before
+     detecting edges
     :return: numpy array
     """
-    return rises(-x, axis=axis, step=-step)
+    return rises(-x, axis=axis, step=-step, analog=analog)
 
 
-def rises(x, axis=-1, step=1):
+def rises(x, axis=-1, step=1, analog=False):
     """
     Detect Rising edges of a voltage signal, returns indices
 
     :param x: array on which to compute RMS
     :param axis: (optional, -1)
     :param step: (optional, 1) amplitude of the step to detect
+    :param analog: (optional, False) in case the signal is analog, converts the voltage to boolean (> step) before
+     detecting edges
     :return: numpy array
     """
+    if analog:
+        x = (x > step).astype(np.float64)
+        step = 1
     ind = np.array(np.where(np.diff(x, axis=axis) >= step))
     ind[axis] += 1
     if len(ind) == 1:

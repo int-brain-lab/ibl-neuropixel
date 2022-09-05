@@ -294,6 +294,8 @@ class TestWindowGenerator(unittest.TestCase):
         self.assertTrue(ts[0] == (100 - 1) / 2 / 1000)
         self.assertTrue((np.allclose(np.diff(ts), 0.05)))
 
+
+class TestFrontDetection(unittest.TestCase):
     def test_rises_falls(self):
         # test 1D case with a long pulse and a dirac
         a = np.zeros(500,)
@@ -323,6 +325,12 @@ class TestWindowGenerator(unittest.TestCase):
         self.assertTrue(all(ind[0] == np.array([0, 0, 0, 0, 1, 1, 1, 1])))
         self.assertTrue(all(ind[1] == np.array([80, 120, 200, 201, 280, 320, 400, 401])))
         self.assertTrue(all(val == np.array([1, -1, 1, -1, 1, -1, 1, -1])))
+
+    def test_rises_analog(self):
+        a = utils.fcn_cosine([0, 1])(np.linspace(-5, 5, 500))
+        a = np.r_[a, np.flipud(a)] * 4
+        np.testing.assert_array_equal(utils.falls(a, step=3, analog=True), 717)
+        np.testing.assert_array_equal(utils.rises(a, step=3, analog=True), 283)
 
 
 class TestVoltage(unittest.TestCase):

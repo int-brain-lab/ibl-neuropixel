@@ -1,4 +1,7 @@
 # 0.3.0
+## 0.3.1
+- neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
+- 
 ## 0.3.0
 - neuropixel: add functions to reconstruct original files from split NP2.4 files
 

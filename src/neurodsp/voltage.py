@@ -665,7 +665,7 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     xfeats_med = {k: np.median(xfeats[k], axis=-1) for k in xfeats}
     channel_flags, _ = scipy.stats.mode(channel_labels, axis=1)
     if display:
-        raw = sr[sl, :nc].T
+        raw = sr[sl, :nc].TO
         from ibllib.plots.figures import ephys_bad_channels
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
