@@ -21,10 +21,11 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     # Init remove nan vals in entry array
     arr_in[np.isnan(arr_in)] = 0
 
-    # 1. Find max peak (absolute deviation in STD units)
-    max_vals = np.max(np.abs(arr_in[:, :]), axis=1)
-    indx_maxs = np.argmax(np.abs(arr_in[:, :]), axis=1)
-    indx_trace = np.argmax(max_vals, axis=1)
+    # 1. Find max peak (defined as most negative value; absolute deviation in STD units)
+    max_vals = np.min(arr_in[:, :], axis=1)
+    indx_maxs = np.argmin(arr_in[:, :], axis=1)
+    indx_trace = np.argmin(max_vals, axis=1)
+
     indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
     val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
     del (max_vals, indx_maxs)
