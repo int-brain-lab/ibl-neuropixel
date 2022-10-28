@@ -270,8 +270,14 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assert_read_glx(nidq)
 
     def test_read_geometry(self):
+
         g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
-        assert all([g[k].size == 384 for k in g])
+        sizes = np.array([g[k].size for k in g])
+        np.testing.assert_array_equal(sizes, 384)
+
+        g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_376_channels.ap.meta'))
+        sizes = np.array([g[k].size for k in g])
+        np.testing.assert_array_equal(sizes, 276)
 
     def test_read_3A(self):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
@@ -381,11 +387,24 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
-        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None,
-                    19011116954, 20403308181, 19011110513]
-        for meta_data_file, res in zip(self.meta_files, expected):
-            md = spikeglx.read_meta_data(meta_data_file)
-            self.assertEqual(md.serial, res)
+        high_expectations = {
+            'sample3A_g0_t0.imec.ap.meta': 641251510,
+            'sample3A_g0_t0.imec.lf.meta': 641251510,
+            'sample3A_short_g0_t0.imec.ap.meta': 641251510,
+            'sample3B2_exported.imec0.ap.meta': 17216703352,
+            'sample3B_g0_t0.imec1.ap.meta': 18005116811,
+            'sample3B_g0_t0.imec1.lf.meta': 18005116811,
+            'sample3B_g0_t0.nidq.meta': None,
+            'sampleNP2.1_g0_t0.imec.ap.meta': 19011116954,
+            'sampleNP2.4_1shank_g0_t0.imec.ap.meta': 20403308181,
+            'sampleNP2.4_4shanks_g0_t0.imec.ap.meta': 19011110513,
+        }
+        for meta_data_file in self.meta_files:
+            with self.subTest(meta_data_file=meta_data_file):
+                if meta_data_file not in high_expectations:
+                    continue
+                md = spikeglx.read_meta_data(meta_data_file)
+                self.assertEqual(md.serial, high_expectations[meta_data_file.name])
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:

@@ -122,8 +122,8 @@ def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None):
     WAV = np.r_[np.flipud(WAV[1:npad + 1, :]) * padgain[:, np.newaxis],
                 WAV,
                 np.flipud(WAV[-npad - 2: - 1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis]]  # apply padding
-    x = np.r_[np.flipud(h['x'][1:npad + 1]), h['x'],  np.flipud(h['x'][-npad - 2: - 1])]
-    y = np.r_[np.flipud(h['y'][1:npad + 1]) - 120, h['y'],  np.flipud(h['y'][-npad - 2: - 1]) + 120]
+    x = np.r_[np.flipud(h['x'][1:npad + 1]), h['x'], np.flipud(h['x'][-npad - 2: - 1])]
+    y = np.r_[np.flipud(h['y'][1:npad + 1]) - 120, h['y'], np.flipud(h['y'][-npad - 2: - 1]) + 120]
     WAV_ = np.zeros_like(WAV)
     gain = np.zeros(ntr + npad * 2 + 1)
     hanning = scipy.signal.windows.hann(ovx * 2 - 1)[0:ovx]

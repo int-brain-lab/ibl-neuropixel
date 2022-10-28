@@ -534,12 +534,12 @@ def _geometry_from_meta(meta_data):
     if major_version == 1:
         # the spike sorting channel maps have a flipped version of the channel map
         th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
-
+    nc = th['col'].size
     th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
-    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version)
+    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version, nc=nc)
 
     th = _split_geometry_into_shanks(th, meta_data)
-    th['ind'] = np.arange(th['col'].size)
+    th['ind'] = np.arange(nc)
 
     return th
 

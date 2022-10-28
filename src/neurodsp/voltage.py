@@ -20,7 +20,7 @@ def agc(x, wl=.5, si=.002, epsilon=1e-8, gpu=False):
     """
     Automatic gain control
     w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
-    such as w_agc / gain = w
+    such as w_agc * gain = w
     :param x: seismic array (sample last dimension)
     :param wl: window length (secs)
     :param si: sampling interval (secs)
@@ -37,12 +37,12 @@ def agc(x, wl=.5, si=.002, epsilon=1e-8, gpu=False):
     w /= gp.sum(w)
     gain = fourier.convolve(gp.abs(x), w, mode='same', gpu=gpu)
     gain += (gp.sum(gain, axis=1) * epsilon / x.shape[-1])[:, gp.newaxis]
-    gain = 1 / gain
-
+    dead_channels = np.sum(gain, axis=1) == 0
+    x[~dead_channels, :] = x[~dead_channels, :] / gain[~dead_channels, :]
     if gpu:
         return (x * gain).astype('float32'), gain.astype('float32')
 
-    return x * gain, gain
+    return x, gain
 
 
 def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None, lagc=.5,
@@ -117,7 +117,7 @@ def fk(x, si=.002, dx=1, vbounds=None, btype='highpass', ntr_pad=0, ntr_tap=None
 
     if ntr_pad > 0:
         xf = xf[ntr_pad:-ntr_pad, :]
-    return xf / gain
+    return xf * gain
 
 
 def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
@@ -148,7 +148,7 @@ def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
         xf, gain = agc(x, wl=lagc, si=1.0)
     # apply CAR and then un-apply the gain
     xf = xf - np.median(xf, axis=0)
-    return xf / gain
+    return xf * gain
 
 
 def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None, gpu=False):
@@ -207,7 +207,7 @@ def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=N
 
     if ntr_pad > 0:
         xf = xf[ntr_pad:-ntr_pad, :]
-    return xf / gain
+    return xf * gain
 
 
 def interpolate_bad_channels(data, channel_labels=None, x=None, y=None, p=1.3, kriging_distance_um=20, gpu=False):

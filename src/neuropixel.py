@@ -126,7 +126,7 @@ def dense_layout(version=1, nshank=1):
     return ch
 
 
-def adc_shifts(version=1):
+def adc_shifts(version=1, nc=NC):
     """
     The sampling is serial within the same ADC, but it happens at the same time in all ADCs.
     The ADC to channel mapping is done per odd and even channels:
@@ -137,6 +137,8 @@ def adc_shifts(version=1):
     Therefore, channels 1, 2, 33, 34 get sample at the same time. I hope this is more or
     less clear. In 1.0, it is similar, but there we have 32 ADC that sample each 12 channels."
     - Nick on Slack after talking to Carolina - ;-)
+    :param version: neuropixel major version 1 or 2
+    :param nc: number of channels
     """
     if version == 1:
         adc_channels = 12
@@ -148,7 +150,7 @@ def adc_shifts(version=1):
     sample_shift = np.zeros_like(adc)
     for a in adc:
         sample_shift[adc == a] = np.arange(adc_channels) / adc_channels
-    return sample_shift, adc
+    return sample_shift[:nc], adc[:nc]
 
 
 def trace_header(version=1, nshank=1):
