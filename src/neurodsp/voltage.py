@@ -743,3 +743,21 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
         hstack['fold'] = fold
 
     return stack, hstack
+
+
+def current_source_density(lfp, h):
+    """
+    Compute the current source density (CSD) of a given LFP signal.
+    :param data: LFP signal (n_channels, n_samples)
+    :param h: trace header dictionary
+    :return:
+    """
+    csd = np.zeros(lfp.shape, dtype=np.float64) * np.NAN
+    xy = h['x'] + 1j * h['y']
+    for col in np.unique(h['col']):
+        ind = np.where(h['col'] == col)[0]
+        isort = np.argsort(h['row'][ind])
+        itr = ind[isort]
+        dx = np.median(np.diff(np.abs(xy[itr])))
+        csd[itr[1:-1], :] = np.diff(lfp[itr, :].astype(np.float64), n=2, axis=0) / dx ** 2
+    return csd

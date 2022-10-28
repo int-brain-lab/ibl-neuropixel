@@ -1,3 +1,7 @@
+# 0.4.0
+## 0.4.0 2022-10-28
+- current source density simple double diff with denoising from raw LFP
+
 # 0.3.0
 ## 0.3.2 2022-10-27
 - spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
