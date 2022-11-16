@@ -7,6 +7,43 @@ import numpy as np
 import pandas as pd
 
 
+def _validate_arr_in(arr_in):
+    # expand array if 2d
+    if arr_in.ndim == 2:
+        arr_in = arr_in[np.newaxis, :, :]
+
+    # Init remove nan vals in entry array
+    arr_in[np.isnan(arr_in)] = 0
+    return arr_in
+
+
+def pick_maxima(arr_in):
+    """
+    From one or several single or multi-trace waveforms, extract the maxima for all traces
+    :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace)
+    :return: indices of time peaks, values of maxima, each of shape (nwav, ntraces)
+    """
+    arr_in = _validate_arr_in(arr_in)
+    max_vals = np.max(np.abs(arr_in[:, :]), axis=1)
+    indx_maxs = np.argmax(np.abs(arr_in[:, :]), axis=1)
+    return indx_maxs, max_vals
+
+
+def pick_maximum(arr_in):
+    """
+    From one or several single or multi-trace waveforms, extract the maximum for each wavelet.
+    :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace)
+    :return: sample index of maximum, trace index of maximum, values of maximum, length of N wav
+    """
+    arr_in = _validate_arr_in(arr_in)
+    indx_maxs, max_vals = pick_maxima(arr_in)
+    indx_trace = np.argmax(max_vals, axis=1)
+    indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
+    val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
+
+    return indx_trace, indx_peak, val_peak
+
+
 def peak_trough_tip(arr_in, return_peak_trace=False):
     """
     From one or several single or multi-trace waveforms, extract the times and associated
@@ -14,21 +51,11 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace)
     :return: indices of traces and peaks, length of N wav
     """
-    # expand array if 2d
-    if arr_in.ndim == 2:
-        arr_in = arr_in[np.newaxis, :, :]
-
-    # Init remove nan vals in entry array
-    arr_in[np.isnan(arr_in)] = 0
+    arr_in = _validate_arr_in(arr_in)
 
     # 1. Find max peak (absolute deviation in STD units)
-    max_vals = np.max(np.abs(arr_in[:, :]), axis=1)
-    indx_maxs = np.argmax(np.abs(arr_in[:, :]), axis=1)
-    indx_trace = np.argmax(max_vals, axis=1)
-    indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
-    val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
-    del (max_vals, indx_maxs)
 
+    indx_trace, indx_peak, val_peak = pick_maximum(arr_in)
     # 2. Find trough and tip (at peak waveform)
     # Per waveform, keep only trace that contains the peak
     arr_out = arr_in[np.arange(0, arr_in.shape[0], 1), :, indx_trace]
@@ -70,7 +97,7 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     del arr_cs
 
     # Create dict / pd df
-    d_out = dict()
+    d_out = pd.DataFrame()
     d_out['peak_trace_idx'] = indx_trace
     d_out['peak_time_idx'] = indx_peak
     d_out['peak_val'] = val_peak
@@ -81,9 +108,7 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     d_out['tip_time_idx'] = indx_tip
     d_out['tip_val'] = val_tip
 
-    df = pd.DataFrame(data=d_out)
-
     if return_peak_trace:
-        return df, arr_out
+        return d_out, arr_out
     else:
-        return df
+        return d_out
