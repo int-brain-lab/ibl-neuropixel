@@ -366,7 +366,7 @@ def read_meta_data(md_file):
         md = fid.read()
     d = {}
     for a in md.splitlines():
-        k, v = a.split('=')
+        k, v = a.split('=', maxsplit=1)
         # if all numbers, try to interpret the string
         if v and re.fullmatch('[0-9,.]*', v) and v.count('.') < 2:
             v = [float(val) for val in v.split(',')]

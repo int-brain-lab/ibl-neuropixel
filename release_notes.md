@@ -1,4 +1,7 @@
 # 0.4.0
+## 0.4.1 2022-11-29
+- CAT GT command in meta file
+
 ## 0.4.0 2022-10-28
 - current source density simple double diff with denoising from raw LFP
 
