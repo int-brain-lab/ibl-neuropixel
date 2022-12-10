@@ -509,7 +509,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             time_data = tid.read()
         time_data = np.frombuffer(time_data, dtype=np.float32)
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
-        assert(rms_data.shape[0] == time_data.shape[0] * ncv)
+        assert (rms_data.shape[0] == time_data.shape[0] * ncv)
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
         output_qc_path = output_qc_path or output_file.parent
         np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)

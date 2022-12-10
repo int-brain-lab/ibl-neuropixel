@@ -383,7 +383,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 th = sr.geometry
                 h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
                 for k in h.keys():
-                    assert(np.all(th[k] == h[k])), print(k)
+                    assert (np.all(th[k] == h[k])), print(k)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()

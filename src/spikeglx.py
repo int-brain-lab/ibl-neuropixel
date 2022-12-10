@@ -62,7 +62,7 @@ class Reader:
             assert (nc is not None and fs is not None and nc is not None), err_str
             self.file_meta_data = None
             self.meta = None
-            self._nc, self._fs, self._ns = (nc, fs, ns)
+            self._nc, self._fs, self._ns = (int(nc), int(fs), int(ns))
             # handles default parameters: if int16 we assume it's a raw recording with 1 sync and sample2mv
             # if its' float32 or something else, we assume the sync channel has been removed and the scaling applied
             if nsync is None:
