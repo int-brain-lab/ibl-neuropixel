@@ -48,7 +48,13 @@ def traj_matrix_indices(n):
 
 def trajectory(x, y):
     """
-    Computes the 2 spatial dimensions block-Toeplitz indices from x and y coordinates
+    Computes the 2 spatial dimensions block-Toeplitz indices from x and y traces coordinates
+    Coordinates are assumed to be regularly spaced
+    :param x: trace spatial coordinate (np.array)
+    :param y: trace spatial coordinate (np.array)
+    :return: T: 2-D complex matrix whose elements are the spatial dimensions
+    :return: it, itr: (tuple, ndarray) indices such that T[it] = data[itr]
+    :return: trcount: count of traces in the trajectory matrix
     """
     xu, ix = np.unique(x, return_inverse=True)
     yu, iy = np.unique(y, return_inverse=True)

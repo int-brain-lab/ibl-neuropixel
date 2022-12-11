@@ -58,20 +58,31 @@ class Reader:
         self.dtype = np.dtype(dtype)
 
         if not file_meta_data.exists():
+            # if no meta-data file is provided, try to get critical info from the binary file
+            # by seeing if filesize checks out with neuropixel 384 channels
+            if self.file_bin.stat().st_size / 384 % 2 == 0:
+                nc = nc or 384
+                ns = ns or self.file_bin.stat().st_size / 2 / 384
+                fs = fs or 30000
+            elif self.file_bin.stat().st_size / 385 % 2 == 0:
+                nc = nc or 385
+                ns = ns or self.file_bin.stat().st_size / 2 / 385
+                fs = fs or 30000
+                nsync = nsync or 1
+
             err_str = "Instantiating an Reader without meta data requires providing nc, fs and nc parameters"
             assert (nc is not None and fs is not None and nc is not None), err_str
             self.file_meta_data = None
             self.meta = None
             self._nc, self._fs, self._ns = (int(nc), int(fs), int(ns))
-            # handles default parameters: if int16 we assume it's a raw recording with 1 sync and sample2mv
-            # if its' float32 or something else, we assume the sync channel has been removed and the scaling applied
-            if nsync is None:
-                nsync = 1 if self.dtype == np.dtype('int16') else 0
-            self._nsync = nsync
+            # handles default parameters: if int16 we assume it's a raw recording, we've checked the
+            # multiple of the file size above to determine if there is a sync or not
+            self._nsync = nsync or 0
             if s2v is None:
                 s2v = neuropixel.S2V_AP if self.dtype == np.dtype('int16') else 1.0
             self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2v}
-            self.channel_conversion_sample2v['samples'][-nsync:] = 1
+            if self._nsync > 0:
+                self.channel_conversion_sample2v['samples'][-nsync:] = 1
         else:
             # normal case we continue reading and interpreting the metadata file
             self.file_meta_data = file_meta_data
@@ -98,14 +109,15 @@ class Reader:
         else:
             if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
                 ftsec = self.file_bin.stat().st_size / self.dtype.itemsize / self.nc / self.fs
-                self.meta['fileTimeSecs'] = ftsec
-                if not self.ignore_warnings:
-                    _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
-                                    f"File size: expected {self.meta['fileSizeBytes']},"
-                                    f" actual {self.file_bin.stat().st_size}\n"
-                                    f"File duration: expected {self.meta['fileTimeSecs']},"
-                                    f" actual {ftsec}\n"
-                                    f"Will attempt to fudge the meta-data information.")
+                if self.meta is not None:
+                    if not self.ignore_warnings:
+                        _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
+                                        f"File size: expected {self.meta['fileSizeBytes']},"
+                                        f" actual {self.file_bin.stat().st_size}\n"
+                                        f"File duration: expected {self.meta['fileTimeSecs']},"
+                                        f" actual {ftsec}\n"
+                                        f"Will attempt to fudge the meta-data information.")
+                    self.meta['fileTimeSecs'] = ftsec
             self._raw = np.memmap(sglx_file, dtype=self.dtype, mode='r', shape=(self.ns, self.nc))
 
     def close(self):
