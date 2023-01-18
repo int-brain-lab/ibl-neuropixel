@@ -1,7 +1,18 @@
+# 0.4.0
+## 0.4.1 2022-11-29
+- CAT GT command in meta file
+
+## 0.4.0 2022-10-28
+- current source density simple double diff with denoising from raw LFP
+
 # 0.3.0
+## 0.3.2 2022-10-27
+- spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
+- agc: gain refers to the inverse of applied gains for agc - done to handle dead channels in destriping
 ## 0.3.1
 - neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
-- 
+
+
 ## 0.3.0
 - neuropixel: add functions to reconstruct original files from split NP2.4 files
 

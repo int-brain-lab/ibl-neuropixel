@@ -270,8 +270,14 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assert_read_glx(nidq)
 
     def test_read_geometry(self):
+
         g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
-        assert all([g[k].size == 384 for k in g])
+        sizes = np.array([g[k].size for k in g])
+        np.testing.assert_array_equal(sizes, 384)
+
+        g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_376_channels.ap.meta'))
+        sizes = np.array([g[k].size for k in g])
+        np.testing.assert_array_equal(sizes, 276)
 
     def test_read_3A(self):
         with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
@@ -377,15 +383,28 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 th = sr.geometry
                 h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
                 for k in h.keys():
-                    assert(np.all(th[k] == h[k])), print(k)
+                    assert (np.all(th[k] == h[k])), print(k)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
-        expected = [641251510, 641251510, 641251510, 17216703352, 18005116811, 18005116811, None,
-                    19011116954, 20403308181, 19011110513]
-        for meta_data_file, res in zip(self.meta_files, expected):
-            md = spikeglx.read_meta_data(meta_data_file)
-            self.assertEqual(md.serial, res)
+        high_expectations = {
+            'sample3A_g0_t0.imec.ap.meta': 641251510,
+            'sample3A_g0_t0.imec.lf.meta': 641251510,
+            'sample3A_short_g0_t0.imec.ap.meta': 641251510,
+            'sample3B2_exported.imec0.ap.meta': 17216703352,
+            'sample3B_g0_t0.imec1.ap.meta': 18005116811,
+            'sample3B_g0_t0.imec1.lf.meta': 18005116811,
+            'sample3B_g0_t0.nidq.meta': None,
+            'sampleNP2.1_g0_t0.imec.ap.meta': 19011116954,
+            'sampleNP2.4_1shank_g0_t0.imec.ap.meta': 20403308181,
+            'sampleNP2.4_4shanks_g0_t0.imec.ap.meta': 19011110513,
+        }
+        for meta_data_file in self.meta_files:
+            with self.subTest(meta_data_file=meta_data_file):
+                if meta_data_file not in high_expectations:
+                    continue
+                md = spikeglx.read_meta_data(meta_data_file)
+                self.assertEqual(md.serial, high_expectations[meta_data_file.name])
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
@@ -504,7 +523,7 @@ class TestsBasicReader(unittest.TestCase):
             assert sr.nsync == 0
             assert np.all(sr.sample2volts == 1)
 
-    def test_read_flat_binary_int16(self):
+    def test_read_flat_binary_int16_with_sync(self):
         # here we expect scaling on all channels but the sync channel
         np.random.seed(42)
         kwargs = dict(ns=60000, nc=385, fs=30000, dtype=np.int16)
@@ -516,10 +535,35 @@ class TestsBasicReader(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as tf:
             with open(tf.name, mode='w') as fp:
                 data.tofile(fp)
-            sr = spikeglx.Reader(tf.name, **kwargs)
-            assert np.all(np.isclose(sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP))
-            assert sr.nsync == 1
-            assert np.all(sr.sample2volts == s2v)
+            # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
+            for kw in (kwargs, {}):
+                with self.subTest(kwargs=kw):
+                    sr = spikeglx.Reader(tf.name, **kw)
+                    print(sr.shape, kw)
+                    assert sr.nsync == 1
+                    np.testing.assert_allclose(
+                        sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                    np.testing.assert_array_equal(sr.sample2volts, s2v)
+
+    def test_read_flat_binary_int16_no_sync(self):
+        # here we expect scaling on all channels but the sync channel
+        np.random.seed(42)
+        kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.int16)
+        s2v = np.ones(384) * neuropixel.S2V_AP
+        data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
+        data = data.astype(np.int16)
+        with tempfile.NamedTemporaryFile() as tf:
+            with open(tf.name, mode='w') as fp:
+                data.tofile(fp)
+            # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
+            for kw in (kwargs, {}):
+                with self.subTest(kwargs=kw):
+                    sr = spikeglx.Reader(tf.name, **kw)
+                    print(sr.shape, kw)
+                    np.testing.assert_allclose(
+                        sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                    assert sr.nsync == 0
+                    np.testing.assert_array_equal(sr.sample2volts, s2v)
 
     def test_load_meta_file_only(self):
         # here we load only a meta-file
