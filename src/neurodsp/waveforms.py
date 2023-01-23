@@ -113,6 +113,7 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     else:
         return d_out
 
+
 def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(arr[nth_wav], c='gray', alpha=0.5)
     ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], c='blue')

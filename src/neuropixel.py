@@ -137,6 +137,13 @@ def adc_shifts(version=1, nc=NC):
     Therefore, channels 1, 2, 33, 34 get sample at the same time. I hope this is more or
     less clear. In 1.0, it is similar, but there we have 32 ADC that sample each 12 channels."
     - Nick on Slack after talking to Carolina - ;-)
+
+    The probe always records from all 384 channels; you can disable sites, but they actually still get read back.
+    The sample time shifts are always the same for a given channel -- each channel is hardwired to a specific
+     ADC and has a specific order in the sampling lineup. So you should always calculate
+      the sample shift based on the original channel number. In the SpikeGLX metadata,
+      these are listed in the snsSaveChannelSubset field.
+
     :param version: neuropixel major version 1 or 2
     :param nc: number of channels
     """
