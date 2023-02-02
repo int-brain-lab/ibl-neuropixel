@@ -19,7 +19,7 @@ def _validate_arr_in(arr_in):
 
 def pick_maxima(arr_in):
     """
-    From one or several single or multi-trace waveforms, extract the maxima for all traces
+    From one or several single or multi-trace waveforms, extract the absolute maxima for all traces
     :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace)
     :return: indices of time peaks, values of maxima, each of shape (nwav, ntraces)
     """
@@ -38,7 +38,8 @@ def pick_maximum(arr_in):
     arr_in = _validate_arr_in(arr_in)
     indx_maxs, max_vals = pick_maxima(arr_in)
     indx_trace = np.argmax(max_vals, axis=1)
-    indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
+    # indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
+    indx_peak = np.argmin(arr_in[np.arange(arr_in.shape[0]), :, indx_trace], axis=1)
     val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
 
     return indx_trace, indx_peak, val_peak
