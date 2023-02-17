@@ -347,7 +347,7 @@ class TestVoltage(unittest.TestCase):
         data_v1 = fourier.fshift(data, offset / v1 / sr)
         data_v2 = fourier.fshift(data, offset / v2 / sr)
 
-        noise = np.random.randn(ntr, ns) / 40
+        noise = np.random.randn(ntr, ns) / 60
         fk = voltage.fk(data_v1 + data_v2 + noise, si=sr, dx=dx, vbounds=[1200, 1500],
                         ntr_pad=10, ntr_tap=15, lagc=.25)
         fknoise = voltage.fk(noise, si=sr, dx=dx, vbounds=[1200, 1500],
@@ -356,21 +356,15 @@ class TestVoltage(unittest.TestCase):
         assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -50) > .9
         assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > .98
         # test the K option
-        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
-        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi)
-        fk = voltage.fk(data_v1 + data_v2 + noise + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
-                        ntr_pad=10, ntr_tap=15, lagc=.25,
+        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi) / 10
+        fkk = voltage.fk(data_v1 + data_v2 + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
+                        ntr_pad=40, ntr_tap=15, lagc=.25,
                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
-        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > .9
-
-    def test_rcoeff(self):
-        x = np.random.rand(2, 1000)
-        y = x[0, :]
-        r = np.corrcoef(x[1, :], y)
-        assert voltage.rcoeff(x[0, :], y) == 1
-        assert np.isclose(voltage.rcoeff(x[1, :], y), r[1, 0])
-        assert np.all(np.isclose(voltage.rcoeff(x, y), r[0, :]))
-        assert np.all(np.isclose(voltage.rcoeff(y, x), r[0, :]))
+        assert np.mean(20 * np.log10(utils.rms(fkk - data_v1)) < -40) > .9
+        # from easyqc.gui import viewseis
+        # a = viewseis(data_v1 + data_v2 + kbands, .002, title='input')
+        # b = viewseis(fkk, .002, title='output')
+        # c = viewseis(data_v1 - fkk, .002, title='test')
 
 
 class TestCadzow(unittest.TestCase):

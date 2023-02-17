@@ -9,6 +9,7 @@ import scipy.stats
 import pandas as pd
 from joblib import Parallel, delayed, cpu_count
 
+from iblutil.numerical import rcoeff
 import spikeglx
 import neuropixel
 
@@ -514,25 +515,6 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         output_qc_path = output_qc_path or output_file.parent
         np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
         np.save(output_qc_path.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
-
-
-def rcoeff(x, y):
-    """
-    Computes pairwise Person correlation coefficients for matrices.
-    That is for 2 matrices the same size, computes the row to row coefficients and outputs
-    a vector corresponding to the number of rows of the first matrix
-    If the second array is a vector then computes the correlation coefficient for all rows
-    :param x: np array [nc, ns]
-    :param y: np array [nc, ns] or [ns]
-    :return: r [nc]
-    """
-    def normalize(z):
-        mean = np.mean(z, axis=-1)
-        return z - mean if mean.size == 1 else z - mean[:, np.newaxis]
-    xnorm = normalize(x)
-    ynorm = normalize(y)
-    rcor = np.sum(xnorm * ynorm, axis=-1) / np.sqrt(np.sum(np.square(xnorm), axis=-1) * np.sum(np.square(ynorm), axis=-1))
-    return rcor
 
 
 def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
