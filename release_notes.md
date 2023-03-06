@@ -1,3 +1,8 @@
+# 0.5.0
+## 0.5.0 2023-03-06
+- KCSD option for LFP current source density
+- Cadzow for NP1: expose spatial parameters for LFP
+
 # 0.4.0
 ## 0.4.1 2022-11-29
 - CAT GT command in meta file

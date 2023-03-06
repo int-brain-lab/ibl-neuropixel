@@ -358,8 +358,8 @@ class TestVoltage(unittest.TestCase):
         # test the K option
         kbands = np.sin(np.arange(ns) / ns * 8 * np.pi) / 10
         fkk = voltage.fk(data_v1 + data_v2 + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
-                        ntr_pad=40, ntr_tap=15, lagc=.25,
-                        kfilt={'bounds': [0, .01], 'btype': 'hp'})
+                         ntr_pad=40, ntr_tap=15, lagc=.25,
+                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
         assert np.mean(20 * np.log10(utils.rms(fkk - data_v1)) < -40) > .9
         # from easyqc.gui import viewseis
         # a = viewseis(data_v1 + data_v2 + kbands, .002, title='input')

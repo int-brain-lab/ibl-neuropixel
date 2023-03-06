@@ -727,11 +727,13 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
     return stack, hstack
 
 
-def current_source_density(lfp, h):
+def current_source_density(lfp, h, method='diff', sigma=1 / 3):
     """
-    Compute the current source density (CSD) of a given LFP signal.
+    Compute the current source density (CSD) of a given LFP signal recorded on neuropixel 1 or 2
     :param data: LFP signal (n_channels, n_samples)
     :param h: trace header dictionary
+    :param method: diff (straight double difference) or kernel CSD (needs the KCSD python package)
+    :param sigma: conductivity, defaults to 1/3 S.m-1
     :return:
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.NAN
@@ -741,5 +743,21 @@ def current_source_density(lfp, h):
         isort = np.argsort(h['row'][ind])
         itr = ind[isort]
         dx = np.median(np.diff(np.abs(xy[itr])))
-        csd[itr[1:-1], :] = np.diff(lfp[itr, :].astype(np.float64), n=2, axis=0) / dx ** 2
+        if method == 'diff':
+            csd[itr[1:-1], :] = np.diff(lfp[itr, :].astype(np.float64), n=2, axis=0) / dx ** 2 * sigma
+        elif method == 'kcsd':
+            from kcsd import KCSD1D
+            # here we could eventually expose the KCSD kwargs
+            csd[itr, :] = KCSD1D(
+                h['y'][itr, np.newaxis],
+                lfp[itr, :],
+                h=1.,
+                sigma=1 / 3,
+                xmin=np.min(h['y'][itr]),
+                xmax=np.max(h['y'][itr]),
+                gdx=np.ceil((np.max(h['y'][itr]) - np.min(h['y'][itr])) / itr.size),
+                lambd=0.,
+                R_init=5.,
+                n_src_init=10000,
+                src_type='gauss').values('CSD')
     return csd

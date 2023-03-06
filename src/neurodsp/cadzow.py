@@ -99,27 +99,26 @@ def denoise(WAV, x, y, r, imax=None, niter=1):
     return WAV_
 
 
-def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None):
+def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None, ovx=int(16), nswx=int(32), npad=int(0)):
     """
     Apply Fxy rank-denoiser to a full recording of Neuropixel 1 probe geometry
+    ntr - nswx has to be a multiple of (nswx - ovx)
+    Examples of working set of parameters:
+        ovx = int(5); nswx = int(33); ovx = int(6))
+        ovx = int(16); nswx = int(32); ovx = int(0))
+        ovx = int(32); nswx = int(64); ovx = int(0))
+        ovx = int(24); nswx = int(64); ovx = int(0))
+        ovx = int(8); nswx = int(16); ovx = int(0))
     :param wav: ntr, ns
     :param fs:
+    :param ovx is the overlap in x
+    :param nswx is the size of the window in x
+    :param npad is the padding
     :return:
     """
-    # ntr - nswx has to be a multiple of (nswx - ovx)
+    #
     ntr, ns = wav.shape
-    """
-    try some window sizes:
-     ovx is the overlap in x
-     nswx is the size of the window in x
-     npad is the padding
-    """
     h = h or neuropixel.trace_header(version=1)
-    # ovx, nswx, npad = (int(5), int(33), int(6))
-    ovx, nswx, npad = (int(16), int(32), int(0))
-    # ovx, nswx, npad = (int(32), int(64), int(0))
-    # ovx, nswx, npad = (int(24), int(64), int(0))
-    # ovx, nswx, npad = (int(8), int(16), int(0))
     nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
     fscale = scipy.fft.rfftfreq(ns, d=1 / fs)
     imax = np.searchsorted(fscale, fmax)
@@ -146,7 +145,7 @@ def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None):
         gain[firstx:lastx] += gw
         T, it, itr, trcount = trajectory(x=x[firstx:lastx], y=y[firstx:lastx])
         array = WAV[firstx:lastx, :]
-        print(firstx, lastx, x[firstx:lastx].shape, WAV[firstx:lastx, :].shape, T.shape)
+        # print(firstx, lastx, x[firstx:lastx].shape, WAV[firstx:lastx, :].shape, T.shape)
         array = denoise(array, x=x[firstx:lastx], y=y[firstx:lastx], r=rank, imax=imax, niter=niter)
         WAV_[firstx:lastx, :] += array * gw[:, np.newaxis]
 
