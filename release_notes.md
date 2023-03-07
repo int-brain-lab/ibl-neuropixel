@@ -1,4 +1,7 @@
 # 0.5.0
+## 0.5.1 2023-03-07
+- Enforce iblutil dependency
+
 ## 0.5.0 2023-03-06
 - KCSD option for LFP current source density
 - Cadzow for NP1: expose spatial parameters for LFP
