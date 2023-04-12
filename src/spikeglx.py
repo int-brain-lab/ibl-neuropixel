@@ -538,7 +538,7 @@ def _geometry_from_meta(meta_data):
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
     if cm is None:
-        _logger.warning("Meta data doesn't have geometry (snsShankMap field), returning defaults")
+        _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
         th = neuropixel.trace_header(version=major_version)
         th['flag'] = th['x'] * 0 + 1.
         return th
@@ -574,14 +574,18 @@ def _map_channels_from_meta(meta_data):
     """
     if 'snsShankMap' in meta_data.keys():
         chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsShankMap'])
-        # for digital nidq types, the key exists but does not contain any information
-        if not chmap:
-            return {'shank': None, 'col': None, 'row': None, 'flag': None}
-        # shank#, col#, row#, drawflag
-        # (nb: drawflag is one should be drawn and considered spatial average)
-        chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
-        return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
-
+    elif 'snsGeomMap' in meta_data.keys():
+        chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsGeomMap'])
+    else:
+        chmap = None
+    # for digital nidq types, the key exists but does not contain any information
+    if not chmap:
+        return {'shank': None, 'col': None, 'row': None, 'flag': None}
+    # shank#, col#, row#, drawflag
+    # (nb: drawflag is one should be drawn and considered spatial average)
+    chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
+    return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
+                
 
 def _conversion_sample2v_from_meta(meta_data):
     """
