@@ -377,7 +377,7 @@ class NP2Converter:
 
         return shank_info
 
-    def _process_NP21(self, overwrite=False, offset=0):
+    def _process_NP21(self, overwrite=False, offset=0, **kwargs):
         """
         Extracts LFP signal from original data and writes to lf.bin file. Also created lf.meta
         file. Don't call this function directly but access through process() method
@@ -387,7 +387,7 @@ class NP2Converter:
         :return:
         """
 
-        self.shank_info = self._prepare_files_NP21(overwrite=overwrite)
+        self.shank_info = self._prepare_files_NP21(overwrite=overwrite, **kwargs)
         if self.already_exists:
             _logger.warning('This ap file is an NP2.1 that already has lfp extracted, '
                             'nothing to do here')
