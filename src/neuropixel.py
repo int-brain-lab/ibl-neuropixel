@@ -432,7 +432,7 @@ class NP2Converter:
             n_shanks = np.unique(chn_info['shank']).astype(np.int16)
             assert (len(n_shanks) == 1)
         else:
-            n_shanks = 1
+            n_shanks = np.array([0])
         shank_info = {}
         self.already_exists = False
 
