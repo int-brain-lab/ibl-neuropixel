@@ -377,12 +377,13 @@ class NP2Converter:
 
         return shank_info
 
-    def _process_NP21(self, overwrite=False):
+    def _process_NP21(self, overwrite=False, offset=0):
         """
         Extracts LFP signal from original data and writes to lf.bin file. Also created lf.meta
         file. Don't call this function directly but access through process() method
 
         :param overwrite: set to True to force rerunning even if lf.bin file already exists
+        :param offset: offset to add to the window generator in cases where the whole file doens't want to be processed
         :return:
         """
 
@@ -395,6 +396,9 @@ class NP2Converter:
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
 
         for first, last in wg.firstlast:
+
+            first = first + offset
+            last = last + offset
 
             chunk_lf = self.extract_lfp(self.sr[first:last, :self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch:].T)
@@ -413,7 +417,7 @@ class NP2Converter:
 
         return 1
 
-    def _prepare_files_NP21(self, overwrite=False):
+    def _prepare_files_NP21(self, overwrite=False, assert_shanks=True):
         """
         Creates and opens lf.bin file in order to extract the lfp signal from full signal. Checks
         to see if file already exists and will only rerun if overwrite=True. Don't call this
@@ -424,8 +428,11 @@ class NP2Converter:
         """
 
         chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
-        n_shanks = np.unique(chn_info['shank']).astype(np.int16)
-        assert (len(n_shanks) == 1)
+        if assert_shanks:
+            n_shanks = np.unique(chn_info['shank']).astype(np.int16)
+            assert (len(n_shanks) == 1)
+        else:
+            n_shanks = 1
         shank_info = {}
         self.already_exists = False
 
@@ -435,9 +442,13 @@ class NP2Converter:
             for sh in n_shanks:
                 _shank_info = {}
                 # channels for individual shank + sync channel
-                _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
-                                            np.array(spikeglx._get_sync_trace_indices_from_meta(
-                                                self.sr.meta))]
+                if assert_shanks:
+                    _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
+                                                np.array(spikeglx._get_sync_trace_indices_from_meta(
+                                                    self.sr.meta))]
+                else:
+                    _shank_info['chns'] = np.arange(self.sr.nc)
+
                 _shank_info['lf_file'] = lf_file
                 _shank_info['lf_open_file'] = open(_shank_info['lf_file'], 'wb')
 
