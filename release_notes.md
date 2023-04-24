@@ -1,4 +1,7 @@
 # 0.5.0
+## 0.5.3 2023-04-24
+- Fix for cases where channel map keys are not present
+
 ## 0.5.2 2023-04-19
 - Geometry now supports both snsShankMap and snsGeomMap fields
 - Option to compute LFP without splitting shanks
