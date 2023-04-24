@@ -577,7 +577,7 @@ def _map_channels_from_meta(meta_data):
     elif 'snsGeomMap' in meta_data.keys():
         chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsGeomMap'])
     else:
-        chmap = None
+        return None
     # for digital nidq types, the key exists but does not contain any information
     if not chmap:
         return {'shank': None, 'col': None, 'row': None, 'flag': None}
