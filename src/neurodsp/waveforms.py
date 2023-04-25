@@ -7,14 +7,26 @@ import numpy as np
 import pandas as pd
 
 
-def arr_pre_post(arr_in, indx_peak):
+def get_array_peak(arr_in, df):
     '''
-    :param arr_in: NxC waveform matrix : spikes x channel, only the peak channel
+    Create matrix of just NxT (spikes x time) of the peak waveforms channel (=1 channel)
+
+    :param arr_in: NxTxC waveform matrix (spikes x time x channel)
+    :param df: dataframe of waveform features
+    :return: NxT waveform matrix : spikes x time, only the peak channel
+    '''
+    arr_peak = arr_in[np.arange(arr_in.shape[0]), :, df['peak_trace_idx'].to_numpy()]
+    return arr_peak
+
+
+def arr_pre_post(arr_peak, indx_peak):
+    '''
+    :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
     :param indx_peak: Nx1 matrix : indices of the peak for each channel
     :return:
     '''
     # Create zero mask with 1 at peak, cumsum
-    arr_mask = np.zeros(arr_in.shape)
+    arr_mask = np.zeros(arr_peak.shape)
     arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 1
     arr_mask = np.cumsum(arr_mask, axis=1)
     # arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 2  # to keep peak in both cases
@@ -25,11 +37,11 @@ def arr_pre_post(arr_in, indx_peak):
     indx_postpeak = np.where(arr_mask == 1)
     del arr_mask
 
-    arr_pre = arr_in.copy()
+    arr_pre = arr_peak.copy()
     arr_pre = arr_pre.astype('float')
     arr_pre[indx_postpeak] = np.nan  # Array with values pre-, nans post- peak (from peak to end)
 
-    arr_post = arr_in.copy()
+    arr_post = arr_peak.copy()
     arr_post = arr_post.astype('float')
     arr_post[indx_prepeak] = np.nan  # Array with values post-, nans pre- peak (from start to peak-1)
     return arr_pre, arr_post
@@ -133,18 +145,13 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
 
 
-def half_peak(arr_in, df=None):
+def half_peak(arr_peak, df):
     '''
     Compute the two intersection points at halp-maximum peak
-    :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace) = (spikes, time, channels)
+    :param: arr_in: NxT waveform matrix : spikes x time, only the peak channel
     :return: df with columns containing indices of intersection points and values, length of N wav
     '''
-    # Recompute peak-tip-trough if not passed in
-    if df is None:  # Recompute
-        df = peak_trough_tip(arr_in)
     # TODO Review: is df.to_numpy() necessary ?
-    # Create matrix of just NxC (spikes x time) of the peak waveforms channel (=1 channel)
-    arr_peak = arr_in[np.arange(arr_in.shape[0]), :, df['peak_trace_idx'].to_numpy()]
     # Get the sign of the peak
     indx_pos = np.where(df['peak_val'].to_numpy() > 0)
     # Flip positive wavs so all are negative
@@ -202,7 +209,7 @@ def polarisation_slopes(df, fs):
     '''
     Computes the depolarisation and repolarisation slopes as the difference between tip-peak
     and peak-trough respectively.
-    :param df:  dataframe of waveforms features
+    :param df: dataframe of waveforms features
     :param fs: sampling frequency (Hz)
     :return: dataframe with added columns
     '''
@@ -215,3 +222,18 @@ def polarisation_slopes(df, fs):
     repolarise_volt = df['trough_val'] - df['peak_val']
     df['repolarisation_slope'] = repolarise_volt / repolarise_duration
     return df
+
+
+def recovery_slope(arr_peak, df, window_idx=np.arrange(50,55,1)):
+    '''
+    Compute the recovery slope, but using the average of the window as secondary point
+    If you want to use just one point, input a single value for the window_idx
+    :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
+    :param df: dataframe of waveforms features
+    :param window_idx: indices to be taken into account for the second point
+    :return: dataframe with added columns
+    '''
+    # Check range is not outside of matrix boundary
+    if window_idx[-1] >= (arr_peak.shape[1]):
+        raise ValueError('Index out of bound: Window index larger than waveform array shape')
+    
