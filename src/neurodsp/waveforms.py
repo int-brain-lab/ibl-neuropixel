@@ -121,3 +121,24 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(df.iloc[nth_wav].peak_time_idx, df.iloc[nth_wav].peak_val, 'r*')
     ax.plot(df.iloc[nth_wav].trough_time_idx, df.iloc[nth_wav].trough_val, 'g*')
     ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
+
+
+def half_peak(arr_in, df=None):
+    '''
+    Compute the two intersection points at halp-maximum peak
+    :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace) = (spikes, time, channels)
+    :return: indices of traces and peaks, length of N wav
+    '''
+    # Recompute peak-tip-trough if not passed in
+    if df is None:  # Recompute
+        df = peak_trough_tip(arr_in)
+
+    # Create matrix of just NxC (spikes x time) of the peak waveforms channel (=1 channel)
+    arr_peak = arr_in[:, :, df['peak_trace_idx']]
+    np.squeeze
+    # Get the sign of the peak
+    indx_pos = np.where(df['peak_val'] > 0)
+    # Flip positive wavs so all are negative
+    if len(indx_pos) > 0:
+        arr_peak[indx_pos]
+
