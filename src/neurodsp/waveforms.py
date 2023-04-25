@@ -154,6 +154,11 @@ def half_peak(arr_in, df=None):
     half_max = df['peak_val'].to_numpy()/2
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
     # Note on the above: using np.tile because np. repeat does not work with axis=1
-    f = arr_peak - half_max_rep
+    arr_sub = arr_peak - half_max_rep
     # Create masks pre/post
-    arr_pre, arr_post = arr_pre_post(arr_in, indx_peak)
+    arr_pre, arr_post = arr_pre_post(arr_sub, df['peak_time_idx'].to_numpy())
+    # POST: Find first time it crosses 0 (from negative -> positive values)
+    indx_post = np.argmax(arr_post > 0, axis=1)
+    val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post]
+
+    # PRE: Find first time it crosses 0 (from positive -> negative values)
