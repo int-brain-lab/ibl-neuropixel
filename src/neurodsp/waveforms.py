@@ -137,7 +137,7 @@ def half_peak(arr_in, df=None):
     '''
     Compute the two intersection points at halp-maximum peak
     :param: arr_in: array of waveforms; 3D dimension have to be (wav, time, trace) = (spikes, time, channels)
-    :return: indices of traces and peaks, length of N wav
+    :return: indices of intersection points and values, length of N wav
     '''
     # Recompute peak-tip-trough if not passed in
     if df is None:  # Recompute
