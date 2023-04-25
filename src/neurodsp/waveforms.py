@@ -262,3 +262,4 @@ def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
     # Get values
     val_wind = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_values]
     rep_01 = np.tile(np.arange(0, arr_peak.shape[0], 1), (indx_values.shape[1], 1)).transpose()
+    # TODO Awaiting for Olivier -- getting values out of indices is not working
