@@ -284,13 +284,10 @@ def dist_chanel_from_peak(channel_geometry, df):
 
     # Difference
     diff_ch = peak_coord_rep - channel_geometry
-
     # Square
     square_ch = np.square(diff_ch)
-
     # Sum
     sum_ch = np.sum(square_ch, axis=2)
-
     # Sqrt
     eu_dist = np.sqrt(sum_ch)
 
