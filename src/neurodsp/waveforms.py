@@ -269,17 +269,29 @@ def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
 def dist_chanel_from_peak(channel_geometry, df):
     '''
     Compute distance for each channel from the peak channel, for each spike
-    :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,y,z) coordinates
+    :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,y,z)
     # Note: computing this to provide it as input will be a pain
     :param df: dataframe of waveform features
-    :return:
+    :return: eu_dist : N(spikes) * N(channels): the euclidian distance between each channel and the peak channel,
+    for each waveform
     '''
     # Get peak coordinates (x,y,z)
     peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
 
     # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
-    b = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)
+    peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)
+    peak_coord_rep = np.swapaxes(peak_coord_rep, 1, 2)  # N spikes x channel x coordinates
+
     # Difference
+    diff_ch = peak_coord_rep - channel_geometry
+
     # Square
+    square_ch = np.square(diff_ch)
+
     # Sum
+    sum_ch = np.sum(square_ch, axis=2)
+
     # Sqrt
+    eu_dist = np.sqrt(sum_ch)
+
+    return eu_dist
