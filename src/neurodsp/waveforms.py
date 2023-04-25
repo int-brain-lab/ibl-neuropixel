@@ -160,7 +160,8 @@ def half_peak(arr_peak, df):
     # Compute half max value, repmat and substract it
     half_max = df['peak_val'].to_numpy()/2
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
-    # Note on the above: using np.tile because np. repeat does not work with axis=1
+    # Note on the above: using np.tile because np.repeat does not work with axis=1
+    # todo rewrite with np.repeat and np.newaxis
     arr_sub = arr_peak - half_max_rep
     # Create masks pre/post
     arr_pre, arr_post = arr_pre_post(arr_sub, df['peak_time_idx'].to_numpy())
@@ -217,7 +218,7 @@ def polarisation_slopes(df, fs):
     depolarise_duration = (df['peak_time_idx'] - df['tip_time_idx']) / fs
     depolarise_volt = df['peak_val'] - df['tip_val']
     df['depolarisation_slope'] = depolarise_volt / depolarise_duration
-    # Repolsation: slope after the peak (between peak and trough)
+    # Repolarisation: slope after the peak (between peak and trough)
     repolarise_duration = (df['trough_time_idx'] - df['peak_time_idx']) / fs
     repolarise_volt = df['trough_val'] - df['peak_val']
     df['repolarisation_slope'] = repolarise_volt / repolarise_duration
@@ -263,3 +264,22 @@ def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
     val_wind = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_values]
     rep_01 = np.tile(np.arange(0, arr_peak.shape[0], 1), (indx_values.shape[1], 1)).transpose()
     # TODO Awaiting for Olivier -- getting values out of indices is not working
+
+
+def dist_chanel_from_peak(channel_geometry, df):
+    '''
+    Compute distance for each channel from the peak channel, for each spike
+    :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,y,z) coordinates
+    # Note: computing this to provide it as input will be a pain
+    :param df: dataframe of waveform features
+    :return:
+    '''
+    # Get peak coordinates (x,y,z)
+    peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
+
+    # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
+    b = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)
+    # Difference
+    # Square
+    # Sum
+    # Sqrt
