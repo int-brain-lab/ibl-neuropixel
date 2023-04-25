@@ -7,6 +7,33 @@ import numpy as np
 import pandas as pd
 
 
+def arr_pre_post(arr_in, indx_peak):
+    '''
+    :param arr_in: NxC waveform matrix : spikes x channel, only the peak channel
+    :param indx_peak: Nx1 matrix : indices of the peak for each channel
+    :return:
+    '''
+    # Create zero mask with 1 at peak, cumsum
+    arr_mask = np.zeros(arr_in.shape)
+    arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 1
+    arr_mask = np.cumsum(arr_mask, axis=1)
+    # arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 2  # to keep peak in both cases
+    # Commented code above not needed: We want to keep peak = nan when keeping pre-values
+
+    # Pad with Nans (as cannot slice since each waveform will have different length from peak)
+    indx_prepeak = np.where(arr_mask == 0)
+    indx_postpeak = np.where(arr_mask == 1)
+    del arr_mask
+
+    arr_pre = arr_in.copy()
+    arr_pre = arr_pre.astype('float')
+    arr_pre[indx_postpeak] = np.nan  # Array with values pre-, nans post- peak (from peak to end)
+
+    arr_post = arr_in.copy()
+    arr_post = arr_post.astype('float')
+    arr_post[indx_prepeak] = np.nan  # Array with values post-, nans pre- peak (from start to peak-1)
+    return arr_pre, arr_post
+
 def _validate_arr_in(arr_in):
     # expand array if 2d
     if arr_in.ndim == 2:
@@ -61,25 +88,8 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     # Per waveform, keep only trace that contains the peak
     arr_out = arr_in[np.arange(0, arr_in.shape[0], 1), :, indx_trace]
 
-    # Create zero mask with 1 at peak, cumsum
-    arr_mask = np.zeros(arr_out.shape)
-    arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 1
-    arr_mask = np.cumsum(arr_mask, axis=1)
-    # arr_mask[np.arange(0, arr_mask.shape[0], 1), indx_peak] = 2  # to keep peak in both cases
-    # Commented code above not needed: We want to keep peak = nan when keeping pre-values
-
-    # Pad with Nans (as cannot slice since each waveform will have different length from peak)
-    indx_prepeak = np.where(arr_mask == 0)
-    indx_postpeak = np.where(arr_mask == 1)
-    del arr_mask
-
-    arr_pre = arr_out.copy()
-    arr_pre = arr_pre.astype('float')
-    arr_pre[indx_postpeak] = np.nan  # Array with values pre-, nans post- peak (from peak to end)
-
-    arr_post = arr_out.copy()
-    arr_post = arr_post.astype('float')
-    arr_post[indx_prepeak] = np.nan  # Array with values post-, nans pre- peak (from start to peak-1)
+    # Create masks pre/post
+    arr_pre, arr_post = arr_pre_post(arr_out, indx_peak)
 
     # Find trough
     indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
@@ -132,13 +142,18 @@ def half_peak(arr_in, df=None):
     # Recompute peak-tip-trough if not passed in
     if df is None:  # Recompute
         df = peak_trough_tip(arr_in)
-
+    # TODO Review: is df.to_numpy() necessary ?
     # Create matrix of just NxC (spikes x time) of the peak waveforms channel (=1 channel)
-    arr_peak = arr_in[:, :, df['peak_trace_idx']]
-    np.squeeze
+    arr_peak = arr_in[np.arange(arr_in.shape[0]), :, df['peak_trace_idx'].to_numpy()]
     # Get the sign of the peak
-    indx_pos = np.where(df['peak_val'] > 0)
+    indx_pos = np.where(df['peak_val'].to_numpy() > 0)
     # Flip positive wavs so all are negative
     if len(indx_pos) > 0:
-        arr_peak[indx_pos]
-
+        arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
+    # Compute half max value, repmat and substract it
+    half_max = df['peak_val'].to_numpy()/2
+    half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
+    # Note on the above: using np.tile because np. repeat does not work with axis=1
+    f = arr_peak - half_max_rep
+    # Create masks pre/post
+    arr_pre, arr_post = arr_pre_post(arr_in, indx_peak)
