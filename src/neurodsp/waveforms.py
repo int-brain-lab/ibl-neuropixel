@@ -224,16 +224,41 @@ def polarisation_slopes(df, fs):
     return df
 
 
-def recovery_slope(arr_peak, df, window_idx=np.arrange(50,55,1)):
+def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
     '''
     Compute the recovery slope, but using the average of the window as secondary point
     If you want to use just one point, input a single value for the window_idx
     :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
     :param df: dataframe of waveforms features
-    :param window_idx: indices to be taken into account for the second point
+    :param window_idx: indices to be taken into account for the second point ; indices from the peak
+    :param fs: sampling frequency (Hz)
     :return: dataframe with added columns
     '''
     # Check range is not outside of matrix boundary
     if window_idx[-1] >= (arr_peak.shape[1]):
         raise ValueError('Index out of bound: Window index larger than waveform array shape')
-    
+    # Time difference (use round) ; same for all as set by the window
+    recovery_duration = (np.round(np.mean(window_idx))) / fs
+
+    # Compute average value in window time
+
+    # # Create zero mask with 1 at peak + window, cumsum
+    # arr_mask = np.zeros(arr_peak.shape)
+    # arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx']+window_idx[0]] = 1
+    # arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx'] + window_idx[1]] = 1
+    # arr_mask = np.cumsum(arr_mask, axis=1)
+    # indx_window = np.where(arr_mask == 1)
+    # arr_window = arr_peak[indx_window[0], indx_window[1]]
+    # mean_val_window = np.mean(arr_peak[indx_window], axis=1)
+
+    # Compute the average value over the window, and take the difference
+    # # Sum indx of peak and window ; Repeat to get same size matrices
+    # Note : could make window_idx be passed in as vector instead of 2 min/max values:
+    window_idx = np.arange(window_idx[0], window_idx[1], 1)
+    rep_wind = np.tile(window_idx, (arr_peak.shape[0], 1))
+    rep_peak = np.tile(df['peak_time_idx'], (window_idx.shape[0], 1)).transpose()
+    # Note on the above: using np.tile because np. repeat does not work with axis=1
+    indx_values = rep_wind + rep_peak
+    # Get values
+    val_wind = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_values]
+    rep_01 = np.tile(np.arange(0, arr_peak.shape[0], 1), (indx_values.shape[1], 1)).transpose()
