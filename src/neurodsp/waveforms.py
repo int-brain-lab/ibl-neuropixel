@@ -196,3 +196,22 @@ def peak_to_trough(df, fs):
     # Ratio
     df['peak_to_trough_ratio'] = np.log(np.abs(df['peak_val'] / df['trough_val']))
     return df
+
+
+def polarisation_slopes(df, fs):
+    '''
+    Computes the depolarisation and repolarisation slopes as the difference between tip-peak
+    and peak-trough respectively.
+    :param df:  dataframe of waveforms features
+    :param fs: sampling frequency (Hz)
+    :return: dataframe with added columns
+    '''
+    # Depolarisation: slope before the peak (between tip and peak)
+    depolarise_duration = (df['peak_time_idx'] - df['tip_time_idx']) / fs
+    depolarise_volt = df['peak_val'] - df['tip_val']
+    df['depolarisation_slope'] = depolarise_volt / depolarise_duration
+    # Repolsation: slope after the peak (between peak and trough)
+    repolarise_duration = (df['trough_time_idx'] - df['peak_time_idx']) / fs
+    repolarise_volt = df['trough_val'] - df['peak_val']
+    df['repolarisation_slope'] = repolarise_volt / repolarise_duration
+    return df
