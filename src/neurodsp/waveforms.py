@@ -171,3 +171,28 @@ def half_peak(arr_in, df=None):
     df['half_peak_pre_val'] = val_pre
 
     return df
+
+
+def half_peak_duration(df, fs):
+    '''
+    Compute the half peak duration (in second)
+    :param df: dataframe of waveforms features, with the half peak intersection points computed
+    :param fs:  sampling rate (Hz)
+    :return: dataframe wirth added column
+    '''
+    df['half_peak_duration'] = (df['half_peak_post_time_idx'] - df['half_peak_pre_time_idx']) / fs
+    return df
+
+
+def peak_to_trough(df, fs):
+    '''
+    Compute the duration (second) and ratio of the peak-to-trough
+    :param df: dataframe of waveforms features
+    :param fs: sampling rate (Hz)
+    :return:
+    '''
+    # Duration
+    df['peak_to_trough_duration'] = (df['trough_time_idx'] - df['peak_time_idx']) / fs
+    # Ratio
+    df['peak_to_trough_ratio'] = np.log(np.abs(df['peak_val'] / df['trough_val']))
+    return df
