@@ -245,12 +245,20 @@ def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
 
     # Create zero mask with 1 at peak + window, cumsum
     arr_mask = np.zeros(arr_peak.shape)
-    # Todo check df['peak_time_idx'] + window_idx[0] or [1] is not out of bound
-    
+    # Check df['peak_time_idx'] + window_idx[0] or [1] is not out of bound
+    w_0 = df['peak_time_idx'] + window_idx[0]
+    w_1 = df['peak_time_idx'] + window_idx[1]
+    indx0 = np.where(w_0 > arr_mask.shape[1])[0]
+    indx1 = np.where(w_1 > arr_mask.shape[1])[0]
+    if len(indx0) > 0:
+        w_0[indx0] = arr_peak[indx0][-1]  # Take the last value of the waveform
+    if len(indx1) > 0:
+        w_1[indx1] = arr_peak[indx1][-1]  # Take the last value of the waveform
+
     arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx'] + window_idx[0]] = 1
     arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx'] + window_idx[1]] = 1
     arr_mask = np.cumsum(arr_mask, axis=1)
-    indx_window = np.where(arr_mask == 1)
+    indx_window = np.where(0 < arr_mask < (window_idx[1]-window_idx[0]))  # TODO and
     arr_window = arr_peak[indx_window[0], indx_window[1]]
     mean_val_window = np.mean(arr_peak[indx_window], axis=1)
     # Do reshape
