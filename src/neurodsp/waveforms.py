@@ -153,7 +153,7 @@ def half_peak(arr_peak, df):
     '''
     # TODO Review: is df.to_numpy() necessary ?
     # Get the sign of the peak
-    indx_pos = np.where(df['peak_val'].to_numpy() > 0)
+    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]  # todo Check [0] necessary
     # Flip positive wavs so all are negative
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
@@ -290,7 +290,7 @@ def dist_chanel_from_peak(channel_geometry, df):
     peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
 
     # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
-    peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)
+    peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)  #Todo -1
     peak_coord_rep = np.swapaxes(peak_coord_rep, 1, 2)  # N spikes x channel x coordinates
 
     # Difference
