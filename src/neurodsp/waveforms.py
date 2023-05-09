@@ -181,7 +181,7 @@ def half_peak(arr_peak, df):
     return df
 
 
-def half_peak_duration(df, fs):
+def half_peak_duration(df, fs=30000):
     '''
     Compute the half peak duration (in second)
     :param df: dataframe of waveforms features, with the half peak intersection points computed
@@ -192,7 +192,7 @@ def half_peak_duration(df, fs):
     return df
 
 
-def peak_to_trough(df, fs):
+def peak_to_trough(df, fs=30000):
     '''
     Compute the duration (second) and ratio of the peak-to-trough
     :param df: dataframe of waveforms features
@@ -206,7 +206,7 @@ def peak_to_trough(df, fs):
     return df
 
 
-def polarisation_slopes(df, fs):
+def polarisation_slopes(df, fs=30000):
     '''
     Computes the depolarisation and repolarisation slopes as the difference between tip-peak
     and peak-trough respectively.
@@ -225,56 +225,34 @@ def polarisation_slopes(df, fs):
     return df
 
 
-def recovery_slope(arr_peak, df, fs, window_idx=np.array([50, 55])):
+def recovery_slope(arr_peak, df, fs=30000, idx_from_trough=5):
     '''
-    Compute the recovery slope, but using the average of the window as secondary point
-    If you want to use just one point, input a single value for the window_idx
+    Compute the recovery slope, using a single secondary point (selected by a fixed increment
+    from the trough). If the fixed increment from the trough is outside the matrix boundary, the
+    last value of the waveform is used.
     :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
     :param df: dataframe of waveforms features
-    :param window_idx: indices to be taken into account for the second point ; indices from the peak
+    :param idx_from_peak: sample index to be taken into account for the second point ; index from the trough
     :param fs: sampling frequency (Hz)
     :return: dataframe with added columns
     '''
     # Check range is not outside of matrix boundary
-    if window_idx[-1] >= (arr_peak.shape[1]):
-        raise ValueError('Index out of bound: Window index larger than waveform array shape')
-    # Time difference (use round) ; same for all as set by the window
-    recovery_duration = (np.round(np.mean(window_idx))) / fs
+    if idx_from_trough >= (arr_peak.shape[1]):
+        raise ValueError('Index out of bound: Index larger than waveform array shape')
 
-    # Compute average value in window time
+    # Check df['peak_time_idx'] + pt_idx is not out of bound
+    idx_all = df['trough_time_idx'] + idx_from_trough
+    # Find waveform(s) for which the second point is outside matrix boundary range
+    idx_over = np.where(idx_all > arr_peak.shape[1])[0]
+    if len(idx_over) > 0:
+        # Todo should this raise a warning ?
+        idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
 
-    # Create zero mask with 1 at peak + window, cumsum
-    arr_mask = np.zeros(arr_peak.shape)
-    # Check df['peak_time_idx'] + window_idx[0] or [1] is not out of bound
-    w_0 = df['peak_time_idx'] + window_idx[0]
-    w_1 = df['peak_time_idx'] + window_idx[1]
-    indx0 = np.where(w_0 > arr_mask.shape[1])[0]
-    indx1 = np.where(w_1 > arr_mask.shape[1])[0]
-    if len(indx0) > 0:
-        w_0[indx0] = arr_peak[indx0][-1]  # Take the last value of the waveform
-    if len(indx1) > 0:
-        w_1[indx1] = arr_peak[indx1][-1]  # Take the last value of the waveform
-
-    arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx'] + window_idx[0]] = 1
-    arr_mask[np.arange(0, arr_mask.shape[0], 1), df['peak_time_idx'] + window_idx[1]] = 1
-    arr_mask = np.cumsum(arr_mask, axis=1)
-    indx_window = np.where(0 < arr_mask < (window_idx[1]-window_idx[0]))  # TODO and
-    arr_window = arr_peak[indx_window[0], indx_window[1]]
-    mean_val_window = np.mean(arr_peak[indx_window], axis=1)
-    # Do reshape
-
-
-    # # Compute the average value over the window, and take the difference
-    # # # Sum indx of peak and window ; Repeat to get same size matrices
-    # # Note : could make window_idx be passed in as vector instead of 2 min/max values:
-    # window_idx = np.arange(window_idx[0], window_idx[1], 1)
-    # rep_wind = np.tile(window_idx, (arr_peak.shape[0], 1))
-    # rep_peak = np.tile(df['peak_time_idx'], (window_idx.shape[0], 1)).transpose()
-    # # Note on the above: using np.tile because np. repeat does not work with axis=1
-    # indx_values = rep_wind + rep_peak
-    # # Get values
-    # val_wind = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_values]
-    # rep_01 = np.tile(np.arange(0, arr_peak.shape[0], 1), (indx_values.shape[1], 1)).transpose()
+    # Time, volt and slope values
+    recovery_duration = (idx_all - df['trough_time_idx']) / fs  # Difference between second point and peak
+    recovery_volt = arr_peak[idx_all] - df['trough_val']
+    df['recovery_slope'] = recovery_volt / recovery_duration
+    return df
 
 
 def dist_chanel_from_peak(channel_geometry, df):
@@ -301,5 +279,4 @@ def dist_chanel_from_peak(channel_geometry, df):
     sum_ch = np.sum(square_ch, axis=2)
     # Sqrt
     eu_dist = np.sqrt(sum_ch)
-
     return eu_dist
