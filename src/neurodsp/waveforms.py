@@ -7,14 +7,25 @@ import numpy as np
 import pandas as pd
 
 
+def _validate_arr_in(arr_in):
+    # expand array if 2d
+    if arr_in.ndim == 2:
+        arr_in = arr_in[np.newaxis, :, :]
+
+    # Init remove nan vals in entry array
+    arr_in[np.isnan(arr_in)] = 0
+    return arr_in
+
+
 def get_array_peak(arr_in, df):
     '''
     Create matrix of just NxT (spikes x time) of the peak waveforms channel (=1 channel)
 
-    :param arr_in: NxTxC waveform matrix (spikes x time x channel)
+    :param arr_in: NxTxC waveform matrix (spikes x time x channel) ; expands to 1xTxC if TxC as input
     :param df: dataframe of waveform features
     :return: NxT waveform matrix : spikes x time, only the peak channel
     '''
+    arr_in = _validate_arr_in(arr_in)
     arr_peak = arr_in[np.arange(arr_in.shape[0]), :, df['peak_trace_idx'].to_numpy()]
     return arr_peak
 
@@ -45,15 +56,6 @@ def arr_pre_post(arr_peak, indx_peak):
     arr_post = arr_post.astype('float')
     arr_post[indx_prepeak] = np.nan  # Array with values post-, nans pre- peak (from start to peak-1)
     return arr_pre, arr_post
-
-def _validate_arr_in(arr_in):
-    # expand array if 2d
-    if arr_in.ndim == 2:
-        arr_in = arr_in[np.newaxis, :, :]
-
-    # Init remove nan vals in entry array
-    arr_in[np.isnan(arr_in)] = 0
-    return arr_in
 
 
 def pick_maxima(arr_in):
@@ -139,7 +141,7 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
 
 def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(arr[nth_wav], c='gray', alpha=0.5)
-    ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], c='blue')
+    ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
     ax.plot(df.iloc[nth_wav].peak_time_idx, df.iloc[nth_wav].peak_val, 'r*')
     ax.plot(df.iloc[nth_wav].trough_time_idx, df.iloc[nth_wav].trough_val, 'g*')
     ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
@@ -171,6 +173,7 @@ def half_peak(arr_peak, df):
     # PRE: Find first time it crosses 0 (from positive -> negative values)
     indx_pre = np.argmax(arr_pre < 0, axis=1)
     val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre]
+    # Todo this algorithm does not deal if there are no points between 0 and the peak (no points found for half)
 
     # Add columns to DF and return
     df['half_peak_post_time_idx'] = indx_post
