@@ -147,7 +147,7 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
 
 
-def half_peak(arr_peak, df):
+def half_peak_point(arr_peak, df):
     '''
     Compute the two intersection points at halp-maximum peak
     :param: arr_in: NxT waveform matrix : spikes x time, only the peak channel
@@ -228,15 +228,14 @@ def polarisation_slopes(df, fs=30000):
     return df
 
 
-def recovery_slope(arr_peak, df, fs=30000, idx_from_trough=5):
+def recovery_point(arr_peak, df, idx_from_trough=5):
     '''
-    Compute the recovery slope, using a single secondary point (selected by a fixed increment
+    Compute the single recovery secondary point (selected by a fixed increment
     from the trough). If the fixed increment from the trough is outside the matrix boundary, the
     last value of the waveform is used.
     :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
     :param df: dataframe of waveforms features
-    :param idx_from_peak: sample index to be taken into account for the second point ; index from the trough
-    :param fs: sampling frequency (Hz)
+    :param idx_from_trough: sample index to be taken into account for the second point ; index from the trough
     :return: dataframe with added columns
     '''
     # Check range is not outside of matrix boundary
@@ -251,9 +250,22 @@ def recovery_slope(arr_peak, df, fs=30000, idx_from_trough=5):
         # Todo should this raise a warning ?
         idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
 
+    df['recovery_time_idx'] = idx_all
+    df['recovery_val'] = arr_peak[idx_all]
+    return df
+
+
+def recovery_slope(df, fs=30000):
+    '''
+    Compute the recovery slope, from the trough to the single secondary point.
+    :param df: dataframe of waveforms features
+    :param fs: sampling frequency (Hz)
+    :return: dataframe with added columns
+    '''
+
     # Time, volt and slope values
-    recovery_duration = (idx_all - df['trough_time_idx']) / fs  # Difference between second point and peak
-    recovery_volt = arr_peak[idx_all] - df['trough_val']
+    recovery_duration = (df['recovery_time_idx'] - df['trough_time_idx']) / fs  # Diff between second point and peak
+    recovery_volt = df['recovery_val'] - df['trough_val']
     df['recovery_slope'] = recovery_volt / recovery_duration
     return df
 
@@ -267,6 +279,7 @@ def dist_chanel_from_peak(channel_geometry, df):
     :return: eu_dist : N(spikes) * N(channels): the euclidian distance between each channel and the peak channel,
     for each waveform
     '''
+    # Todo deal with Nan in entry coordinate (fake padding channels)
     # Get peak coordinates (x,y,z)
     peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
 
