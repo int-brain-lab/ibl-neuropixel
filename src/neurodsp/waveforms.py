@@ -243,7 +243,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
         raise ValueError('Index out of bound: Index larger than waveform array shape')
 
     # Check df['peak_time_idx'] + pt_idx is not out of bound
-    idx_all = df['trough_time_idx'] + idx_from_trough
+    idx_all = df['trough_time_idx'].to_numpy() + idx_from_trough
     # Find waveform(s) for which the second point is outside matrix boundary range
     idx_over = np.where(idx_all > arr_peak.shape[1])[0]
     if len(idx_over) > 0:
@@ -251,7 +251,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
         idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
 
     df['recovery_time_idx'] = idx_all
-    df['recovery_val'] = arr_peak[idx_all]
+    df['recovery_val'] = arr_peak[np.arange(0, arr_peak.shape[0], 1), idx_all]
     return df
 
 
