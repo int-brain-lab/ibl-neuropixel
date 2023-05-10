@@ -262,7 +262,7 @@ def recovery_slope(df, fs=30000):
     :param fs: sampling frequency (Hz)
     :return: dataframe with added columns
     '''
-
+    # Note: this could be lumped in with the polarisation_slopes
     # Time, volt and slope values
     recovery_duration = (df['recovery_time_idx'] - df['trough_time_idx']) / fs  # Diff between second point and peak
     recovery_volt = df['recovery_val'] - df['trough_val']
