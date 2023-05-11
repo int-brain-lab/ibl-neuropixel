@@ -307,5 +307,6 @@ def spatial_spread_weighted(eu_dist, weights):
     :param weights: N(spikes) * N(channels): the weights per channel per spikes
     :return: spatial_spread : N(spikes) * 1 vector
     '''
+    # Todo check for nan entries and replace with 0
     spatial_spread = np.sum(np.multiply(eu_dist, weights), axis=1) / np.sum(weights, axis=1)
     return spatial_spread
