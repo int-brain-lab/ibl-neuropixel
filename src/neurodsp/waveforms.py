@@ -279,7 +279,7 @@ def dist_chanel_from_peak(channel_geometry, df):
     :return: eu_dist : N(spikes) * N(channels): the euclidian distance between each channel and the peak channel,
     for each waveform
     '''
-    # Todo deal with Nan in entry coordinate (fake padding channels)
+    # Note: It deals with Nan in entry coordinate (fake padding channels); returns Nan as Eu dist
     # Get peak coordinates (x,y,z)
     peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
 
