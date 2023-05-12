@@ -310,3 +310,9 @@ def spatial_spread_weighted(eu_dist, weights):
     # Note: possible to have nan entries in eu_dist
     spatial_spread = np.nansum(np.multiply(eu_dist, weights), axis=1) / np.sum(weights, axis=1)
     return spatial_spread
+
+
+# TODO: to compute values (e.g. peak, trough) on all channels,
+#  flatten the matrix channel -> along N wav (so each channel appears as a single waveform)
+#  apply function
+#  then reshape
