@@ -160,7 +160,7 @@ def half_peak_point(arr_peak, df):
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
     # Compute half max value, repmat and substract it
-    half_max = df['peak_val'].to_numpy()/2
+    half_max = df['peak_val'].to_numpy() / 2
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
     # Note on the above: using np.tile because np.repeat does not work with axis=1
     # todo rewrite with np.repeat and np.newaxis
@@ -284,7 +284,7 @@ def dist_chanel_from_peak(channel_geometry, df):
     peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
 
     # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
-    peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)  #Todo -1
+    peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)  # Todo -1
     peak_coord_rep = np.swapaxes(peak_coord_rep, 1, 2)  # N spikes x channel x coordinates
 
     # Difference
