@@ -1,3 +1,7 @@
+# 0.6.0
+## 0.6.0 2023-05-15
+- Add waveforms utilities for spike features computations
+
 # 0.5.0
 ## 0.5.3 2023-04-24
 - Fix for cases where channel map keys are not present
