@@ -311,13 +311,6 @@ def spatial_spread_weighted(eu_dist, weights):
     spatial_spread = np.nansum(np.multiply(eu_dist, weights), axis=1) / np.sum(weights, axis=1)
     return spatial_spread
 
-
-# TODO: to compute values (e.g. peak, trough) on all channels,
-#  flatten the matrix channel -> along N wav (so each channel appears as a single waveform)
-#  apply function
-#  then reshape ; Note: indexing DF with reshape indices needs testing
-
-
 def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
     """
     This is the main function to compute spike features from a set of waveforms
