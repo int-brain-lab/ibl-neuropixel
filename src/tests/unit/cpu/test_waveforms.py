@@ -66,8 +66,8 @@ def test_dist_chanel_from_peak():
                           np.array([[4, 0, 0], [2, 0, 0], [np.NaN, np.NaN, np.NaN], [1, 0, 0]])), axis=2)
     xyz_testd = np.swapaxes(xyz_testd, axis1=0, axis2=2)
     xyz_testd = np.swapaxes(xyz_testd, axis1=1, axis2=2)
-    df_testd = pd.DataFrame.from_dict({"peak_trace_idx": np.array([0, 1])})
-    eu_dist = waveforms.dist_chanel_from_peak(xyz_testd, df_testd)
+
+    eu_dist = waveforms.dist_chanel_from_peak(xyz_testd, np.array([0, 1]))
     weights = np.zeros(eu_dist.shape)
     weights[0][1:3] = 1
     weights[1][2:4] = 1
