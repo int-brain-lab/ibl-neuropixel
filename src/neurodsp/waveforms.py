@@ -318,18 +318,18 @@ def spatial_spread_weighted(eu_dist, weights):
 #  then reshape ; Note: indexing DF with reshape indices needs testing
 
 
-def compute_df_arr_peak(arr_in):
+def compute_df_arr_peak(arr_in, fs=30000, idx_from_trough=5):
     # ----- Compute -----
     df = peak_trough_tip(arr_in)
     # Array peak
-    arr_peak = get_array_peak(arr_in, df)  # this output is correct (manually inspected) ; should be saved for test
+    arr_peak = get_array_peak(arr_in, df)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
-    df = half_peak_duration(df, fs=30000)
+    df = half_peak_duration(df, fs=fs)
     # Recovery point
-    df = recovery_point(arr_peak, df, idx_from_trough=5)
+    df = recovery_point(arr_peak, df, idx_from_trough=idx_from_trough)
     # Slopes (this was not checked by eye but saved for future testing)
-    df = polarisation_slopes(df, fs=30000)
-    df = recovery_slope(df, fs=30000)
+    df = polarisation_slopes(df, fs=fs)
+    df = recovery_slope(df, fs=fs)
     return df, arr_peak
