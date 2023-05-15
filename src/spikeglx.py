@@ -585,7 +585,7 @@ def _map_channels_from_meta(meta_data):
     # (nb: drawflag is one should be drawn and considered spatial average)
     chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
     return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
-                
+
 
 def _conversion_sample2v_from_meta(meta_data):
     """

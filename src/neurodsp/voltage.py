@@ -751,8 +751,8 @@ def current_source_density(lfp, h, method='diff', sigma=1 / 3):
             csd[itr, :] = KCSD1D(
                 h['y'][itr, np.newaxis],
                 lfp[itr, :],
-                h=1.,
-                sigma=1 / 3,
+                h=np.median(np.diff(h['y'][ind])),  # this seems to work well with the current intertrace
+                sigma=sigma,
                 xmin=np.min(h['y'][itr]),
                 xmax=np.max(h['y'][itr]),
                 gdx=np.ceil((np.max(h['y'][itr]) - np.min(h['y'][itr])) / itr.size),
