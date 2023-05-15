@@ -316,3 +316,20 @@ def spatial_spread_weighted(eu_dist, weights):
 #  flatten the matrix channel -> along N wav (so each channel appears as a single waveform)
 #  apply function
 #  then reshape ; Note: indexing DF with reshape indices needs testing
+
+
+def compute_df_arr_peak(arr_in):
+    # ----- Compute -----
+    df = peak_trough_tip(arr_in)
+    # Array peak
+    arr_peak = get_array_peak(arr_in, df)  # this output is correct (manually inspected) ; should be saved for test
+    # Half peak points
+    df = half_peak_point(arr_peak, df)
+    # Half peak duration
+    df = half_peak_duration(df, fs=30000)
+    # Recovery point
+    df = recovery_point(arr_peak, df, idx_from_trough=5)
+    # Slopes (this was not checked by eye but saved for future testing)
+    df = polarisation_slopes(df, fs=30000)
+    df = recovery_slope(df, fs=30000)
+    return df, arr_peak

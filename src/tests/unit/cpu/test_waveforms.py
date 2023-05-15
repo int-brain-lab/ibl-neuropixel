@@ -46,23 +46,6 @@ def test_peak_through_tip_3d():
     np.testing.assert_equal(df.tip_val, np.array([5, -7]))
 
 
-def compute_df_arr_peak(arr_in):
-    # ----- Compute -----
-    df = waveforms.peak_trough_tip(arr_in)
-    # Array peak
-    arr_peak = waveforms.get_array_peak(arr_in, df)  # this output is correct (manually inspected) ; should be saved for test
-    # Half peak points
-    df = waveforms.half_peak_point(arr_peak, df)
-    # Half peak duration
-    df = waveforms.half_peak_duration(df, fs=30000)
-    # Recovery point
-    df = waveforms.recovery_point(arr_peak, df, idx_from_trough=5)
-    # Slopes (this was not checked by eye but saved for future testing)
-    df = waveforms.polarisation_slopes(df, fs=30000)
-    df = waveforms.recovery_slope(df, fs=30000)
-    return df, arr_peak
-
-
 def test_halfpeak_slopes():
     # Load fixtures
     folder_save = Path(waveforms.__file__).parents[1].joinpath('tests', 'unit', 'cpu', 'fixtures', 'waveform_sample')
@@ -70,7 +53,7 @@ def test_halfpeak_slopes():
     test_arr_peak = np.load(folder_save.joinpath('test_arr_peak.npy'))
     test_df = pd.read_csv(folder_save.joinpath('test_df.csv'))
     test_df = test_df.drop("Unnamed: 0", axis=1)  # Dropping the "Unnamed: 0" column
-    df, arr_peak = compute_df_arr_peak(arr_in)
+    df, arr_peak = waveforms.compute_df_arr_peak(arr_in)
     # Array peak testing
     np.testing.assert_equal(arr_peak, test_arr_peak)
     # Df testing
