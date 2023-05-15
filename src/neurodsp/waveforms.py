@@ -238,7 +238,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
     :param idx_from_trough: sample index to be taken into account for the second point ; index from the trough
     :return: dataframe with added columns
     '''
-    # Check range is not outside of matrix boundary
+    # Check range is not outside of matrix boundary)
     if idx_from_trough >= (arr_peak.shape[1]):
         raise ValueError('Index out of bound: Index larger than waveform array shape')
 
@@ -318,18 +318,34 @@ def spatial_spread_weighted(eu_dist, weights):
 #  then reshape ; Note: indexing DF with reshape indices needs testing
 
 
-def compute_df_arr_peak(arr_in, fs=30000, idx_from_trough=5):
-    # ----- Compute -----
-    df = peak_trough_tip(arr_in)
+def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
+    """
+    This is the main function to compute spike features from a set of waveforms
+    Current features:
+    Index(['peak_trace_idx', 'peak_time_idx', 'peak_val', 'trough_time_idx',
+       'trough_val', 'tip_time_idx', 'tip_val', 'half_peak_post_time_idx',
+       'half_peak_pre_time_idx', 'half_peak_post_val', 'half_peak_pre_val',
+       'half_peak_duration', 'recovery_time_idx', 'recovery_val',
+       'depolarisation_slope', 'repolarisation_slope', 'recovery_slope'],
+    :param waveforms: npsikes * nsamples * nchannels 3D np.array containing multi-channel waveforms
+    :param fs: sampling frequency (Hz)
+    :recovery_duration_ms: in ms, the duration from the trough to the recovery point
+    :return: dataframe of spikes with all features,
+    Returns:
+    """
+    df = peak_trough_tip(waveforms)
     # Array peak
-    arr_peak = get_array_peak(arr_in, df)
+    arr_peak = get_array_peak(waveforms, df)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
     df = half_peak_duration(df, fs=fs)
     # Recovery point
-    df = recovery_point(arr_peak, df, idx_from_trough=idx_from_trough)
+    df = recovery_point(arr_peak, df, idx_from_trough=int(round(recovery_duration_ms * fs / 1000)))
     # Slopes (this was not checked by eye but saved for future testing)
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
-    return df, arr_peak
+    if return_peak_channel:
+        return df, arr_peak
+    else:
+        return df
