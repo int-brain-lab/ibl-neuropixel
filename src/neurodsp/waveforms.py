@@ -315,4 +315,4 @@ def spatial_spread_weighted(eu_dist, weights):
 # TODO: to compute values (e.g. peak, trough) on all channels,
 #  flatten the matrix channel -> along N wav (so each channel appears as a single waveform)
 #  apply function
-#  then reshape
+#  then reshape ; Note: indexing DF with reshape indices needs testing
