@@ -320,7 +320,8 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
        'trough_val', 'tip_time_idx', 'tip_val', 'half_peak_post_time_idx',
        'half_peak_pre_time_idx', 'half_peak_post_val', 'half_peak_pre_val',
        'half_peak_duration', 'recovery_time_idx', 'recovery_val',
-       'depolarisation_slope', 'repolarisation_slope', 'recovery_slope'],
+       'depolarisation_slope', 'repolarisation_slope', 'recovery_slope',
+       'peak_to_trough_duration', 'peak_to_trough_ratio'],
     :param waveforms: npsikes * nsamples * nchannels 3D np.array containing multi-channel waveforms
     :param fs: sampling frequency (Hz)
     :recovery_duration_ms: in ms, the duration from the trough to the recovery point
@@ -339,6 +340,7 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
     # Slopes (this was not checked by eye but saved for future testing)
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
+    df = peak_to_trough(df, fs=fs)
     if return_peak_channel:
         return df, arr_peak
     else:
