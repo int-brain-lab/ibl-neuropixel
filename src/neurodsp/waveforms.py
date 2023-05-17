@@ -5,6 +5,7 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 """
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def _validate_arr_in(arr_in):
@@ -139,12 +140,24 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
         return d_out
 
 
-def plot_peaktiptrough(df, arr, ax, nth_wav=0):
-    ax.plot(arr[nth_wav], c='gray', alpha=0.5)
-    ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
-    ax.plot(df.iloc[nth_wav].peak_time_idx, df.iloc[nth_wav].peak_val, 'r*')
-    ax.plot(df.iloc[nth_wav].trough_time_idx, df.iloc[nth_wav].trough_val, 'g*')
-    ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
+def plot_peaktiptrough(df, arr, ax=None, iw=0):
+    """
+    Display waveform on a 2D amplitude-time plot, with peak, trough and tip overlaid
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+    ax.plot(arr[iw], c='gray', alpha=0.5)
+    ax.plot(arr[iw][:, int(df.iloc[iw].peak_trace_idx)], marker=".", c='blue')
+    ax.plot(df.iloc[iw].peak_time_idx, df.iloc[iw].peak_val, 'r*')
+    ax.plot(df.iloc[iw].trough_time_idx, df.iloc[iw].trough_val, 'g*')
+    ax.plot(df.iloc[iw].tip_time_idx, df.iloc[iw].tip_val, 'k*')
+    ax.plot(df.iloc[iw].half_peak_post_time_idx, df.iloc[iw].half_peak_post_val, 'c*')
+    ax.plot(df.iloc[iw].half_peak_pre_time_idx, df.iloc[iw].half_peak_pre_val, 'c*')
+    # line for half peak boundary
+    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[iw].peak_val/2, '-k')
+    # Recovery
+    ax.plot(df.iloc[iw].recovery_time_idx, df.iloc[iw].recovery_val, 'y*')
+    return ax
 
 
 def half_peak_point(arr_peak, df):

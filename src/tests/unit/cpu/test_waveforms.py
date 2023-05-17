@@ -1,7 +1,10 @@
-import numpy as np
-import neurodsp.waveforms as waveforms
-import pandas as pd
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import neurodsp.waveforms as waveforms
+from neurowaveforms.model import generate_waveform
 
 
 def make_array_peak_through_tip():
@@ -76,3 +79,8 @@ def test_dist_chanel_from_peak():
     np.testing.assert_almost_equal(eu_dist[0, :], np.array([0, 1, 1, np.sqrt(2)]))
     np.testing.assert_equal(eu_dist[1, :], np.array([2, 0, np.NaN, 1]))
     np.testing.assert_equal(sp_spread, np.array([1, 0.5]))
+
+
+def test_generate_waveforms():
+    wav = generate_waveform()
+    assert wav.shape == (121, 40)
