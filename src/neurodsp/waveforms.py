@@ -169,8 +169,12 @@ def half_peak_point(arr_peak, df):
     # Get the sign of the peak
     indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]  # todo Check [0] necessary
     # Flip positive wavs so all are negative
+    '''
+    # Commenting : This is probably not necessary given the definition of the peak (argmin)
+    # test without for now
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
+    '''
     # Compute half max value, repmat and substract it
     half_max = df['peak_val'].to_numpy() / 2
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
