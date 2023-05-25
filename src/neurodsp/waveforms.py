@@ -142,10 +142,21 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
 
 def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(arr[nth_wav], c='gray', alpha=0.5)
+    # Peak channel
     ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
+    # Peak point
     ax.plot(df.iloc[nth_wav].peak_time_idx, df.iloc[nth_wav].peak_val, 'r*')
+    # Trough point
     ax.plot(df.iloc[nth_wav].trough_time_idx, df.iloc[nth_wav].trough_val, 'g*')
+    # Tip point
     ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
+    # Half peak points
+    ax.plot(df.iloc[nth_wav].half_peak_post_time_idx, df.iloc[nth_wav].half_peak_post_val, 'c*')
+    ax.plot(df.iloc[nth_wav].half_peak_pre_time_idx, df.iloc[nth_wav].half_peak_pre_val, 'c*')
+    # Line for half peak boundary
+    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val/2, '-k')
+    # Recovery point
+    ax.plot(df.iloc[nth_wav].recovery_time_idx, df.iloc[nth_wav].recovery_val, 'y*')
 
 
 def half_peak_point(arr_peak, df):
