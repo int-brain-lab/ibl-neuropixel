@@ -106,7 +106,8 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     arr_pre, arr_post = arr_pre_post(arr_out, indx_peak)
 
     # Find trough
-    indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
+    # indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
+    indx_trough = np.nanargmax(arr_post, axis=1)
     val_trough = arr_out[np.arange(0, arr_out.shape[0], 1), indx_trough]
     del arr_post
 
