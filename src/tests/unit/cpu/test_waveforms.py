@@ -76,3 +76,53 @@ def test_dist_chanel_from_peak():
     np.testing.assert_almost_equal(eu_dist[0, :], np.array([0, 1, 1, np.sqrt(2)]))
     np.testing.assert_equal(eu_dist[1, :], np.array([2, 0, np.NaN, 1]))
     np.testing.assert_equal(sp_spread, np.array([1, 0.5]))
+
+
+def test_reshape_wav_one_channel():
+    # Test reshape into 1 channel
+    arr = make_array_peak_through_tip()
+    arr_out = waveforms.reshape_wav_one_channel(arr)
+    # Check against test
+    arr_tested = np.array([[[1.],
+                            [2.],
+                            [3.],
+                            [4.],
+                            [4.],
+                            [4.],
+                            [4.]],
+                           [[1.],
+                            [2.],
+                            [5.],
+                            [4.],
+                            [-5.],
+                            [-6.],
+                            [5.]],
+                           [[np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan]],
+                           [[-8.],
+                            [-7.],
+                            [7.],
+                            [7.],
+                            [4.],
+                            [4.],
+                            [4.]],
+                           [[7.],
+                            [7.],
+                            [7.],
+                            [7.],
+                            [5.],
+                            [5.],
+                            [5.]],
+                           [[7.],
+                            [7.],
+                            [7.],
+                            [7.],
+                            [4.],
+                            [4.],
+                            [4.]]])
+    np.testing.assert_equal(arr_out, arr_tested)

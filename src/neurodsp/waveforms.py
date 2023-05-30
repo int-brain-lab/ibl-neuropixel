@@ -328,7 +328,31 @@ def spatial_spread_weighted(eu_dist, weights):
     return spatial_spread
 
 
-def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
+def reshape_wav_one_channel(arr):
+    '''
+    Reshape matrix so instead of being like waveforms: (wav, time, trace) i.e. (npsikes x nsamples x nchannels)
+    it is of size (npsikes * nchannels) x nsamples
+    :param waveforms: 3D np.array containing multi-channel waveforms, 3D dimension have to be (wav, time, trace)
+    :return:
+    '''
+    # Swap axis so the matrix is now: wav x channel x time
+    arr_ax = np.swapaxes(arr, 1, 2)
+    # reshape using the first 2 dimension (multiplied) x time
+    arr_resh = arr_ax.reshape(-1, arr_ax.shape[-1])
+    # add a new axis for computation
+    arr_out = arr_resh[:, :, np.newaxis]
+    return arr_out
+
+
+def compute_on_all_channels(arr, fs=30000):
+    # TODO reshape
+    # Peak, trough, tip
+    df = peak_trough_tip(arr)
+    return df
+
+
+
+def compute_spike_features(arr, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
     """
     This is the main function to compute spike features from a set of waveforms
     Current features:
@@ -337,15 +361,15 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
        'half_peak_pre_time_idx', 'half_peak_post_val', 'half_peak_pre_val',
        'half_peak_duration', 'recovery_time_idx', 'recovery_val',
        'depolarisation_slope', 'repolarisation_slope', 'recovery_slope'],
-    :param waveforms: npsikes * nsamples * nchannels 3D np.array containing multi-channel waveforms
+    :param arr: 3D np.array containing multi-channel waveforms; 3D dimension have to be (wav, time, trace)
     :param fs: sampling frequency (Hz)
     :recovery_duration_ms: in ms, the duration from the trough to the recovery point
     :return: dataframe of spikes with all features,
     Returns:
     """
-    df = peak_trough_tip(waveforms)
+    df = peak_trough_tip(arr)
     # Array peak
-    arr_peak = get_array_peak(waveforms, df)
+    arr_peak = get_array_peak(arr, df)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
