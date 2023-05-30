@@ -361,8 +361,8 @@ def weights_all_channels(arr, weight_type='peak'):
         raise ValueError('weight_type: unknown value attributed')
     # Reshape
     # Order in DF: #1-2-3 channel of spike #1, then #1-2-3 channel spike #2 etc
-    weights = np.reshape(weights_flat, (arr.shape[0], arr.shape[2]))
-    return weights
+    weights_spk_ch = np.reshape(weights_flat, (arr.shape[0], arr.shape[2]))
+    return weights_spk_ch
 
 
 def compute_spike_features(arr, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
