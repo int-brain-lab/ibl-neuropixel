@@ -344,12 +344,25 @@ def reshape_wav_one_channel(arr):
     return arr_out
 
 
-def compute_on_all_channels(arr, fs=30000):
-    # TODO reshape
+def weights_all_channels(arr, weight_type='peak'):
+    '''
+    Compute a value on all channels of a waveform matrix, and return as weights (to be used in spatial spread).
+    :param arr: 3D np.array containing multi-channel waveforms, 3D dimension have to be (wav, time, trace)
+    :param weight_type: value to be returned as weight (implemented: peak)
+    :return: weights: N(spikes) * N(channels): the weights per channel per spikes
+    '''
+    # Reshape
+    arr_resh = reshape_wav_one_channel(arr)
     # Peak, trough, tip
-    df = peak_trough_tip(arr)
-    return df
-
+    df = peak_trough_tip(arr_resh)
+    if weight_type == 'peak':
+        weights_flat = df['peak_val'].to_numpy()
+    else:
+        raise ValueError('weight_type: unknown value attributed')
+    # Reshape
+    # Order in DF: #1-2-3 channel of spike #1, then #1-2-3 channel spike #2 etc
+    weights = np.reshape(weights_flat, (arr.shape[0], arr.shape[2]))
+    return weights
 
 
 def compute_spike_features(arr, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
