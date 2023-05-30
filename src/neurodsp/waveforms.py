@@ -327,6 +327,7 @@ def spatial_spread_weighted(eu_dist, weights):
     spatial_spread = np.nansum(np.multiply(eu_dist, weights), axis=1) / np.sum(weights, axis=1)
     return spatial_spread
 
+
 def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
     """
     This is the main function to compute spike features from a set of waveforms
@@ -351,7 +352,7 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
     df = half_peak_duration(df, fs=fs)
     # Recovery point
     df = recovery_point(arr_peak, df, idx_from_trough=int(round(recovery_duration_ms * fs / 1000)))
-    # Slopes (this was not checked by eye but saved for future testing)
+    # Slopes
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
     if return_peak_channel:
