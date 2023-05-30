@@ -130,8 +130,7 @@ def test_reshape_wav_one_channel():
 
 def test_weights_all_channels():
     arr = make_array_peak_through_tip()
-    arr_out = waveforms.reshape_wav_one_channel(arr)
-    weight = waveforms.weights_all_channels(arr_out)
+    weight = waveforms.weights_all_channels(arr)
     weight_tested = np.array([[1., -6., 0.],
                               [-8., 5., 4.]])
     np.testing.assert_equal(weight, weight_tested)
