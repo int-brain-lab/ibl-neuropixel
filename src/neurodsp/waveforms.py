@@ -32,14 +32,11 @@ def get_array_peak(arr_in, df):
 
 def invert_peak_waveform(arr_peak, df):
     # Get the sign of the peak
-    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]
-    sign_peak = np.ones(df['peak_val'].to_numpy().shape)
+    df['sign_peak'] = np.sign(df['peak_val'])
+    indx_pos = np.where(df['sign_peak'] > 0)[0]
     # Flip positive wavs so all are negative
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
-        sign_peak[indx_pos] = -1
-
-    df['sign_peak'] = sign_peak
     return arr_peak, df
 
 
