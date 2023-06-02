@@ -79,8 +79,10 @@ def pick_maximum(arr_in):
     arr_in = _validate_arr_in(arr_in)
     indx_maxs, max_vals = pick_maxima(arr_in)
     indx_trace = np.argmax(max_vals, axis=1)
-    # indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
-    indx_peak = np.argmin(arr_in[np.arange(arr_in.shape[0]), :, indx_trace], axis=1)
+    # Select maximum of absolute value as peak
+    indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
+    # Select minimum as peak (disregarded on 02-06-2023)
+    # indx_peak = np.argmin(arr_in[np.arange(arr_in.shape[0]), :, indx_trace], axis=1)
     val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
 
     return indx_trace, indx_peak, val_peak
@@ -168,16 +170,15 @@ def half_peak_point(arr_peak, df):
     '''
     # TODO Review: is df.to_numpy() necessary ?
     # Get the sign of the peak
-    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]  # todo Check [0] necessary
+    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]
+    sign_peak = np.ones(df['peak_val'].to_numpy().shape)
     # Flip positive wavs so all are negative
-    '''
-    # Commenting : This is probably not necessary given the definition of the peak (argmin)
-    # test without for now
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
-    '''
+        sign_peak[indx_pos] = -1
+
     # Compute half max value, repmat and substract it
-    half_max = df['peak_val'].to_numpy() / 2
+    half_max = (df['peak_val'].to_numpy() / 2) * sign_peak
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
     # Note on the above: using np.tile because np.repeat does not work with axis=1
     # todo rewrite with np.repeat and np.newaxis
@@ -195,8 +196,8 @@ def half_peak_point(arr_peak, df):
     # Add columns to DF and return
     df['half_peak_post_time_idx'] = indx_post
     df['half_peak_pre_time_idx'] = indx_pre
-    df['half_peak_post_val'] = val_post
-    df['half_peak_pre_val'] = val_pre
+    df['half_peak_post_val'] = val_post * sign_peak
+    df['half_peak_pre_val'] = val_pre * sign_peak
 
     return df
 
