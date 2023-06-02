@@ -204,7 +204,7 @@ def half_peak_point(arr_peak, df):
     indx_post = np.argmax(arr_post > 0, axis=1)
     val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post] * df['invert_sign_peak'].to_numpy()
     # PRE: Find first time it crosses 0 (from positive -> negative values)
-    indx_pre = np.argmax(arr_pre < 0, axis=1)
+    indx_pre = np.argmin(arr_pre > 0, axis=1) - 1
     val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre] * df['invert_sign_peak'].to_numpy()
     # Todo this algorithm does not deal if there are no points between 0 and the peak (no points found for half)
 
