@@ -32,11 +32,12 @@ def get_array_peak(arr_in, df):
 
 def invert_peak_waveform(arr_peak, df):
     # Get the sign of the peak
-    df['sign_peak'] = np.sign(df['peak_val'])
-    indx_pos = np.where(df['sign_peak'] > 0)[0]
+    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]
     # Flip positive wavs so all are negative
     if len(indx_pos) > 0:
         arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
+
+    df['invert_sign_peak'] = np.sign(df['peak_val']) * -1  # Inverted signe peak to multiply point values by
     return arr_peak, df
 
 
@@ -131,7 +132,7 @@ def find_tip_trough(arr_peak, df):
     # Find trough
     # indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
     indx_trough = np.nanargmax(arr_post, axis=1)
-    val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['sign_peak'].to_numpy()
+    val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
     del arr_post
 
     # Find tip
@@ -142,7 +143,7 @@ def find_tip_trough(arr_peak, df):
     arr_cs = np.zeros(y_dif1.shape)
     arr_cs[indx_posit] = 1
     indx_tip = np.argmax(np.cumsum(arr_cs, axis=1), axis=1) + 1
-    val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['sign_peak'].to_numpy()
+    val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
     del arr_cs
 
     df['trough_time_idx'] = indx_trough
@@ -182,7 +183,7 @@ def half_peak_point(arr_peak, df):
     '''
     # TODO Review: is df.to_numpy() necessary ?
     # Compute half max value, repmat and substract it
-    half_max = (df['peak_val'].to_numpy() / 2) * df['sign_peak'].to_numpy()
+    half_max = (df['peak_val'].to_numpy() / 2) * df['invert_sign_peak'].to_numpy()
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
     # Note on the above: using np.tile because np.repeat does not work with axis=1
     # todo rewrite with np.repeat and np.newaxis
@@ -191,10 +192,10 @@ def half_peak_point(arr_peak, df):
     arr_pre, arr_post = arr_pre_post(arr_sub, df['peak_time_idx'].to_numpy())
     # POST: Find first time it crosses 0 (from negative -> positive values)
     indx_post = np.argmax(arr_post > 0, axis=1)
-    val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post] * df['sign_peak'].to_numpy()
+    val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post] * df['invert_sign_peak'].to_numpy()
     # PRE: Find first time it crosses 0 (from positive -> negative values)
     indx_pre = np.argmax(arr_pre < 0, axis=1)
-    val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre] * df['sign_peak'].to_numpy()
+    val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre] * df['invert_sign_peak'].to_numpy()
     # Todo this algorithm does not deal if there are no points between 0 and the peak (no points found for half)
 
     # Add columns to DF and return
@@ -273,7 +274,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
         idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
 
     df['recovery_time_idx'] = idx_all
-    df['recovery_val'] = arr_peak[np.arange(0, arr_peak.shape[0], 1), idx_all] * df['sign_peak'].to_numpy()
+    df['recovery_val'] = arr_peak[np.arange(0, arr_peak.shape[0], 1), idx_all] * df['invert_sign_peak'].to_numpy()
     return df
 
 
