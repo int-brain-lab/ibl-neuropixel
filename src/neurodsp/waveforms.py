@@ -134,7 +134,10 @@ def find_tip_trough(arr_peak, df):
     indx_trough = np.nanargmax(arr_post, axis=1)
     val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
     del arr_post
-
+    # TODO spin function above into a function
+    #  if ratio or diff peak/trough smaller than x AND time diff is smaller than xx :
+    #  Assign trough as peak
+    #  Call this function again to compute trough with new peak assigned
     # Find tip
     '''
     # 02-06-2023 ; Decided not to use the inflection point but rather maximum
