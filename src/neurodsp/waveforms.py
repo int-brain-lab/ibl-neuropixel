@@ -139,7 +139,7 @@ def find_tip_trough(arr_peak, df):
     '''
     # 02-06-2023 ; Decided not to use the inflection point but rather maximum
     # Leaving code for now commented as legacy example
-    
+
     # Inflection point
     y_dif1 = np.diff(arr_pre, axis=1)
     indx_posit = np.where(y_dif1 > 0)
@@ -180,7 +180,7 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True):
     ax.plot(df.iloc[nth_wav].half_peak_post_time_idx, df.iloc[nth_wav].half_peak_post_val, 'c*')
     ax.plot(df.iloc[nth_wav].half_peak_pre_time_idx, df.iloc[nth_wav].half_peak_pre_val, 'c*')
     # Line for half peak boundary
-    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val/2, '-k')
+    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val / 2, '-k')
     # Recovery point
     ax.plot(df.iloc[nth_wav].recovery_time_idx, df.iloc[nth_wav].recovery_val, 'y*')
 
