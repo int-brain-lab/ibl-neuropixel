@@ -136,16 +136,26 @@ def find_tip_trough(arr_peak, df):
     del arr_post
 
     # Find tip
+    '''
+    # 02-06-2023 ; Decided not to use the inflection point but rather maximum
+    # Leaving code for now commented as legacy example
+    
+    # Inflection point
     y_dif1 = np.diff(arr_pre, axis=1)
     indx_posit = np.where(y_dif1 > 0)
     del arr_pre
-
     arr_cs = np.zeros(y_dif1.shape)
     arr_cs[indx_posit] = 1
     indx_tip = np.argmax(np.cumsum(arr_cs, axis=1), axis=1) + 1
     val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
     del arr_cs
+    '''
+    # Maximum
+    indx_tip = np.nanargmax(arr_pre, axis=1)
+    val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
+    del arr_pre
 
+    # Put values into df
     df['trough_time_idx'] = indx_trough
     df['trough_val'] = val_trough
 
@@ -360,8 +370,8 @@ def weights_spk_ch(arr, weight_type='peak'):
     '''
     # Reshape
     arr_resh = reshape_wav_one_channel(arr)
-    # Peak, trough, tip
-    df = peak_trough_tip(arr_resh)  #TODO
+    # Peak
+    df = find_peak(arr_resh)
     if weight_type == 'peak':
         weights_flat = df['peak_val'].to_numpy()
     else:
