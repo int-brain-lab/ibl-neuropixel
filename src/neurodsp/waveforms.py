@@ -203,10 +203,18 @@ def half_peak_point(arr_peak, df):
     # POST: Find first time it crosses 0 (from negative -> positive values)
     indx_post = np.argmax(arr_post > 0, axis=1)
     val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post] * df['invert_sign_peak'].to_numpy()
-    # PRE: Find first time it crosses 0 (from positive -> negative values)
-    indx_pre = np.argmin(arr_pre > 0, axis=1) - 1
+    # PRE:
+    # Invert matrix (flip L-R) to find first point crossing threshold before peak
+    arr_pre_flip = np.fliplr(arr_pre)
+    # Find first time it crosses 0 (from negative -> positive values)
+    indx_pre_flip = np.argmax(arr_pre_flip > 0, axis=1)
+    # Fill a matrix of 0 with 1 at index, flip, then find index
+    arr_zeros = np.zeros(arr_pre_flip.shape)
+    arr_zeros[np.arange(0, arr_pre_flip.shape[0], 1), indx_pre_flip] = 1
+    arr_pre_ones = np.fliplr(arr_zeros)
+    # Find index where there are 1
+    indx_pre = np.argmax(arr_pre_ones > 0, axis=1)
     val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre] * df['invert_sign_peak'].to_numpy()
-    # Todo this algorithm does not deal if there are no points between 0 and the peak (no points found for half)
 
     # Add columns to DF and return
     df['half_peak_post_time_idx'] = indx_post
