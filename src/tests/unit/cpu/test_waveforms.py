@@ -23,27 +23,49 @@ def make_array_peak_through_tip():
     return arr
 
 
+def make_array_peak_through_tip_v2():
+    # Duplicating as above array throws error due to Nans when computing arr_pre
+    arr = np. array([[[1, 1, np.nan],
+                      [2, 2, np.nan],
+                      [3, 5, np.nan],
+                      [4, 4, np.nan],
+                      [4, -5, np.nan],
+                      [4, -6, np.nan],
+                      [4, 5, np.nan]],
+
+                    [[1, 1, 0],
+                     [2, 2, 0],
+                     [3, 5, 0],
+                     [4, 4, 0],
+                     [4, -5, 0],
+                     [4, -8, 1],
+                     [4, 5, 0]]])
+    return arr
+
+
 def test_peak_through_tip_2d():
     arr = make_array_peak_through_tip()
-    df = waveforms.peak_trough_tip(arr[0, :, :])
+    df = waveforms.compute_spike_features(arr[0, :, :])
     np.testing.assert_equal(df.shape[0], 1)
 
 
 def test_peak_through_tip_3d():
-    arr = make_array_peak_through_tip()
-    df, arr_out = waveforms.peak_trough_tip(arr, return_peak_trace=True)
-    np.testing.assert_equal(arr_out, np.array([[1, 2, 5, 4, -5, -6, 5],
-                                               [-8, -7, 7, 7, 4, 4, 4]]))
+    arr = make_array_peak_through_tip_v2()
+    df = waveforms.compute_spike_features(arr)
+    arr_out = waveforms.get_array_peak(arr, df)
 
-    np.testing.assert_equal(df.peak_trace_idx, np.array([1, 0]))
-    np.testing.assert_equal(df.peak_time_idx, np.array([5, 0]))
+    np.testing.assert_equal(arr_out, np.array([[1, 2, 5, 4, -5, -6, 5],
+                                               [1, 2, 5, 4, -5, -8, 5]]))
+
+    np.testing.assert_equal(df.peak_trace_idx, np.array([1, 1]))
+    np.testing.assert_equal(df.peak_time_idx, np.array([5, 5]))
     np.testing.assert_equal(df.peak_val, np.array([-6, -8]))
 
-    np.testing.assert_equal(df.trough_time_idx, np.array([6, 2]))
-    np.testing.assert_equal(df.trough_val, np.array([5, 7]))
+    np.testing.assert_equal(df.trough_time_idx, np.array([6, 6]))
+    np.testing.assert_equal(df.trough_val, np.array([5, 5]))
 
-    np.testing.assert_equal(df.tip_time_idx, np.array([2, 1]))
-    np.testing.assert_equal(df.tip_val, np.array([5, -7]))
+    np.testing.assert_equal(df.tip_time_idx, np.array([2, 2]))
+    np.testing.assert_equal(df.tip_val, np.array([5, 5]))
 
 
 def test_halfpeak_slopes():
@@ -76,3 +98,61 @@ def test_dist_chanel_from_peak():
     np.testing.assert_almost_equal(eu_dist[0, :], np.array([0, 1, 1, np.sqrt(2)]))
     np.testing.assert_equal(eu_dist[1, :], np.array([2, 0, np.NaN, 1]))
     np.testing.assert_equal(sp_spread, np.array([1, 0.5]))
+
+
+def test_reshape_wav_one_channel():
+    # Test reshape into 1 channel
+    arr = make_array_peak_through_tip()
+    arr_out = waveforms.reshape_wav_one_channel(arr)
+    # Check against test
+    arr_tested = np.array([[[1.],
+                            [2.],
+                            [3.],
+                            [4.],
+                            [4.],
+                            [4.],
+                            [4.]],
+                           [[1.],
+                            [2.],
+                            [5.],
+                            [4.],
+                            [-5.],
+                            [-6.],
+                            [5.]],
+                           [[np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan],
+                            [np.nan]],
+                           [[-8.],
+                            [-7.],
+                            [7.],
+                            [7.],
+                            [4.],
+                            [4.],
+                            [4.]],
+                           [[7.],
+                            [7.],
+                            [7.],
+                            [7.],
+                            [5.],
+                            [5.],
+                            [5.]],
+                           [[7.],
+                            [7.],
+                            [7.],
+                            [7.],
+                            [4.],
+                            [4.],
+                            [4.]]])
+    np.testing.assert_equal(arr_out, arr_tested)
+
+
+def test_weights_all_channels():
+    arr = make_array_peak_through_tip()
+    weight = waveforms.weights_spk_ch(arr)
+    weight_tested = np.array([[1., -6., 0.],
+                              [-8., 5., 4.]])
+    np.testing.assert_equal(weight, weight_tested)

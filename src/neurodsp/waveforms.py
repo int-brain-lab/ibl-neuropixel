@@ -30,6 +30,17 @@ def get_array_peak(arr_in, df):
     return arr_peak
 
 
+def invert_peak_waveform(arr_peak, df):
+    # Get the sign of the peak
+    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]
+    # Flip positive wavs so all are negative
+    if len(indx_pos) > 0:
+        arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
+
+    df['invert_sign_peak'] = np.sign(df['peak_val']) * -1  # Inverted signe peak to multiply point values by
+    return arr_peak, df
+
+
 def arr_pre_post(arr_peak, indx_peak):
     '''
     :param arr_peak: NxT waveform matrix : spikes x time, only the peak channel
@@ -79,14 +90,16 @@ def pick_maximum(arr_in):
     arr_in = _validate_arr_in(arr_in)
     indx_maxs, max_vals = pick_maxima(arr_in)
     indx_trace = np.argmax(max_vals, axis=1)
-    # indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
-    indx_peak = np.argmin(arr_in[np.arange(arr_in.shape[0]), :, indx_trace], axis=1)
+    # Select maximum of absolute value as peak
+    indx_peak = indx_maxs[np.arange(0, indx_maxs.shape[0], 1), indx_trace]
+    # Select minimum as peak (disregarded on 02-06-2023)
+    # indx_peak = np.argmin(arr_in[np.arange(arr_in.shape[0]), :, indx_trace], axis=1)
     val_peak = arr_in[np.arange(0, arr_in.shape[0], 1), indx_peak, indx_trace]
 
     return indx_trace, indx_peak, val_peak
 
 
-def peak_trough_tip(arr_in, return_peak_trace=False):
+def find_peak(arr_in):
     """
     From one or several single or multi-trace waveforms, extract the times and associated
      values of the peak, through and tip of the peak channel
@@ -96,52 +109,65 @@ def peak_trough_tip(arr_in, return_peak_trace=False):
     arr_in = _validate_arr_in(arr_in)
 
     # 1. Find max peak (absolute deviation in STD units)
-
     indx_trace, indx_peak, val_peak = pick_maximum(arr_in)
-    # 2. Find trough and tip (at peak waveform)
-    # Per waveform, keep only trace that contains the peak
-    arr_out = arr_in[np.arange(0, arr_in.shape[0], 1), :, indx_trace]
 
+    # Create dict / pd df
+    df = pd.DataFrame()
+    df['peak_trace_idx'] = indx_trace
+    df['peak_time_idx'] = indx_peak
+    df['peak_val'] = val_peak
+    return df
+
+
+def find_tip_trough(arr_peak, df):
+    '''
+    :param arr_in: inverted
+    :param df:
+    :return:
+    '''
+    # 2. Find trough and tip (at peak waveform)
     # Create masks pre/post
-    arr_pre, arr_post = arr_pre_post(arr_out, indx_peak)
+    arr_pre, arr_post = arr_pre_post(arr_peak, df['peak_time_idx'].to_numpy())
 
     # Find trough
     # indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
     indx_trough = np.nanargmax(arr_post, axis=1)
-    val_trough = arr_out[np.arange(0, arr_out.shape[0], 1), indx_trough]
+    val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
     del arr_post
 
     # Find tip
+    '''
+    # 02-06-2023 ; Decided not to use the inflection point but rather maximum
+    # Leaving code for now commented as legacy example
+
+    # Inflection point
     y_dif1 = np.diff(arr_pre, axis=1)
     indx_posit = np.where(y_dif1 > 0)
     del arr_pre
-
     arr_cs = np.zeros(y_dif1.shape)
     arr_cs[indx_posit] = 1
     indx_tip = np.argmax(np.cumsum(arr_cs, axis=1), axis=1) + 1
-    val_tip = arr_out[np.arange(0, arr_out.shape[0], 1), indx_tip]
+    val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
     del arr_cs
+    '''
+    # Maximum
+    indx_tip = np.nanargmax(arr_pre, axis=1)
+    val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
+    del arr_pre
 
-    # Create dict / pd df
-    d_out = pd.DataFrame()
-    d_out['peak_trace_idx'] = indx_trace
-    d_out['peak_time_idx'] = indx_peak
-    d_out['peak_val'] = val_peak
+    # Put values into df
+    df['trough_time_idx'] = indx_trough
+    df['trough_val'] = val_trough
 
-    d_out['trough_time_idx'] = indx_trough
-    d_out['trough_val'] = val_trough
+    df['tip_time_idx'] = indx_tip
+    df['tip_val'] = val_tip
 
-    d_out['tip_time_idx'] = indx_tip
-    d_out['tip_val'] = val_tip
-
-    if return_peak_trace:
-        return d_out, arr_out
-    else:
-        return d_out
+    return df
 
 
-def plot_peaktiptrough(df, arr, ax, nth_wav=0):
-    ax.plot(arr[nth_wav], c='gray', alpha=0.5)
+def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True):
+    if plot_grey:
+        ax.plot(arr[nth_wav], c='gray', alpha=0.5)
     # Peak channel
     ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
     # Peak point
@@ -154,7 +180,7 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0):
     ax.plot(df.iloc[nth_wav].half_peak_post_time_idx, df.iloc[nth_wav].half_peak_post_val, 'c*')
     ax.plot(df.iloc[nth_wav].half_peak_pre_time_idx, df.iloc[nth_wav].half_peak_pre_val, 'c*')
     # Line for half peak boundary
-    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val/2, '-k')
+    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val / 2, '-k')
     # Recovery point
     ax.plot(df.iloc[nth_wav].recovery_time_idx, df.iloc[nth_wav].recovery_val, 'y*')
 
@@ -162,21 +188,12 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0):
 def half_peak_point(arr_peak, df):
     '''
     Compute the two intersection points at halp-maximum peak
-    :param: arr_in: NxT waveform matrix : spikes x time, only the peak channel
+    :param: arr_peak: NxT waveform matrix : spikes x time, only the peak channel (inverted for positive wavs)
     :return: df with columns containing indices of intersection points and values, length of N wav
     '''
     # TODO Review: is df.to_numpy() necessary ?
-    # Get the sign of the peak
-    indx_pos = np.where(df['peak_val'].to_numpy() > 0)[0]  # todo Check [0] necessary
-    # Flip positive wavs so all are negative
-    '''
-    # Commenting : This is probably not necessary given the definition of the peak (argmin)
-    # test without for now
-    if len(indx_pos) > 0:
-        arr_peak[indx_pos, :] = -1 * arr_peak[indx_pos, :]
-    '''
     # Compute half max value, repmat and substract it
-    half_max = df['peak_val'].to_numpy() / 2
+    half_max = (df['peak_val'].to_numpy() / 2) * df['invert_sign_peak'].to_numpy()
     half_max_rep = np.tile(half_max, (arr_peak.shape[1], 1)).transpose()
     # Note on the above: using np.tile because np.repeat does not work with axis=1
     # todo rewrite with np.repeat and np.newaxis
@@ -185,11 +202,19 @@ def half_peak_point(arr_peak, df):
     arr_pre, arr_post = arr_pre_post(arr_sub, df['peak_time_idx'].to_numpy())
     # POST: Find first time it crosses 0 (from negative -> positive values)
     indx_post = np.argmax(arr_post > 0, axis=1)
-    val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post]
-    # PRE: Find first time it crosses 0 (from positive -> negative values)
-    indx_pre = np.argmax(arr_pre < 0, axis=1)
-    val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre]
-    # Todo this algorithm does not deal if there are no points between 0 and the peak (no points found for half)
+    val_post = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_post] * df['invert_sign_peak'].to_numpy()
+    # PRE:
+    # Invert matrix (flip L-R) to find first point crossing threshold before peak
+    arr_pre_flip = np.fliplr(arr_pre)
+    # Find first time it crosses 0 (from negative -> positive values)
+    indx_pre_flip = np.argmax(arr_pre_flip > 0, axis=1)
+    # Fill a matrix of 0 with 1 at index, flip, then find index
+    arr_zeros = np.zeros(arr_pre_flip.shape)
+    arr_zeros[np.arange(0, arr_pre_flip.shape[0], 1), indx_pre_flip] = 1
+    arr_pre_ones = np.fliplr(arr_zeros)
+    # Find index where there are 1
+    indx_pre = np.argmax(arr_pre_ones > 0, axis=1)
+    val_pre = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_pre] * df['invert_sign_peak'].to_numpy()
 
     # Add columns to DF and return
     df['half_peak_post_time_idx'] = indx_post
@@ -267,7 +292,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
         idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
 
     df['recovery_time_idx'] = idx_all
-    df['recovery_val'] = arr_peak[np.arange(0, arr_peak.shape[0], 1), idx_all]
+    df['recovery_val'] = arr_peak[np.arange(0, arr_peak.shape[0], 1), idx_all] * df['invert_sign_peak'].to_numpy()
     return df
 
 
@@ -328,7 +353,51 @@ def spatial_spread_weighted(eu_dist, weights):
     return spatial_spread
 
 
-def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
+def reshape_wav_one_channel(arr):
+    '''
+    Reshape matrix so instead of being like waveforms: (wav, time, trace) i.e. (npsikes x nsamples x nchannels)
+    it is of size (npsikes * nchannels) x nsamples
+    :param waveforms: 3D np.array containing multi-channel waveforms, 3D dimension have to be (wav, time, trace)
+    :return:
+    '''
+    # Swap axis so the matrix is now: wav x channel x time
+    arr_ax = np.swapaxes(arr, 1, 2)
+    # reshape using the first 2 dimension (multiplied) x time
+    arr_resh = arr_ax.reshape(-1, arr_ax.shape[-1])
+    # add a new axis for computation
+    arr_out = arr_resh[:, :, np.newaxis]
+    return arr_out
+
+
+def weights_spk_ch(arr, weight_type='peak'):
+    '''
+    Compute a value on all channels of a waveform matrix, and return as weights (to be used in spatial spread).
+    :param arr: 3D np.array containing multi-channel waveforms, 3D dimension have to be (wav, time, trace)
+    :param weight_type: value to be returned as weight (implemented: peak)
+    :return: weights: N(spikes) * N(channels): the weights per channel per spikes
+    '''
+    # Reshape
+    arr_resh = reshape_wav_one_channel(arr)
+    # Peak
+    df = find_peak(arr_resh)
+    if weight_type == 'peak':
+        weights_flat = df['peak_val'].to_numpy()
+    else:
+        raise ValueError('weight_type: unknown value attributed')
+    # Reshape
+    # Order in DF: #1-2-3 channel of spike #1, then #1-2-3 channel spike #2 etc
+    weights = np.reshape(weights_flat, (arr.shape[0], arr.shape[2]))
+    return weights
+
+
+def compute_spatial_spread(arr, df, channel_geometry, weight_type='peak'):
+    eu_dist = dist_chanel_from_peak(channel_geometry, df)
+    weights = weights_spk_ch(arr, weight_type)
+    df['spatial_spread'] = spatial_spread_weighted(eu_dist, weights)
+    return df
+
+
+def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
     """
     This is the main function to compute spike features from a set of waveforms
     Current features:
@@ -337,15 +406,19 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
        'half_peak_pre_time_idx', 'half_peak_post_val', 'half_peak_pre_val',
        'half_peak_duration', 'recovery_time_idx', 'recovery_val',
        'depolarisation_slope', 'repolarisation_slope', 'recovery_slope'],
-    :param waveforms: npsikes * nsamples * nchannels 3D np.array containing multi-channel waveforms
+    :param arr_in: 3D np.array containing multi-channel waveforms; 3D dimension have to be (wav, time, trace)
     :param fs: sampling frequency (Hz)
     :recovery_duration_ms: in ms, the duration from the trough to the recovery point
     :return: dataframe of spikes with all features,
     Returns:
     """
-    df = peak_trough_tip(waveforms)
-    # Array peak
-    arr_peak = get_array_peak(waveforms, df)
+    df = find_peak(arr_in)
+    # Per waveform, keep only trace that contains the peak
+    arr_peak = get_array_peak(arr_in, df)
+    # Invert positive spikes
+    arr_peak, df = invert_peak_waveform(arr_peak, df)
+    # Tip-trough
+    df = find_tip_trough(arr_peak, df)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
@@ -355,7 +428,4 @@ def compute_spike_features(waveforms, fs=30000, recovery_duration_ms=0.16, retur
     # Slopes
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
-    if return_peak_channel:
-        return df, arr_peak
-    else:
-        return df
+    return df
