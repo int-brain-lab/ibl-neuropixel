@@ -389,3 +389,8 @@ class TestStack(unittest.TestCase):
         stack, hstack = voltage.stack(data, word=word, header=header)
         assert (list(hstack.keys()) == ['toto', 'fold'])
         assert (np.all(hstack['fold'] == 3))
+
+class TestSpikeTrainIntersect(unittest.TestCase):
+
+    def test_spiketrain_intersect(self):
+        pass
