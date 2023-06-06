@@ -154,7 +154,7 @@ def plot_peaktiptrough(df, arr, ax=None, iw=0):
     ax.plot(df.iloc[iw].half_peak_post_time_idx, df.iloc[iw].half_peak_post_val, 'c*')
     ax.plot(df.iloc[iw].half_peak_pre_time_idx, df.iloc[iw].half_peak_pre_val, 'c*')
     # line for half peak boundary
-    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[iw].peak_val/2, '-k')
+    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[iw].peak_val / 2, '-k')
     # Recovery
     ax.plot(df.iloc[iw].recovery_time_idx, df.iloc[iw].recovery_val, 'y*')
     return ax
