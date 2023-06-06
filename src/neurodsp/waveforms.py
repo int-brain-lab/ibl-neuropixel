@@ -398,7 +398,7 @@ def compute_spatial_spread(arr, df, channel_geometry, weight_type='peak'):
     return df
 
 
-def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
+def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
     """
     This is the main function to compute spike features from a set of waveforms
     Current features:
@@ -410,6 +410,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
     :param arr_in: 3D np.array containing multi-channel waveforms; 3D dimension have to be (wav, time, trace)
     :param fs: sampling frequency (Hz)
     :recovery_duration_ms: in ms, the duration from the trough to the recovery point
+    :param return_peak_channel: if True, return the peak channel traces
     :return: dataframe of spikes with all features,
     Returns:
     """
@@ -429,4 +430,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
     # Slopes
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
-    return df
+    if return_peak_channel:
+        return df, arr_peak
+    else:
+        return df
