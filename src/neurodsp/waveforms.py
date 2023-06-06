@@ -5,6 +5,7 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 """
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def _validate_arr_in(arr_in):
@@ -311,18 +312,18 @@ def recovery_slope(df, fs=30000):
     return df
 
 
-def dist_chanel_from_peak(channel_geometry, df):
+def dist_chanel_from_peak(channel_geometry, peak_trace_idx):
     '''
     Compute distance for each channel from the peak channel, for each spike
     :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,y,z)
     # Note: computing this to provide it as input will be a pain
-    :param df: dataframe of waveform features
+    :param peak_trace_idx: index of the highest amplitude channel in the multi-channel waveform
     :return: eu_dist : N(spikes) * N(channels): the euclidian distance between each channel and the peak channel,
     for each waveform
     '''
     # Note: It deals with Nan in entry coordinate (fake padding channels); returns Nan as Eu dist
     # Get peak coordinates (x,y,z)
-    peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
+    peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), peak_trace_idx, :]
 
     # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
     peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)  # Todo -1
