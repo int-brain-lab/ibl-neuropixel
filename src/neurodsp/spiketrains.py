@@ -1,4 +1,5 @@
 import numpy as np
+from functools import reduce
 
 def spiketrain_intersect(samples1, channels1, samples2, channels2, samples_binsize=None, 
                          channels_binsize=4, fs=30000, num_channels=384):
@@ -20,35 +21,55 @@ def spiketrain_intersect(samples1, channels1, samples2, channels2, samples_binsi
     :return: A list of tuples containing the bin assignments of the spikes found in common. 
     """
 
-    max_samples = max(np.max(samples1), np.max(samples2))
-    bins2d_shape = (int(num_channels // channels_binsize), int(max_samples // channels_binsize))
+    assert samples1.shape == channels1.shape, "samples1 and channels1 must have the same shape."
+    assert samples2.shape == channels2.shape, "samples2 and channels2 must have the same shape."
 
     if not samples_binsize:
         # SpikeInterface default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
 
-    # Get sample bins
-    sample_bins1 = np.floor(samples1 / samples_binsize).astype(np.int64)
-    sample_bins2 = np.floor(samples2 / samples_binsize).astype(np.int64)
+    max_samples = max(np.max(samples1), np.max(samples2))
+    bins2d_shape = (int(max_samples // samples_binsize) + 2, int(num_channels // channels_binsize) + 2)
 
-    # Get channel bins
-    channel_bins1 = np.floor(channels1 / channels_binsize).astype(np.int64)
-    channel_bins2 = np.floor(channels2 / channels_binsize).astype(np.int64)
-    # get linear indices
-    linear_ind1 = np.ravel_multi_index(
-        np.array([channel_bins1, sample_bins1]), 
-        bins2d_shape,
-    )
-    linear_ind2 = np.ravel_multi_index(
-        np.array([channel_bins2, sample_bins2]), 
-        bins2d_shape,
+    shifts = np.array(
+        [
+            [0,0],
+            [samples_binsize // 2, channels_binsize // 2],
+            [samples_binsize // 2, 0],
+            [0, channels_binsize // 2],
+        ]
     )
 
-    common_spikes_linearized = np.intersect1d(linear_ind1, linear_ind2).astype(int)
-    common_spikes = np.unravel_index(
-        common_spikes_linearized, 
-        bins2d_shape
-    )
+    factor = np.array([[samples_binsize, channels_binsize]*4], dtype=np.float64)
 
-    return list(zip(*common_spikes))
+    data1 = np.tile(np.vstack((samples1, channels1)), (4,1))
+    bins1 = np.floor((data1 + shifts.flatten()[:, None]) / factor.T).astype(int)
+
+    linear_indices1 = []
+    for i in range(4):
+        idx = slice(i*2, (i+1)*2)
+        linear_indices1.append(np.ravel_multi_index(bins1[idx], bins2d_shape))
+
+    data2 = np.tile(np.vstack((samples2, channels2)), (4,1))
+    bins2 = np.floor((data2 + shifts.flatten()[:, None]) / factor.T).astype(int)
+
+    linear_indices2 = []
+    for i in range(4):
+        idx = slice(i*2, (i+1)*2)
+        linear_indices2.append(np.ravel_multi_index(bins2[idx], bins2d_shape))
+
+    bin_linear_indices = []
+    indices1 = []
+    indices2 = []
+    for i in range(4):
+        bin_linear_idx, idx1, idx2 = np.intersect1d(linear_indices1[i], linear_indices2[i], return_indices=True)
+        bin_linear_indices.append(bin_linear_idx)
+        indices1.append(idx1)
+        indices2.append(idx2)
+
+    common_spike_bins = list(zip(*np.unravel_index(reduce(np.union1d, bin_linear_indices), bins2d_shape)))
+    indices1_foundby2 = reduce(np.union1d, indices1)
+    indices2_foundby1 = reduce(np.union1d, indices2)
+    
+    return common_spike_bins, indices1_foundby2, indices2_foundby1
 

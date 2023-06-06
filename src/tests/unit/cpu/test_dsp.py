@@ -393,4 +393,6 @@ class TestStack(unittest.TestCase):
 class TestSpikeTrainIntersect(unittest.TestCase):
 
     def test_spiketrain_intersect(self):
-        pass
+        samples_binsize = 12
+        channels_binsize = 4
+        common_spikes = []
