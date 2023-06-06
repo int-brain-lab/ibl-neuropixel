@@ -161,3 +161,8 @@ def test_weights_all_channels():
                               [-8., 7., 7.]])
 
     np.testing.assert_equal(weight, weight_tested)
+
+
+def test_generate_waveforms():
+    wav = generate_waveform()
+    assert wav.shape == (121, 40)

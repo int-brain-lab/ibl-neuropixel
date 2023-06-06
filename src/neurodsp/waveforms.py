@@ -5,7 +5,6 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 """
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 def _validate_arr_in(arr_in):
