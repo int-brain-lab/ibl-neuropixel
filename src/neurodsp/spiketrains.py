@@ -18,7 +18,7 @@ def spiketrain_intersect(samples1, channels1, samples2, channels2, samples_binsi
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
     :param num_channels: Total number of channels where spikes appear. Defaults to 384.
-    :return: A list of tuples containing the bin assignments of the spikes found in common. 
+    :return: common_spike_bins, indices1_foundby2, indices2_foundby1 
     """
 
     assert samples1.shape == channels1.shape, "samples1 and channels1 must have the same shape."
