@@ -75,7 +75,7 @@ def test_halfpeak_slopes():
     test_arr_peak = np.load(folder_save.joinpath('test_arr_peak.npy'))
     test_df = pd.read_csv(folder_save.joinpath('test_df.csv'))
     test_df = test_df.drop("Unnamed: 0", axis=1)  # Dropping the "Unnamed: 0" column
-    df, arr_peak = waveforms.compute_spike_features(arr_in, fs=30000, recovery_duration_ms=.16, return_peak_channel=True)
+    df, arr_peak = waveforms.compute_spike_features(arr_in, fs=30000, recovery_duration_ms=.16)
     # Array peak testing
     np.testing.assert_equal(arr_peak, test_arr_peak)
     # Df testing
