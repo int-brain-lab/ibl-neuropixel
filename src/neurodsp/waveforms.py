@@ -185,7 +185,7 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     # Call the function again to compute trough etc. with new peak assigned
 
     # Find df rows to be changed
-    df_index = df.index[(df['peak_val'] > 0) & (df['peak_to_trough_ratio'] <= 1.2)]
+    df_index = df.index[(df['peak_val'] > 0) & (df['peak_to_trough_ratio'] <= 1.5)]
     df_rows = df.iloc[df_index]
     if len(df_index) > 0:
         # New peak - Swap peak for trough values
