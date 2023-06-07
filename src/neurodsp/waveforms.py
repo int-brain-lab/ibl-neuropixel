@@ -169,7 +169,7 @@ def find_tip(arr_peak, df):
     return df
 
 
-def find_tip_trough(arr_peak, df):
+def find_tip_trough(arr_peak, arr_peak_real, df):
     '''
     :param arr_in: inverted
     :param df:
@@ -189,12 +189,18 @@ def find_tip_trough(arr_peak, df):
     df_rows = df.iloc[df_index]
     if len(df_index) > 0:
         # New peak - Swap peak for trough values
+        df_rows = df_rows.drop(['peak_val', 'peak_time_idx'], axis=1)
         df_rows['peak_val'] = df_rows['trough_val']
         df_rows['peak_time_idx'] = df_rows['trough_time_idx']
+
+        # df_trials.loc[iss, f] = predicted[f].values
+
         # Drop trough columns
         df_rows = df_rows.drop(['trough_time_idx', 'trough_val'], axis=1)
-        # Create mini arr_peak for those rows uniquely
-        arr_peak_rows = arr_peak[df_index, :]
+        # Create mini arr_peak for those rows uniquely (take the real waveforms value in, not inverted ones)
+        arr_peak_rows = arr_peak_real[df_index, :]
+        # Get new sign for the peak
+        arr_peak_rows, df_rows = invert_peak_waveform(arr_peak_rows, df_rows)
         # New trough
         df_rows = find_trough(arr_peak_rows, df_rows)
         # New peak-trough ratio
@@ -469,11 +475,11 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     """
     df = find_peak(arr_in)
     # Per waveform, keep only trace that contains the peak
-    arr_peak = get_array_peak(arr_in, df)
+    arr_peak_real = get_array_peak(arr_in, df)
     # Invert positive spikes
-    arr_peak, df = invert_peak_waveform(arr_peak, df)
+    arr_peak, df = invert_peak_waveform(arr_peak_real, df)
     # Tip-trough (this also computes the peak_to_trough_ratio)
-    df = find_tip_trough(arr_peak, df)
+    df = find_tip_trough(arr_peak, arr_peak_real, df)
     # Peak to trough duration
     df = peak_to_trough_duration(df, fs=30000)
     # Half peak points
@@ -487,6 +493,6 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     df = recovery_slope(df, fs=fs)
 
     if return_peak_channel:
-        return df, arr_peak
+        return df, arr_peak_real
     else:
         return df
