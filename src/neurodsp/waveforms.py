@@ -119,13 +119,9 @@ def find_peak(arr_in):
     return df
 
 
-def find_tip_trough(arr_peak, df):
-    '''
-    :param arr_in: inverted
-    :param df:
-    :return:
-    '''
-    # 2. Find trough and tip (at peak waveform)
+def find_trough(arr_peak, df):
+    # Find tip (at peak waveform)
+
     # Create masks pre/post
     arr_pre, arr_post = arr_pre_post(arr_peak, df['peak_time_idx'].to_numpy())
 
@@ -133,11 +129,20 @@ def find_tip_trough(arr_peak, df):
     # indx_trough = np.nanargmin(arr_post * np.sign(val_peak)[:, np.newaxis], axis=1)
     indx_trough = np.nanargmax(arr_post, axis=1)
     val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
-    del arr_post
-    # TODO spin function above into a function
-    #  if ratio or diff peak/trough smaller than x AND time diff is smaller than xx :
-    #  Assign trough as peak
-    #  Call this function again to compute trough with new peak assigned
+
+    # Put values into df
+    df['trough_time_idx'] = indx_trough
+    df['trough_val'] = val_trough
+
+    return df
+
+
+def find_tip(arr_peak, df):
+    # Find tip (at peak waveform)
+
+    # Create masks pre/post
+    arr_pre, arr_post = arr_pre_post(arr_peak, df['peak_time_idx'].to_numpy())
+
     # Find tip
     '''
     # 02-06-2023 ; Decided not to use the inflection point but rather maximum
@@ -156,14 +161,36 @@ def find_tip_trough(arr_peak, df):
     # Maximum
     indx_tip = np.nanargmax(arr_pre, axis=1)
     val_tip = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_tip] * df['invert_sign_peak'].to_numpy()
-    del arr_pre
 
     # Put values into df
-    df['trough_time_idx'] = indx_trough
-    df['trough_val'] = val_trough
-
     df['tip_time_idx'] = indx_tip
     df['tip_val'] = val_tip
+
+    return df
+
+
+def find_tip_trough(arr_peak, df):
+    '''
+    :param arr_in: inverted
+    :param df:
+    :return:
+    '''
+    # 2. Find trough and tip (at peak waveform)
+
+    # Find trough
+    df = find_trough(arr_peak, df)
+    # If ratio or diff peak/trough smaller than x AND time diff is smaller than xx :
+    # Assign trough as peak (Change df and arr_peak)
+    # Call this function again to compute trough with new peak assigned
+    df['ratio_pt'] = df['peak_val']/df['trough_val']  # TODO handle divide by 0
+
+    rows = df.loc[(df['peak_val'] > 0) & (df['ratio_pt'] <= 1.2)]
+
+    # Drop new column
+    df.drop(columns='ratio_pt')
+
+    # Find tip
+    df = find_tip(arr_peak, df)
 
     return df
 
@@ -239,17 +266,29 @@ def half_peak_duration(df, fs=30000):
     return df
 
 
-def peak_to_trough(df, fs=30000):
+def peak_to_trough_duration(df, fs=30000):
     '''
-    Compute the duration (second) and ratio of the peak-to-trough
+    Compute the duration (second) of the peak-to-trough
+    :param df: dataframe of waveforms features
+    :param fs: sampling rate (Hz)
+    :return: df
+    '''
+    # Duration
+    df['peak_to_trough_duration'] = (df['trough_time_idx'] - df['peak_time_idx']) / fs
+    return df
+
+
+def peak_to_trough_ratio(df):
+    '''
+    Compute the ratio of the peak-to-trough
     :param df: dataframe of waveforms features
     :param fs: sampling rate (Hz)
     :return:
     '''
-    # Duration
-    df['peak_to_trough_duration'] = (df['trough_time_idx'] - df['peak_time_idx']) / fs
     # Ratio
-    df['peak_to_trough_ratio'] = np.log(np.abs(df['peak_val'] / df['trough_val']))
+    df['peak_to_trough_ratio'] = np.abs(df['peak_val'] / df['trough_val'])  # TODO handle divide by 0
+    # Ratio log-scale
+    df['peak_to_trough_ratio_log'] = np.log(df['peak_to_trough_ratio'])
     return df
 
 
@@ -423,6 +462,9 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     arr_peak, df = invert_peak_waveform(arr_peak, df)
     # Tip-trough
     df = find_tip_trough(arr_peak, df)
+    # Peak to trough
+    df = peak_to_trough_ratio(df)
+    df = peak_to_trough_duration(df, fs=30000)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
@@ -432,6 +474,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     # Slopes
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
+
     if return_peak_channel:
         return df, arr_peak
     else:
