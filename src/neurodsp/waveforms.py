@@ -131,6 +131,8 @@ def find_trough(arr_peak, df):
     val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
 
     # Put values into df
+    # Drop column in case previously existing as cannot overwrite
+    # df = df.drop(['trough_time_idx', 'trough_val'], axis=1, errors='ignore')
     df['trough_time_idx'] = indx_trough
     df['trough_val'] = val_trough
 
@@ -179,16 +181,26 @@ def find_tip_trough(arr_peak, df):
 
     # Find trough
     df = find_trough(arr_peak, df)
-    # If ratio or diff peak/trough smaller than x AND time diff is smaller than xx :
-    # Assign trough as peak (Change df and arr_peak)
-    # Call this function again to compute trough with new peak assigned
-    df['ratio_pt'] = df['peak_val']/df['trough_val']  # TODO handle divide by 0
+    df = peak_to_trough_ratio(df)
+    # If ratio of peak/trough is near 1, and peak is positive :
+    # Assign trough as peak on same waveform channel
+    # Call the function again to compute trough etc. with new peak assigned
 
-    rows = df.loc[(df['peak_val'] > 0) & (df['ratio_pt'] <= 1.2)]
-
-    # Drop new column
-    df.drop(columns='ratio_pt')
-
+    # Find df rows to be changed
+    df_index = df.index[(df['peak_val'] > 0) & (df['peak_to_trough_ratio'] <= 1.2)]
+    df_rows = df.iloc[df_index]
+    if len(df_index) > 0:
+        # New peak - Swap peak for trough values
+        df_rows.assign(peak_val=df_rows['trough_val'])
+        df_rows.assign(peak_time_idx=df_rows['trough_time_idx'])
+        # Create mini arr_peak for those rows uniquely
+        arr_peak_rows = arr_peak[df_index, :]
+        # New trough
+        df_rows = find_trough(arr_peak_rows, df_rows)
+        # New peak-trough ratio
+        df_rows = peak_to_trough_ratio(df_rows)
+        # Assign back into the dataframe
+        df[df_index] = df_rows
     # Find tip
     df = find_tip(arr_peak, df)
 
@@ -286,7 +298,7 @@ def peak_to_trough_ratio(df):
     :return:
     '''
     # Ratio
-    df['peak_to_trough_ratio'] = np.abs(df['peak_val'] / df['trough_val'])  # TODO handle divide by 0
+    df['peak_to_trough_ratio'] = np.abs(df['peak_val'] / df['trough_val'])  # Division by 0 returns NaN
     # Ratio log-scale
     df['peak_to_trough_ratio_log'] = np.log(df['peak_to_trough_ratio'])
     return df
@@ -460,10 +472,9 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     arr_peak = get_array_peak(arr_in, df)
     # Invert positive spikes
     arr_peak, df = invert_peak_waveform(arr_peak, df)
-    # Tip-trough
+    # Tip-trough (this also computes the peak_to_trough_ratio)
     df = find_tip_trough(arr_peak, df)
-    # Peak to trough
-    df = peak_to_trough_ratio(df)
+    # Peak to trough duration
     df = peak_to_trough_duration(df, fs=30000)
     # Half peak points
     df = half_peak_point(arr_peak, df)
