@@ -131,8 +131,6 @@ def find_trough(arr_peak, df):
     val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
 
     # Put values into df
-    # Drop column in case previously existing as cannot overwrite
-    # df = df.drop(['trough_time_idx', 'trough_val'], axis=1, errors='ignore')
     df['trough_time_idx'] = indx_trough
     df['trough_val'] = val_trough
 
@@ -191,8 +189,10 @@ def find_tip_trough(arr_peak, df):
     df_rows = df.iloc[df_index]
     if len(df_index) > 0:
         # New peak - Swap peak for trough values
-        df_rows.assign(peak_val=df_rows['trough_val'])
-        df_rows.assign(peak_time_idx=df_rows['trough_time_idx'])
+        df_rows['peak_val'] = df_rows['trough_val']
+        df_rows['peak_time_idx'] = df_rows['trough_time_idx']
+        # Drop trough columns
+        df_rows = df_rows.drop(['trough_time_idx', 'trough_val'], axis=1)
         # Create mini arr_peak for those rows uniquely
         arr_peak_rows = arr_peak[df_index, :]
         # New trough
@@ -200,7 +200,7 @@ def find_tip_trough(arr_peak, df):
         # New peak-trough ratio
         df_rows = peak_to_trough_ratio(df_rows)
         # Assign back into the dataframe
-        df[df_index] = df_rows
+        df.loc[df_index] = df_rows
     # Find tip
     df = find_tip(arr_peak, df)
 
