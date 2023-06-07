@@ -1,4 +1,7 @@
 # 0.6.0
+## 0.6.1 2023-06-06
+- Fix bug in ADC cycles sampling for Neuropixel 1.0 probes
+- 
 ## 0.6.0 2023-05-15
 - Add waveforms utilities for spike features computations
 

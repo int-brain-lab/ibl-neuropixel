@@ -1,7 +1,10 @@
-import numpy as np
-import neurodsp.waveforms as waveforms
-import pandas as pd
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import neurodsp.waveforms as waveforms
+from neurowaveforms.model import generate_waveform
 
 
 def make_array_peak_through_tip():
@@ -75,8 +78,9 @@ def test_halfpeak_slopes():
     test_arr_peak = np.load(folder_save.joinpath('test_arr_peak.npy'))
     test_df = pd.read_csv(folder_save.joinpath('test_df.csv'))
     test_df = test_df.drop("Unnamed: 0", axis=1)  # Dropping the "Unnamed: 0" column
-    df, arr_peak = waveforms.compute_spike_features(arr_in, fs=30000, recovery_duration_ms=.16, return_peak_channel=True)
+    df = waveforms.compute_spike_features(arr_in, fs=30000, recovery_duration_ms=.16)
     # Array peak testing
+    arr_peak = waveforms.get_array_peak(arr_in, df)
     np.testing.assert_equal(arr_peak, test_arr_peak)
     # Df testing
     pd.testing.assert_frame_equal(df.astype(float), test_df.astype(float))
@@ -88,8 +92,8 @@ def test_dist_chanel_from_peak():
                           np.array([[4, 0, 0], [2, 0, 0], [np.NaN, np.NaN, np.NaN], [1, 0, 0]])), axis=2)
     xyz_testd = np.swapaxes(xyz_testd, axis1=0, axis2=2)
     xyz_testd = np.swapaxes(xyz_testd, axis1=1, axis2=2)
-    df_testd = pd.DataFrame.from_dict({"peak_trace_idx": np.array([0, 1])})
-    eu_dist = waveforms.dist_chanel_from_peak(xyz_testd, df_testd)
+
+    eu_dist = waveforms.dist_chanel_from_peak(xyz_testd, np.array([0, 1]))
     weights = np.zeros(eu_dist.shape)
     weights[0][1:3] = 1
     weights[1][2:4] = 1
@@ -153,6 +157,12 @@ def test_reshape_wav_one_channel():
 def test_weights_all_channels():
     arr = make_array_peak_through_tip()
     weight = waveforms.weights_spk_ch(arr)
-    weight_tested = np.array([[1., -6., 0.],
-                              [-8., 5., 4.]])
+    weight_tested = np.array([[4., -6., 0.],
+                              [-8., 7., 7.]])
+
     np.testing.assert_equal(weight, weight_tested)
+
+
+def test_generate_waveforms():
+    wav = generate_waveform()
+    assert wav.shape == (121, 40)
