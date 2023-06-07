@@ -199,6 +199,8 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
         df_rows = df_rows.drop(['trough_time_idx', 'trough_val'], axis=1)
         # Create mini arr_peak for those rows uniquely (take the real waveforms value in, not inverted ones)
         arr_peak_rows = arr_peak_real[df_index, :]
+        # Place into "inverted" array peak for return
+        arr_peak[df_index, :] = arr_peak_rows
         # Get new sign for the peak
         arr_peak_rows, df_rows = invert_peak_waveform(arr_peak_rows, df_rows)
         # New trough
@@ -210,7 +212,7 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     # Find tip
     df = find_tip(arr_peak, df)
 
-    return df
+    return df, arr_peak
 
 
 def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True):
@@ -479,7 +481,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     # Invert positive spikes
     arr_peak, df = invert_peak_waveform(arr_peak_real.copy(), df)  # Copy otherwise overwrite the variable in memory
     # Tip-trough (this also computes the peak_to_trough_ratio)
-    df = find_tip_trough(arr_peak, arr_peak_real, df)
+    df, arr_peak = find_tip_trough(arr_peak, arr_peak_real, df)
     # Peak to trough duration
     df = peak_to_trough_duration(df, fs=30000)
     # Half peak points
