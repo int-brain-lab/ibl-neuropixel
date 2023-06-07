@@ -477,7 +477,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
     # Per waveform, keep only trace that contains the peak
     arr_peak_real = get_array_peak(arr_in, df)
     # Invert positive spikes
-    arr_peak, df = invert_peak_waveform(arr_peak_real, df)
+    arr_peak, df = invert_peak_waveform(arr_peak_real.copy(), df)  # Copy otherwise overwrite the variable in memory
     # Tip-trough (this also computes the peak_to_trough_ratio)
     df = find_tip_trough(arr_peak, arr_peak_real, df)
     # Peak to trough duration
