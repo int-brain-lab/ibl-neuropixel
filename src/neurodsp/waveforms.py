@@ -134,7 +134,10 @@ def find_tip_trough(arr_peak, df):
     indx_trough = np.nanargmax(arr_post, axis=1)
     val_trough = arr_peak[np.arange(0, arr_peak.shape[0], 1), indx_trough] * df['invert_sign_peak'].to_numpy()
     del arr_post
-
+    # TODO spin function above into a function
+    #  if ratio or diff peak/trough smaller than x AND time diff is smaller than xx :
+    #  Assign trough as peak
+    #  Call this function again to compute trough with new peak assigned
     # Find tip
     '''
     # 02-06-2023 ; Decided not to use the inflection point but rather maximum
@@ -311,18 +314,18 @@ def recovery_slope(df, fs=30000):
     return df
 
 
-def dist_chanel_from_peak(channel_geometry, df):
+def dist_chanel_from_peak(channel_geometry, peak_trace_idx):
     '''
     Compute distance for each channel from the peak channel, for each spike
     :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,y,z)
     # Note: computing this to provide it as input will be a pain
-    :param df: dataframe of waveform features
+    :param peak_trace_idx: index of the highest amplitude channel in the multi-channel waveform
     :return: eu_dist : N(spikes) * N(channels): the euclidian distance between each channel and the peak channel,
     for each waveform
     '''
     # Note: It deals with Nan in entry coordinate (fake padding channels); returns Nan as Eu dist
     # Get peak coordinates (x,y,z)
-    peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), df['peak_trace_idx'], :]
+    peak_coord = channel_geometry[np.arange(0, channel_geometry.shape[0], 1), peak_trace_idx, :]
 
     # repmat peak coordinates (x,y,z) [Nspikes x Ncoordinates] across channels
     peak_coord_rep = np.repeat(peak_coord[:, :, np.newaxis], channel_geometry.shape[1], axis=2)  # Todo -1
@@ -397,7 +400,7 @@ def compute_spatial_spread(arr, df, channel_geometry, weight_type='peak'):
     return df
 
 
-def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
+def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_peak_channel=False):
     """
     This is the main function to compute spike features from a set of waveforms
     Current features:
@@ -409,6 +412,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
     :param arr_in: 3D np.array containing multi-channel waveforms; 3D dimension have to be (wav, time, trace)
     :param fs: sampling frequency (Hz)
     :recovery_duration_ms: in ms, the duration from the trough to the recovery point
+    :param return_peak_channel: if True, return the peak channel traces
     :return: dataframe of spikes with all features,
     Returns:
     """
@@ -428,4 +432,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16):
     # Slopes
     df = polarisation_slopes(df, fs=fs)
     df = recovery_slope(df, fs=fs)
-    return df
+    if return_peak_channel:
+        return df, arr_peak
+    else:
+        return df
