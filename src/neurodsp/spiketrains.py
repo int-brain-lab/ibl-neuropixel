@@ -228,3 +228,19 @@ def spikes_venn(samples_tuple,
                                 num_channels=num_channels
                                 )
     
+
+    cond_names = ["100", "010", "110", "001", "101", "011", "111"]
+    pre_result = np.zeros(7, int)
+
+    max_per_spike = np.amax(bin_counts, axis=0)
+    overall_max = np.max(max_per_spike)
+
+
+    for i in range(0, overall_max):
+        ind = (max_per_spike - i > 0)
+        venn_info = bin_counts[:, ind] >= (max_per_spike - i)[ind]
+        venn_info_int = np.packbits(venn_info, axis=0, bitorder="little")
+        conds, counts = np.unique(venn_info_int, return_counts=True)
+        pre_result[conds-1] += counts
+
+    return dict(zip(cond_names, pre_result))
