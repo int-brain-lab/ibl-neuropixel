@@ -3,92 +3,6 @@ from functools import reduce
 from scipy.stats import mode
 
 
-def spiketrain_intersect(
-    samples1,
-    channels1,
-    samples2,
-    channels2,
-    samples_binsize=None,
-    channels_binsize=4,
-    fs=30000,
-    num_channels=384,
-):
-    """
-    Given two spike trains and respective channel assignments from different spike sorters,
-    identifies spikes identified by both sorters via binning the spike trains in the time
-    and channel dimensions.
-
-    :param samples1: A 1-D NumPy array containing sample times of spikes.
-    :param channels1: A 1-D NumPy array containing channel assignments of spikes in `sample1`.
-    Must have same length as `sample1`.
-    :param samples2: A 1-D NumPy array containing sample times of another spike train.
-    :param channels2: A 1-D NumPy array containing channel assignments of spikes in `sample2`.
-    Must have same length as `sample2`.
-    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
-    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
-    :param fs: Sampling rate (Hz). Defaults to 30000.
-    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
-    :return: common_spike_bins, indices1_foundby2, indices2_foundby1
-    """
-
-    assert (
-        samples1.shape == channels1.shape
-    ), "samples1 and channels1 must have the same shape."
-    assert (
-        samples2.shape == channels2.shape
-    ), "samples2 and channels2 must have the same shape."
-
-    if not samples_binsize:
-        # Default: 0.4 ms
-        samples_binsize = int(0.4 * fs / 1000)
-
-    max_samples = max(np.max(samples1), np.max(samples2))
-    bins2d_shape = (
-        int(max_samples // samples_binsize) + 2,
-        int(num_channels // channels_binsize) + 2,
-    )
-
-    linear_indices1 = bin_spikes(
-        samples1,
-        channels1,
-        samples_binsize=samples_binsize,
-        channels_binsize=channels_binsize,
-        fs=fs,
-        num_channels=num_channels,
-        max_samples=max_samples,
-    )
-    linear_indices2 = bin_spikes(
-        samples2,
-        channels2,
-        samples_binsize=samples_binsize,
-        channels_binsize=channels_binsize,
-        fs=fs,
-        num_channels=num_channels,
-        max_samples=max_samples,
-    )
-
-    # find the intersection of the two spike trains' bin indices for each shift
-    bin_linear_indices = []
-    indices1 = []
-    indices2 = []
-    for i in range(4):
-        bin_linear_idx, idx1, idx2 = np.intersect1d(
-            linear_indices1[i], linear_indices2[i], return_indices=True
-        )
-        bin_linear_indices.append(bin_linear_idx)
-        indices1.append(idx1)
-        indices2.append(idx2)
-
-    # take the union over shifts
-    common_spike_bins = list(
-        zip(*np.unravel_index(reduce(np.union1d, bin_linear_indices), bins2d_shape))
-    )
-    indices1_foundby2 = reduce(np.union1d, indices1)
-    indices2_foundby1 = reduce(np.union1d, indices2)
-
-    return common_spike_bins, indices1_foundby2, indices2_foundby1
-
-
 def bin_spikes(
     samples,
     channels,
@@ -98,6 +12,20 @@ def bin_spikes(
     num_channels=384,
     max_samples=None,
 ):
+    """
+    Given a series of spike times and locations, assign each spike to a bin in the time
+    and channel dimensions. Repeats the process over 4 shifts.
+
+    :param samples1: A 1-D NumPy array containing sample times of spikes.
+    :param channels1: A 1-D NumPy array containing channel assignments of spikes in `sample`.
+    Must have same length as `sample`.
+    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
+    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
+    :param fs: Sampling rate (Hz). Defaults to 30000.
+    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :return: NumPy array of shape `(4, num_spikes)`, with linearized bin assignments for each
+    of the four shifts.
+    """
     if not samples_binsize:
         # Default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
@@ -154,8 +82,17 @@ def spikes_per_bin(
     num_channels=384,
 ):
     """
-    :param samples: A tuple of N sample times of spikes (each a 1D NumPy array)
-    :param channels: A tuple of N channel locations of spikes (each a 1D NumPy array)
+    Given a set of spikes found by different spike sorters over the same snippet,
+    find the number of spikes found by each spike sorter in linearized bins.
+
+    :param samples_tuple: A tuple of N sample times of spikes (each a 1D NumPy array)
+    :param channels_tuple: A tuple of N channel locations of spikes (each a 1D NumPy array)
+    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
+    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
+    :param fs: Sampling rate (Hz). Defaults to 30000.
+    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :return: A NumPy array of shape (num_sorters, num bins) containing the number of spikes
+    found by each sorter in each linearized bin.
     """
 
     assert len(samples_tuple) == len(
@@ -202,9 +139,8 @@ def spikes_per_bin(
         # length is number of spikes
         _arr = np.zeros(binning.shape[1])
         # most common bin each spike is assigned to
-        polled_binnings[i] = mode(binning, axis=0, keepdims=False)[0]
+        polled_binnings[i] = np.amax(binning, axis=0)
 
-    
     # [i, j] is the number of spikes found by sorter i in bin j
     bin_counts = np.zeros((len(samples_tuple), num_bins), dtype=int)
     for i, polled in enumerate(polled_binnings):
@@ -214,20 +150,36 @@ def spikes_per_bin(
 
     return bin_counts
 
-def spikes_venn(samples_tuple,
+
+def spikes_venn3(
+    samples_tuple,
     channels_tuple,
     samples_binsize=None,
     channels_binsize=4,
     fs=30000,
-    num_channels=384,):
+    num_channels=384,
+):
+    """
+    Given a set of spikes found by different spike sorters over the same snippet,
+    return the venn diagram counts as a dictionary suitable for the `subsets` arg of
+    matplotlib_venn.venn3().
 
-    bin_counts = spikes_per_bin(samples_tuple, channels_tuple, 
-                                samples_binsize=samples_binsize,
-                                channels_binsize=channels_binsize,
-                                fs=fs,
-                                num_channels=num_channels
-                                )
-    
+    :param samples_tuple: A tuple of N sample times of spikes (each a 1D NumPy array)
+    :param channels_tuple: A tuple of N channel locations of spikes (each a 1D NumPy array)
+    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
+    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
+    :param fs: Sampling rate (Hz). Defaults to 30000.
+    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :return: dict containing venn diagram spike counts for the spike sorters. 
+    """
+    bin_counts = spikes_per_bin(
+        samples_tuple,
+        channels_tuple,
+        samples_binsize=samples_binsize,
+        channels_binsize=channels_binsize,
+        fs=fs,
+        num_channels=num_channels,
+    )
 
     cond_names = ["100", "010", "110", "001", "101", "011", "111"]
     pre_result = np.zeros(7, int)
@@ -235,12 +187,13 @@ def spikes_venn(samples_tuple,
     max_per_spike = np.amax(bin_counts, axis=0)
     overall_max = np.max(max_per_spike)
 
+    vec = np.array([1, 2, 4])
 
     for i in range(0, overall_max):
-        ind = (max_per_spike - i > 0)
+        ind = max_per_spike - i > 0
         venn_info = bin_counts[:, ind] >= (max_per_spike - i)[ind]
-        venn_info_int = np.packbits(venn_info, axis=0, bitorder="little")
+        venn_info_int = vec @ venn_info
         conds, counts = np.unique(venn_info_int, return_counts=True)
-        pre_result[conds-1] += counts
+        pre_result[conds - 1] += counts
 
     return dict(zip(cond_names, pre_result))

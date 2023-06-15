@@ -465,31 +465,3 @@ class TestStack(unittest.TestCase):
         stack, hstack = voltage.stack(data, word=word, header=header)
         assert list(hstack.keys()) == ["toto", "fold"]
         assert np.all(hstack["fold"] == 3)
-
-
-class TestSpikeTrainIntersect(unittest.TestCase):
-    def test_spiketrain_intersect(self):
-        spike_train1 = np.array([11, 40, 63, 80, 90, 99])
-        spike_train2 = np.array([12, 40, 68, 93, 98])
-        channels1 = np.array([32, 125, 300, 150, 340, 127])
-        channels2 = np.array([32, 123, 302, 150, 335])
-        # (11,32) - (12,32) are separated by a time bin border, make sure we catch
-        # (40,125) - (40,123) are separated by a channel bin border, make sure we catch
-        # (63,68) - (300,302) are within a single bin, make sure we catch
-        # (80,93) - (150,150) are too far away in time, make sure we *don't* catch
-        # (90,340) - (98,335) are too far away in channels, make sure we *don't* catch
-        # (99, 127) is an extra spike in spike train 1
-
-        common_spikes = [(1, 8), (3, 31), (5, 75)]
-        # in both spike trains, the first 3 spikes are found by the other sorter
-        indices = np.array([0, 1, 2])
-        (
-            result_spikes,
-            result_indices1,
-            result_indices2,
-        ) = spiketrains.spiketrain_intersect(
-            spike_train1, channels1, spike_train2, channels2
-        )
-        assert common_spikes == result_spikes
-        assert np.array_equal(result_indices1, indices)
-        assert np.array_equal(result_indices2, indices)
