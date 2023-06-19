@@ -38,7 +38,7 @@ def spikes_venn3(
                 channels_binsize,
                 [0, int(max_samples)],
                 [0, num_channels],
-            )[0].flatten()
+            )[0].flatten().astype(np.uint16)
             for i in range(3)
         ]
     )
