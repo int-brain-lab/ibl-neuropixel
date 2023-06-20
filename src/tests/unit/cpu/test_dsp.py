@@ -8,6 +8,7 @@ import neurodsp.utils as utils
 import neurodsp.voltage as voltage
 import neurodsp.cadzow as cadzow
 import neurodsp.smooth as smooth
+import neurodsp.spiketrains as spiketrains
 
 
 class TestSyncTimestamps(unittest.TestCase):
@@ -389,3 +390,21 @@ class TestStack(unittest.TestCase):
         stack, hstack = voltage.stack(data, word=word, header=header)
         assert (list(hstack.keys()) == ['toto', 'fold'])
         assert (np.all(hstack['fold'] == 3))
+
+class TestSpikeTrains(unittest.TestCase):
+
+    def test_spikes_venn3(self):
+        rng = np.random.default_rng()
+        # make sure each 'spiketrain' goes up to around 30000 samples
+        samples_tuple = (np.cumsum(rng.poisson(30, 1000)),
+                         np.cumsum(rng.poisson(20, 1500)),
+                         np.cumsum(rng.poisson(15, 2000)))
+        # used reduced number of channels for speed and to increase collision chance
+        channels_tuple = (rng.integers(20, size=(1000,)),
+                          rng.integers(20, size=(1500,)),
+                          rng.integers(20, size=(2000,)))
+        # check that spikes have been accounted for exactly once
+        venn_info = spiketrains.spikes_venn3(samples_tuple, channels_tuple, num_channels=20)
+        assert (venn_info["100"] + venn_info["101"] + venn_info["110"] + venn_info["111"] == 1000)
+        assert (venn_info["010"] + venn_info["011"] + venn_info["110"] + venn_info["111"] == 1500)
+        assert (venn_info["001"] + venn_info["101"] + venn_info["011"] + venn_info["111"] == 2000)
