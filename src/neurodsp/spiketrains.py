@@ -1,6 +1,10 @@
 import numpy as np
 from brainbox.processing import bincount2D
+import tqdm
+import logging
 
+_logger = logging.getLogger('ibllib')
+_logger.setLevel("INFO")
 
 def spikes_venn3(
     samples_tuple,
@@ -9,6 +13,7 @@ def spikes_venn3(
     channels_binsize=4,
     fs=30000,
     num_channels=384,
+    chunk_size = None
 ):
     """
     Given a set of spikes found by different spike sorters over the same snippet,
@@ -21,41 +26,54 @@ def spikes_venn3(
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
     :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 600 seconds. 
     :return: dict containing venn diagram spike counts for the spike sorters.
     """
     if not samples_binsize:
         # Default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
 
+    if not chunk_size:
+        chunk_size = 600 * fs
+
     max_samples = max([np.max(samples) for samples in samples_tuple])
 
-    bin_counts = np.array(
-        [
-            bincount2D(
-                samples_tuple[i],
-                channels_tuple[i],
-                samples_binsize,
-                channels_binsize,
-                [0, int(max_samples)],
-                [0, num_channels],
-            )[0].flatten()
-            for i in range(3)
-        ]
-    )
+    num_chunks = int((max_samples // chunk_size) + 1)
 
     cond_names = ["100", "010", "110", "001", "101", "011", "111"]
     pre_result = np.zeros(7, int)
-
-    max_per_spike = np.amax(bin_counts, axis=0)
-    overall_max = np.max(max_per_spike)
-
     vec = np.array([1, 2, 4])
 
-    for i in range(0, overall_max):
-        ind = max_per_spike - i > 0
-        venn_info = bin_counts[:, ind] >= (max_per_spike - i)[ind]
-        venn_info_int = vec @ venn_info
-        conds, counts = np.unique(venn_info_int, return_counts=True)
-        pre_result[conds - 1] += counts
+    _logger.info(f"Running spike venning routine with {num_chunks} chunks.")
+    for ch in tqdm.tqdm(range(num_chunks)):
+        sample_offset = ch * chunk_size
+        # select spikes within this chunk timeframe
+        spike_indices = [slice(*np.searchsorted(samples, [sample_offset, sample_offset + chunk_size])) for samples in samples_tuple]
+        # get corresponding spike sample times and channels
+        samples_chunks = [samples[spike_indices[i]].astype(int) - sample_offset for i, samples in enumerate(samples_tuple)]
+        channels_chunks = [channels[spike_indices[i]].astype(int) for i, channels in enumerate(channels_tuple)]
+        bin_counts = np.array(
+            [
+                bincount2D(
+                    samples_chunks[i],
+                    channels_chunks[i],
+                    samples_binsize,
+                    channels_binsize,
+                    [0, chunk_size],
+                    [0, num_channels],
+                )[0].flatten()
+                for i in range(3)
+            ]
+        )
+
+        max_per_spike = np.amax(bin_counts, axis=0)
+        overall_max = np.max(max_per_spike)
+
+        for i in range(0, overall_max):
+            ind = max_per_spike - i > 0
+            venn_info = bin_counts[:, ind] >= (max_per_spike - i)[ind]
+            venn_info_int = vec @ venn_info
+            conds, counts = np.unique(venn_info_int, return_counts=True)
+            pre_result[conds - 1] += counts
 
     return dict(zip(cond_names, pre_result))
