@@ -3,8 +3,9 @@ from brainbox.processing import bincount2D
 import tqdm
 import logging
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger("ibllib")
 _logger.setLevel("INFO")
+
 
 def spikes_venn3(
     samples_tuple,
@@ -13,7 +14,7 @@ def spikes_venn3(
     channels_binsize=4,
     fs=30000,
     num_channels=384,
-    chunk_size = None
+    chunk_size=None,
 ):
     """
     Given a set of spikes found by different spike sorters over the same snippet,
@@ -26,7 +27,7 @@ def spikes_venn3(
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
     :param num_channels: Total number of channels where spikes appear. Defaults to 384.
-    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 600 seconds. 
+    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 600 seconds.
     :return: dict containing venn diagram spike counts for the spike sorters.
     """
     if not samples_binsize:
@@ -48,10 +49,21 @@ def spikes_venn3(
     for ch in tqdm.tqdm(range(num_chunks)):
         sample_offset = ch * chunk_size
         # select spikes within this chunk timeframe
-        spike_indices = [slice(*np.searchsorted(samples, [sample_offset, sample_offset + chunk_size])) for samples in samples_tuple]
+        spike_indices = [
+            slice(
+                *np.searchsorted(samples, [sample_offset, sample_offset + chunk_size])
+            )
+            for samples in samples_tuple
+        ]
         # get corresponding spike sample times and channels
-        samples_chunks = [samples[spike_indices[i]].astype(int) - sample_offset for i, samples in enumerate(samples_tuple)]
-        channels_chunks = [channels[spike_indices[i]].astype(int) for i, channels in enumerate(channels_tuple)]
+        samples_chunks = [
+            samples[spike_indices[i]].astype(int) - sample_offset
+            for i, samples in enumerate(samples_tuple)
+        ]
+        channels_chunks = [
+            channels[spike_indices[i]].astype(int)
+            for i, channels in enumerate(channels_tuple)
+        ]
         bin_counts = np.array(
             [
                 bincount2D(
