@@ -22,10 +22,10 @@ def spikes_venn3(
     `matplotlib_venn.venn3()`. "100" represents the number of spikes found by sorter 1
     but not the other two, "110" represents the number of spikes found by sorters 1 and 2
     but not 3, etc. The algorithm works by binning in the time and channel dimensions and
-    counting spikes found by different sorters within the same bins. 
+    counting spikes found by different sorters within the same bins.
 
-    :param samples_tuple: A tuple of N sample times of spikes (each a 1D NumPy array).
-    :param channels_tuple: A tuple of N channel locations of spikes (each a 1D NumPy array).
+    :param samples_tuple: A tuple of 3 sample times of spikes (each a 1D NumPy array).
+    :param channels_tuple: A tuple of 3 channel locations of spikes (each a 1D NumPy array).
     :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
@@ -33,6 +33,12 @@ def spikes_venn3(
     :param chunk_size: Chunk size to process spike data (in samples). Defaults to 600 seconds.
     :return: dict containing venn diagram spike counts for the spike sorters.
     """
+    assert len(samples_tuple) == 3, "Must have 3 sets of samples."
+    assert len(channels_tuple) == 3, "Must have 3 sets of channels."
+    assert all(
+        samples_tuple[i].shape == channels_tuple[i].shape for i in range(3)
+    ), "Samples and channels must match for each sorter."
+
     if not samples_binsize:
         # set default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
@@ -71,7 +77,7 @@ def spikes_venn3(
             channels[spike_indices[i]].astype(int)
             for i, channels in enumerate(channels_tuple)
         ]
-        
+
         # compute fast 2D bin count for each sorter, resulting in an (3, num_bins)
         # array where the (i, j) number is the number of spikes found by sorter i
         # in (linearized) bin j.
