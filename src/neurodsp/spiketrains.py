@@ -19,10 +19,13 @@ def spikes_venn3(
     """
     Given a set of spikes found by different spike sorters over the same snippet,
     return the venn diagram counts as a dictionary suitable for the `subsets` arg of
-    matplotlib_venn.venn3().
+    `matplotlib_venn.venn3()`. "100" represents the number of spikes found by sorter 1
+    but not the other two, "110" represents the number of spikes found by sorters 1 and 2
+    but not 3, etc. The algorithm works by binning in the time and channel dimensions and
+    counting spikes found by different sorters within the same bins. 
 
-    :param samples_tuple: A tuple of N sample times of spikes (each a 1D NumPy array)
-    :param channels_tuple: A tuple of N channel locations of spikes (each a 1D NumPy array)
+    :param samples_tuple: A tuple of N sample times of spikes (each a 1D NumPy array).
+    :param channels_tuple: A tuple of N channel locations of spikes (each a 1D NumPy array).
     :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
@@ -31,24 +34,28 @@ def spikes_venn3(
     :return: dict containing venn diagram spike counts for the spike sorters.
     """
     if not samples_binsize:
-        # Default: 0.4 ms
+        # set default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
 
     if not chunk_size:
+        # set default: 600 s
         chunk_size = 600 * fs
 
+    # find the timestamp of the last spike detected by any of the sorters
+    # to calibrate chunking
     max_samples = max([np.max(samples) for samples in samples_tuple])
-
     num_chunks = int((max_samples // chunk_size) + 1)
 
+    # each spike falls into one of 7 conditions based on whether it was found
+    # by different sortings
     cond_names = ["100", "010", "110", "001", "101", "011", "111"]
     pre_result = np.zeros(7, int)
     vec = np.array([1, 2, 4])
 
     _logger.info(f"Running spike venning routine with {num_chunks} chunks.")
     for ch in tqdm.tqdm(range(num_chunks)):
+        # select spikes within this chunk's time snippet
         sample_offset = ch * chunk_size
-        # select spikes within this chunk timeframe
         spike_indices = [
             slice(
                 *np.searchsorted(samples, [sample_offset, sample_offset + chunk_size])
@@ -64,6 +71,10 @@ def spikes_venn3(
             channels[spike_indices[i]].astype(int)
             for i, channels in enumerate(channels_tuple)
         ]
+        
+        # compute fast 2D bin count for each sorter, resulting in an (3, num_bins)
+        # array where the (i, j) number is the number of spikes found by sorter i
+        # in (linearized) bin j.
         bin_counts = np.array(
             [
                 bincount2D(
@@ -78,6 +89,10 @@ def spikes_venn3(
             ]
         )
 
+        # this process iteratively counts the number of spikes falling into each
+        # of the 7 conditions by separating out which spikes must have been found
+        # by each spike sorter within each bin, and updates the master `pre_result`
+        # count array for this chunk
         max_per_spike = np.amax(bin_counts, axis=0)
         overall_max = np.max(max_per_spike)
 
