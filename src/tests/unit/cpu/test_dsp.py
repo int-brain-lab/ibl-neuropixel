@@ -391,6 +391,7 @@ class TestStack(unittest.TestCase):
         assert (list(hstack.keys()) == ['toto', 'fold'])
         assert (np.all(hstack['fold'] == 3))
 
+
 class TestSpikeTrains(unittest.TestCase):
 
     def test_spikes_venn3(self):
