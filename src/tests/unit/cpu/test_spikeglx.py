@@ -502,6 +502,9 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def test_write_meta_file(self):
         meta = spikeglx.read_meta_data(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        # cannot use context manager and NamedTemporaryFile() on Windows
+        # and then try to open file again
+        # https://github.com/bravoserver/bravo/issues/111
         file_mdtest = tempfile.NamedTemporaryFile(delete=False)
         spikeglx.write_meta_data(meta, file_mdtest.name)
         _meta = spikeglx.read_meta_data(file_mdtest.name)
@@ -518,13 +521,15 @@ class TestsBasicReader(unittest.TestCase):
         # here we expect no scaling to V applied and no sync trace as the format is float32
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
         data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
-        with tempfile.NamedTemporaryFile() as tf:
-            with open(tf.name, mode='w') as fp:
-                data.tofile(fp)
-            sr = spikeglx.Reader(tf.name, **kwargs)
-            assert np.all(sr[:, :] == data)
-            assert sr.nsync == 0
-            assert np.all(sr.sample2volts == 1)
+        tf = tempfile.NamedTemporaryFile(delete=False)
+        with open(tf.name, mode='w') as fp:
+            data.tofile(fp)
+        sr = spikeglx.Reader(tf.name, **kwargs)
+        assert np.all(sr[:, :] == data)
+        assert sr.nsync == 0
+        assert np.all(sr.sample2volts == 1)
+        tf.close()
+        os.unlink(tf.name)
 
     def test_read_flat_binary_int16_with_sync(self):
         # here we expect scaling on all channels but the sync channel
@@ -535,18 +540,20 @@ class TestsBasicReader(unittest.TestCase):
         data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
         data[:, -1] = 1
         data = data.astype(np.int16)
-        with tempfile.NamedTemporaryFile() as tf:
-            with open(tf.name, mode='w') as fp:
-                data.tofile(fp)
-            # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
-            for kw in (kwargs, {}):
-                with self.subTest(kwargs=kw):
-                    sr = spikeglx.Reader(tf.name, **kw)
-                    print(sr.shape, kw)
-                    assert sr.nsync == 1
-                    np.testing.assert_allclose(
-                        sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
-                    np.testing.assert_array_equal(sr.sample2volts, s2v)
+        tf = tempfile.NamedTemporaryFile(delete=False)
+        with open(tf.name, mode='w') as fp:
+            data.tofile(fp)
+        # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
+        for kw in (kwargs, {}):
+            with self.subTest(kwargs=kw):
+                sr = spikeglx.Reader(tf.name, **kw)
+                print(sr.shape, kw)
+                assert sr.nsync == 1
+                np.testing.assert_allclose(
+                    sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                np.testing.assert_array_equal(sr.sample2volts, s2v)
+        tf.close()
+        os.unlink(tf.name)
 
     def test_read_flat_binary_int16_no_sync(self):
         # here we expect scaling on all channels but the sync channel
@@ -555,18 +562,20 @@ class TestsBasicReader(unittest.TestCase):
         s2v = np.ones(384) * neuropixel.S2V_AP
         data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
         data = data.astype(np.int16)
-        with tempfile.NamedTemporaryFile() as tf:
-            with open(tf.name, mode='w') as fp:
-                data.tofile(fp)
-            # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
-            for kw in (kwargs, {}):
-                with self.subTest(kwargs=kw):
-                    sr = spikeglx.Reader(tf.name, **kw)
-                    print(sr.shape, kw)
-                    np.testing.assert_allclose(
-                        sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
-                    assert sr.nsync == 0
-                    np.testing.assert_array_equal(sr.sample2volts, s2v)
+        tf = tempfile.NamedTemporaryFile(delete=False)
+        with open(tf.name, mode='w') as fp:
+            data.tofile(fp)
+        # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
+        for kw in (kwargs, {}):
+            with self.subTest(kwargs=kw):
+                sr = spikeglx.Reader(tf.name, **kw)
+                print(sr.shape, kw)
+                np.testing.assert_allclose(
+                    sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                assert sr.nsync == 0
+                np.testing.assert_array_equal(sr.sample2volts, s2v)
+        tf.close()
+        os.unlink(tf.name)
 
     def test_load_meta_file_only(self):
         # here we load only a meta-file
