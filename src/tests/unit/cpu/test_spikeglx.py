@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 import tempfile
 import unittest
@@ -501,9 +502,12 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def test_write_meta_file(self):
         meta = spikeglx.read_meta_data(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
-        with tempfile.NamedTemporaryFile() as file_mdtest:
-            spikeglx.write_meta_data(meta, file_mdtest.name)
-            _meta = spikeglx.read_meta_data(file_mdtest.name)
+        file_mdtest = tempfile.NamedTemporaryFile(delete=False)
+        spikeglx.write_meta_data(meta, file_mdtest.name)
+        _meta = spikeglx.read_meta_data(file_mdtest.name)
+        file_mdtest.close()
+        os.unlink(file_mdtest.name)
+        
         self.assertEqual(meta, _meta)
 
 
