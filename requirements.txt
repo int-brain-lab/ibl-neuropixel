@@ -1,4 +1,4 @@
-iblutil >= 1.6.0
+iblutil >= 1.7.0
 joblib
 mtscomp
 numpy
