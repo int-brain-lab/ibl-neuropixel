@@ -1,4 +1,7 @@
 # 0.6.0
+## 0.6.2 2023-06-19
+- add option to specify meta-data file for spikeglx.Reader
+
 ## 0.6.1 2023-06-06
 - Fix bug in ADC cycles sampling for Neuropixel 1.0 probes
 - 

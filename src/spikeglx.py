@@ -39,7 +39,7 @@ class Reader:
     """
 
     def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2v=None,
-                 nsync=None, ignore_warnings=False):
+                 nsync=None, ignore_warnings=False, meta_file=None):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
@@ -47,8 +47,8 @@ class Reader:
         """
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
-        file_meta_data = sglx_file.with_suffix('.meta')
-        if file_meta_data == sglx_file:
+        meta_file = meta_file or sglx_file.with_suffix('.meta')
+        if meta_file == sglx_file:
             # if a meta-data file is provided, try to get the binary file
             self.file_bin = sglx_file.with_suffix('.cbin') if sglx_file.with_suffix('.cbin').exists() else None
             self.file_bin = sglx_file.with_suffix('.bin') if sglx_file.with_suffix('.bin').exists() else None
@@ -57,7 +57,7 @@ class Reader:
         self.nbytes = self.file_bin.stat().st_size if self.file_bin else None
         self.dtype = np.dtype(dtype)
 
-        if not file_meta_data.exists():
+        if not meta_file.exists():
             # if no meta-data file is provided, try to get critical info from the binary file
             # by seeing if filesize checks out with neuropixel 384 channels
             if self.file_bin.stat().st_size / 384 % 2 == 0:
@@ -85,8 +85,8 @@ class Reader:
                 self.channel_conversion_sample2v['samples'][-nsync:] = 1
         else:
             # normal case we continue reading and interpreting the metadata file
-            self.file_meta_data = file_meta_data
-            self.meta = read_meta_data(file_meta_data)
+            self.file_meta_data = meta_file
+            self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
         if open and self.file_bin:
