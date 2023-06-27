@@ -522,12 +522,14 @@ class TestsBasicReader(unittest.TestCase):
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
         data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
         with tempfile.NamedTemporaryFile(delete=False) as tf:
+            _to_delete = tf.name
             with open(tf.name, "w") as fp:
                 data.tofile(fp)
             sr = spikeglx.Reader(tf.name, **kwargs)
             assert np.all(sr[:, :] == data)
             assert sr.nsync == 0
             assert np.all(sr.sample2volts == 1)
+        os.unlink(_to_delete)
 
     def test_read_flat_binary_int16_with_sync(self):
         # here we expect scaling on all channels but the sync channel
@@ -539,6 +541,7 @@ class TestsBasicReader(unittest.TestCase):
         data[:, -1] = 1
         data = data.astype(np.int16)
         with tempfile.NamedTemporaryFile(delete=False) as tf:
+            _to_delete = tf.name
             with open(tf.name, "w") as fp:
                 data.tofile(fp)
             # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
@@ -550,6 +553,7 @@ class TestsBasicReader(unittest.TestCase):
                     np.testing.assert_allclose(
                         sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
                     np.testing.assert_array_equal(sr.sample2volts, s2v)
+        os.unlink(_to_delete)
 
     def test_read_flat_binary_int16_no_sync(self):
         # here we expect scaling on all channels but the sync channel
@@ -559,6 +563,7 @@ class TestsBasicReader(unittest.TestCase):
         data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
         data = data.astype(np.int16)
         with tempfile.NamedTemporaryFile(delete=False) as tf:
+            _to_delete = tf.name
             with open(tf.name, mode='w') as fp:
                 data.tofile(fp)
             # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
@@ -570,6 +575,7 @@ class TestsBasicReader(unittest.TestCase):
                         sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
                     assert sr.nsync == 0
                     np.testing.assert_array_equal(sr.sample2volts, s2v)
+        os.unlink(_to_delete)
 
     def test_load_meta_file_only(self):
         # here we load only a meta-file
