@@ -521,15 +521,13 @@ class TestsBasicReader(unittest.TestCase):
         # here we expect no scaling to V applied and no sync trace as the format is float32
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
         data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
-        tf = tempfile.NamedTemporaryFile(delete=False)
-        data.tofile(tf)
-        tf.close()
-        sr = spikeglx.Reader(tf.name, **kwargs)
-        assert np.all(sr[:, :] == data)
-        assert sr.nsync == 0
-        assert np.all(sr.sample2volts == 1)
-        tf.close()
-        os.unlink(tf.name)
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            with open(tf.name, "w") as fp:
+                data.tofile(fp)
+            sr = spikeglx.Reader(tf.name, **kwargs)
+            assert np.all(sr[:, :] == data)
+            assert sr.nsync == 0
+            assert np.all(sr.sample2volts == 1)
 
     def test_read_flat_binary_int16_with_sync(self):
         # here we expect scaling on all channels but the sync channel
