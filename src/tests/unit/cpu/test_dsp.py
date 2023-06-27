@@ -467,6 +467,7 @@ class TestStack(unittest.TestCase):
         assert np.all(hstack["fold"] == 3)
 
 
+
 class TestSpikeTrains(unittest.TestCase):
     def test_spikes_venn3(self):
         rng = np.random.default_rng()
