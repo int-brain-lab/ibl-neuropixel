@@ -507,7 +507,6 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         _meta = spikeglx.read_meta_data(file_mdtest.name)
         file_mdtest.close()
         os.unlink(file_mdtest.name)
-        
         self.assertEqual(meta, _meta)
 
 
