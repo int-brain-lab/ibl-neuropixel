@@ -522,8 +522,8 @@ class TestsBasicReader(unittest.TestCase):
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
         data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
         tf = tempfile.NamedTemporaryFile(delete=False)
-        with open(tf.name, mode='w') as fp:
-            data.tofile(fp)
+        data.tofile(tf)
+        tf.close()
         sr = spikeglx.Reader(tf.name, **kwargs)
         assert np.all(sr[:, :] == data)
         assert sr.nsync == 0
@@ -541,8 +541,8 @@ class TestsBasicReader(unittest.TestCase):
         data[:, -1] = 1
         data = data.astype(np.int16)
         tf = tempfile.NamedTemporaryFile(delete=False)
-        with open(tf.name, mode='w') as fp:
-            data.tofile(fp)
+        data.tofile(tf)
+        tf.close()
         # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
         for kw in (kwargs, {}):
             with self.subTest(kwargs=kw):
