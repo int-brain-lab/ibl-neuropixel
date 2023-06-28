@@ -1,4 +1,9 @@
-# 0.6.0
+# 0.7.0
+
+## 0.7.0 2023-06-29
+- Add function `spike_venn3` in new module `neurodsp.spiketrains`
+- Update `iblutil` dependency to 1.7.0 to use `iblutil.numerical.bincount2D`
+
 ## 0.6.2 2023-06-19
 - add option to specify meta-data file for spikeglx.Reader
 
