@@ -520,10 +520,10 @@ class TestsBasicReader(unittest.TestCase):
             temp_bin = Path(tmpdir) / "sample.bin"
             with open(temp_bin, "w") as fp:
                 data.tofile(fp)
-            sr = spikeglx.Reader(temp_bin, **kwargs)
-            assert np.all(sr[:, :] == data)
-            assert sr.nsync == 0
-            assert np.all(sr.sample2volts == 1)
+            with spikeglx.Reader(temp_bin, **kwargs) as sr:
+                assert np.all(sr[:, :] == data)
+                assert sr.nsync == 0
+                assert np.all(sr.sample2volts == 1)
 
     def test_read_flat_binary_int16_with_sync(self):
         # here we expect scaling on all channels but the sync channel
@@ -541,12 +541,12 @@ class TestsBasicReader(unittest.TestCase):
             # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
             for kw in (kwargs, {}):
                 with self.subTest(kwargs=kw):
-                    sr = spikeglx.Reader(temp_bin, **kw)
-                    print(sr.shape, kw)
-                    assert sr.nsync == 1
-                    np.testing.assert_allclose(
-                        sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
-                    np.testing.assert_array_equal(sr.sample2volts, s2v)
+                    with spikeglx.Reader(temp_bin, **kw) as sr:
+                        print(sr.shape, kw)
+                        assert sr.nsync == 1
+                        np.testing.assert_allclose(
+                            sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                        np.testing.assert_array_equal(sr.sample2volts, s2v)
 
     def test_read_flat_binary_int16_no_sync(self):
         # here we expect scaling on all channels but the sync channel
