@@ -562,12 +562,12 @@ class TestsBasicReader(unittest.TestCase):
             # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
             for kw in (kwargs, {}):
                 with self.subTest(kwargs=kw):
-                    sr = spikeglx.Reader(temp_bin, **kw)
-                    print(sr.shape, kw)
-                    np.testing.assert_allclose(
-                        sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
-                    assert sr.nsync == 0
-                    np.testing.assert_array_equal(sr.sample2volts, s2v)
+                    with spikeglx.Reader(temp_bin, **kw) as sr:
+                        print(sr.shape, kw)
+                        np.testing.assert_allclose(
+                            sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                        assert sr.nsync == 0
+                        np.testing.assert_array_equal(sr.sample2volts, s2v)
 
     def test_load_meta_file_only(self):
         # here we load only a meta-file
