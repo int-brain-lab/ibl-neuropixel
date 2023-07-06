@@ -30,7 +30,7 @@ def spikes_venn3(
     :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
     :param fs: Sampling rate (Hz). Defaults to 30000.
     :param num_channels: Total number of channels where spikes appear. Defaults to 384.
-    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 600 seconds.
+    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 20 seconds.
     :return: dict containing venn diagram spike counts for the spike sorters.
     """
     assert len(samples_tuple) == 3, "Must have 3 sets of samples."
@@ -44,8 +44,8 @@ def spikes_venn3(
         samples_binsize = int(0.4 * fs / 1000)
 
     if not chunk_size:
-        # set default: 600 s
-        chunk_size = 600 * fs
+        # set default: 20 s
+        chunk_size = 20 * fs
 
     # find the timestamp of the last spike detected by any of the sorters
     # to calibrate chunking
