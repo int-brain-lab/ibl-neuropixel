@@ -8,10 +8,10 @@ import neurodsp.utils as utils
 import neurodsp.voltage as voltage
 import neurodsp.cadzow as cadzow
 import neurodsp.smooth as smooth
+import neurodsp.spiketrains as spiketrains
 
 
 class TestSyncTimestamps(unittest.TestCase):
-
     def test_timestamps_lin(self):
         np.random.seed(4132)
         n = 50
@@ -27,16 +27,22 @@ class TestSyncTimestamps(unittest.TestCase):
 
         # test missing indices on a
         imiss = np.setxor1d(np.arange(n), [1, 2, 34, 35])
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(tsa[imiss], tsb, return_indices=True)
+        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
+            tsa[imiss], tsb, return_indices=True
+        )
         assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[_ib]))
 
         # test missing indices on b
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(tsa, tsb[imiss], return_indices=True)
+        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
+            tsa, tsb[imiss], return_indices=True
+        )
         assert np.all(np.isclose(_fcn(tsa[_ia]), tsb[imiss[_ib]]))
 
         # test missing indices on both
         imiss2 = np.setxor1d(np.arange(n), [14, 17])
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(tsa[imiss], tsb[imiss2], return_indices=True)
+        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
+            tsa[imiss], tsb[imiss2], return_indices=True
+        )
         assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[imiss2[_ib]]))
 
 
@@ -45,14 +51,16 @@ class TestParabolicMax(unittest.TestCase):
     maxi = np.array([np.NaN, 0, 3.04166667, 3.04166667, 5, 5])
     ipeak = np.array([np.NaN, 0, 5.166667, 2.166667, 0, 7])
     # input
-    x = np.array([
-        [0, 0, 0, 0, 0, np.NaN, 0, 0],  # some NaNs
-        [0, 0, 0, 0, 0, 0, 0, 0],  # all flat
-        [0, 0, 0, 0, 1, 3, 2, 0],
-        [0, 1, 3, 2, 0, 0, 0, 0],
-        [5, 1, 3, 2, 0, 0, 0, 0],  # test first sample
-        [0, 1, 3, 2, 0, 0, 0, 5],  # test last sample
-    ])
+    x = np.array(
+        [
+            [0, 0, 0, 0, 0, np.NaN, 0, 0],  # some NaNs
+            [0, 0, 0, 0, 0, 0, 0, 0],  # all flat
+            [0, 0, 0, 0, 1, 3, 2, 0],
+            [0, 1, 3, 2, 0, 0, 0, 0],
+            [5, 1, 3, 2, 0, 0, 0, 0],  # test first sample
+            [0, 1, 3, 2, 0, 0, 0, 5],  # test last sample
+        ]
+    )
 
     def test_error_cases(self):
         pass
@@ -71,7 +79,6 @@ class TestParabolicMax(unittest.TestCase):
 
 
 class TestDspMisc(unittest.TestCase):
-
     def test_dsp_cosine_func(self):
         x = np.linspace(0, 40)
         fcn = utils.fcn_cosine(bounds=[20, 30])
@@ -80,21 +87,31 @@ class TestDspMisc(unittest.TestCase):
 
 
 class TestPhaseRegression(unittest.TestCase):
-
     def test_fit_phase1d(self):
         w = np.zeros(500)
         w[1] = 1
-        self.assertTrue(np.isclose(fourier.fit_phase(w, .002), .002))
+        self.assertTrue(np.isclose(fourier.fit_phase(w, 0.002), 0.002))
 
     def test_fit_phase2d(self):
         w = np.zeros((500, 2))
         w[1, 0], w[2, 1] = (1, 1)
-        self.assertTrue(np.all(np.isclose(fourier.fit_phase(w, .002, axis=0), np.array([.002, .004]))))
-        self.assertTrue(np.all(np.isclose(fourier.fit_phase(w.transpose(), .002), np.array([.002, .004]))))
+        self.assertTrue(
+            np.all(
+                np.isclose(
+                    fourier.fit_phase(w, 0.002, axis=0), np.array([0.002, 0.004])
+                )
+            )
+        )
+        self.assertTrue(
+            np.all(
+                np.isclose(
+                    fourier.fit_phase(w.transpose(), 0.002), np.array([0.002, 0.004])
+                )
+            )
+        )
 
 
 class TestShift(unittest.TestCase):
-
     def test_shift_already_fft(self):
         for ns in [500, 501]:
             w = scipy.signal.ricker(ns, 10)
@@ -117,27 +134,43 @@ class TestShift(unittest.TestCase):
         ns = 500
         w = scipy.signal.ricker(ns, 10)
         w = np.tile(w, (100, 1)).transpose()
-        self.assertTrue(np.all(np.isclose(fourier.fshift(w, 1, axis=0), np.roll(w, 1, axis=0))))
-        self.assertTrue(np.all(np.isclose(fourier.fshift(w, 1, axis=1), np.roll(w, 1, axis=1))))
+        self.assertTrue(
+            np.all(np.isclose(fourier.fshift(w, 1, axis=0), np.roll(w, 1, axis=0)))
+        )
+        self.assertTrue(
+            np.all(np.isclose(fourier.fshift(w, 1, axis=1), np.roll(w, 1, axis=1)))
+        )
         # # test with individual shifts for each trace
         self.assertTrue(
-            np.all(np.isclose(fourier.fshift(w, np.ones(w.shape[1]), axis=0), np.roll(w, 1, axis=0))))
+            np.all(
+                np.isclose(
+                    fourier.fshift(w, np.ones(w.shape[1]), axis=0),
+                    np.roll(w, 1, axis=0),
+                )
+            )
+        )
         self.assertTrue(
-            np.all(np.isclose(fourier.fshift(w, np.ones(w.shape[0]), axis=1), np.roll(w, 1, axis=1))))
+            np.all(
+                np.isclose(
+                    fourier.fshift(w, np.ones(w.shape[0]), axis=1),
+                    np.roll(w, 1, axis=1),
+                )
+            )
+        )
 
 
 class TestSmooth(unittest.TestCase):
-
     def test_smooth_lp(self):
         np.random.seed(458)
-        a = np.random.rand(500,)
+        a = np.random.rand(
+            500,
+        )
         a_ = smooth.lp(a, [0.1, 0.15])
-        res = fourier.hp(np.pad(a_, 100, mode='edge'), 1, [0.1, 0.15])[100:-100]
+        res = fourier.hp(np.pad(a_, 100, mode="edge"), 1, [0.1, 0.15])[100:-100]
         self.assertTrue((utils.rms(a) / utils.rms(res)) > 500)
 
 
 class TestFFT(unittest.TestCase):
-
     def test_spectral_convolution(self):
         sig = np.random.randn(20, 500)
         w = np.hanning(25)
@@ -145,12 +178,12 @@ class TestFFT(unittest.TestCase):
         s = np.convolve(sig[0, :], w)
         self.assertTrue(np.all(np.isclose(s, c[0, :-1])))
 
-        c = fourier.convolve(sig, w, mode='same')
-        s = np.convolve(sig[0, :], w, mode='same')
+        c = fourier.convolve(sig, w, mode="same")
+        s = np.convolve(sig[0, :], w, mode="same")
         self.assertTrue(np.all(np.isclose(c[0, :], s)))
 
-        c = fourier.convolve(sig, w[:-1], mode='same')
-        s = np.convolve(sig[0, :], w[:-1], mode='same')
+        c = fourier.convolve(sig, w[:-1], mode="same")
+        s = np.convolve(sig[0, :], w[:-1], mode="same")
         self.assertTrue(np.all(np.isclose(c[0, :], s)))
 
     def test_nech_optim(self):
@@ -196,29 +229,41 @@ class TestFFT(unittest.TestCase):
 
     def test_fscale(self):
         # test for an even number of samples
-        res = [0, 100, 200, 300, 400, 500, -400, -300, -200, -100],
+        res = ([0, 100, 200, 300, 400, 500, -400, -300, -200, -100],)
         self.assertTrue(np.all(np.abs(fourier.fscale(10, 0.001) - res) < 1e-6))
         # test for an odd number of samples
-        res = [0, 90.9090909090909, 181.818181818182, 272.727272727273, 363.636363636364,
-               454.545454545455, -454.545454545455, -363.636363636364, -272.727272727273,
-               -181.818181818182, -90.9090909090909],
+        res = (
+            [
+                0,
+                90.9090909090909,
+                181.818181818182,
+                272.727272727273,
+                363.636363636364,
+                454.545454545455,
+                -454.545454545455,
+                -363.636363636364,
+                -272.727272727273,
+                -181.818181818182,
+                -90.9090909090909,
+            ],
+        )
         self.assertTrue(np.all(np.abs(fourier.fscale(11, 0.001) - res) < 1e-6))
 
     def test_filter_lp_hp(self):
         # test 1D time serie: subtracting lp filter removes DC
         ts1 = np.random.rand(500)
-        out1 = fourier.lp(ts1, 1, [.1, .2])
+        out1 = fourier.lp(ts1, 1, [0.1, 0.2])
         self.assertTrue(np.mean(ts1 - out1) < 0.001)
         # test 2D case along the last dimension
         ts = np.tile(ts1, (11, 1))
-        out = fourier.lp(ts, 1, [.1, .2])
+        out = fourier.lp(ts, 1, [0.1, 0.2])
         self.assertTrue(np.allclose(out, out1))
         # test 2D case along the first dimension
         ts = np.tile(ts1[:, np.newaxis], (1, 11))
-        out = fourier.lp(ts, 1, [.1, .2], axis=0)
+        out = fourier.lp(ts, 1, [0.1, 0.2], axis=0)
         self.assertTrue(np.allclose(np.transpose(out), out1))
         # test 1D time serie: subtracting lp filter removes DC
-        out2 = fourier.hp(ts1, 1, [.1, .2])
+        out2 = fourier.hp(ts1, 1, [0.1, 0.2])
         self.assertTrue(np.allclose(out1, ts1 - out2))
 
     def test_dft(self):
@@ -239,21 +284,28 @@ class TestFFT(unittest.TestCase):
         _n0, _n1, nt = (10, 11, 30)
         x = np.random.rand(_n0 * _n1, nt)
         X_ = np.fft.fft(np.fft.fft(x.reshape(_n0, _n1, nt), axis=0), axis=1)
-        r, c = [v.flatten() for v in np.meshgrid(np.arange(
-            _n0) / _n0, np.arange(_n1) / _n1, indexing='ij')]
+        r, c = [
+            v.flatten()
+            for v in np.meshgrid(
+                np.arange(_n0) / _n0, np.arange(_n1) / _n1, indexing="ij"
+            )
+        ]
         nk, nl = (_n0, _n1)
         X = fourier.dft2(x, r, c, nk, nl)
         assert np.all(np.isclose(X, X_))
 
 
 class TestWindowGenerator(unittest.TestCase):
-
     def test_window_simple(self):
         wg = utils.WindowGenerator(ns=500, nswin=100, overlap=50)
         sl = list(wg.firstlast)
         self.assertTrue(wg.nwin == len(sl) == 9)
-        self.assertTrue(np.all(np.array([s[0] for s in sl]) == np.arange(0, wg.nwin) * 50))
-        self.assertTrue(np.all(np.array([s[1] for s in sl]) == np.arange(0, wg.nwin) * 50 + 100))
+        self.assertTrue(
+            np.all(np.array([s[0] for s in sl]) == np.arange(0, wg.nwin) * 50)
+        )
+        self.assertTrue(
+            np.all(np.array([s[1] for s in sl]) == np.arange(0, wg.nwin) * 50 + 100)
+        )
 
         wg = utils.WindowGenerator(ns=500, nswin=100, overlap=10)
         sl = list(wg.firstlast)
@@ -271,7 +323,9 @@ class TestWindowGenerator(unittest.TestCase):
 
     def test_firstlast_slices(self):
         # test also the indexing versus direct slicing
-        my_sig = np.random.rand(500,)
+        my_sig = np.random.rand(
+            500,
+        )
         wg = utils.WindowGenerator(ns=500, nswin=100, overlap=50)
         # 1) get the window by
         my_rms = np.zeros((wg.nwin,))
@@ -298,7 +352,9 @@ class TestWindowGenerator(unittest.TestCase):
 class TestFrontDetection(unittest.TestCase):
     def test_rises_falls(self):
         # test 1D case with a long pulse and a dirac
-        a = np.zeros(500,)
+        a = np.zeros(
+            500,
+        )
         a[80:120] = 1
         a[200] = 1
         # rising fronts
@@ -317,13 +373,19 @@ class TestFrontDetection(unittest.TestCase):
         a[1, 280:320] = 1
         a[1, 400] = 1
         # rising fronts
-        self.assertTrue(np.all(utils.rises(a) == np.array([[0, 0, 1, 1], [80, 200, 280, 400]])))
+        self.assertTrue(
+            np.all(utils.rises(a) == np.array([[0, 0, 1, 1], [80, 200, 280, 400]]))
+        )
         # falling fronts
-        self.assertTrue(np.all(utils.falls(a) == np.array([[0, 0, 1, 1], [120, 201, 320, 401]])))
+        self.assertTrue(
+            np.all(utils.falls(a) == np.array([[0, 0, 1, 1], [120, 201, 320, 401]]))
+        )
         # both
         ind, val = utils.fronts(a)
         self.assertTrue(all(ind[0] == np.array([0, 0, 0, 0, 1, 1, 1, 1])))
-        self.assertTrue(all(ind[1] == np.array([80, 120, 200, 201, 280, 320, 400, 401])))
+        self.assertTrue(
+            all(ind[1] == np.array([80, 120, 200, 201, 280, 320, 400, 401]))
+        )
         self.assertTrue(all(val == np.array([1, -1, 1, -1, 1, -1, 1, -1])))
 
     def test_rises_analog(self):
@@ -334,7 +396,6 @@ class TestFrontDetection(unittest.TestCase):
 
 
 class TestVoltage(unittest.TestCase):
-
     def test_fk(self):
         """
         creates a couple of plane waves and separate them using the velocity HP filter
@@ -348,19 +409,34 @@ class TestVoltage(unittest.TestCase):
         data_v2 = fourier.fshift(data, offset / v2 / sr)
 
         noise = np.random.randn(ntr, ns) / 60
-        fk = voltage.fk(data_v1 + data_v2 + noise, si=sr, dx=dx, vbounds=[1200, 1500],
-                        ntr_pad=10, ntr_tap=15, lagc=.25)
-        fknoise = voltage.fk(noise, si=sr, dx=dx, vbounds=[1200, 1500],
-                             ntr_pad=10, ntr_tap=15, lagc=.25)
+        fk = voltage.fk(
+            data_v1 + data_v2 + noise,
+            si=sr,
+            dx=dx,
+            vbounds=[1200, 1500],
+            ntr_pad=10,
+            ntr_tap=15,
+            lagc=0.25,
+        )
+        fknoise = voltage.fk(
+            noise, si=sr, dx=dx, vbounds=[1200, 1500], ntr_pad=10, ntr_tap=15, lagc=0.25
+        )
         # at least 90% of the traces should be below 50dB and 98% below 40 dB
-        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -50) > .9
-        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > .98
+        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -50) > 0.9
+        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > 0.98
         # test the K option
         kbands = np.sin(np.arange(ns) / ns * 8 * np.pi) / 10
-        fkk = voltage.fk(data_v1 + data_v2 + kbands, si=sr, dx=dx, vbounds=[1200, 1500],
-                         ntr_pad=40, ntr_tap=15, lagc=.25,
-                         kfilt={'bounds': [0, .01], 'btype': 'hp'})
-        assert np.mean(20 * np.log10(utils.rms(fkk - data_v1)) < -40) > .9
+        fkk = voltage.fk(
+            data_v1 + data_v2 + kbands,
+            si=sr,
+            dx=dx,
+            vbounds=[1200, 1500],
+            ntr_pad=40,
+            ntr_tap=15,
+            lagc=0.25,
+            kfilt={"bounds": [0, 0.01], "btype": "hp"},
+        )
+        assert np.mean(20 * np.log10(utils.rms(fkk - data_v1)) < -40) > 0.9
         # from easyqc.gui import viewseis
         # a = viewseis(data_v1 + data_v2 + kbands, .002, title='input')
         # b = viewseis(fkk, .002, title='output')
@@ -368,24 +444,57 @@ class TestVoltage(unittest.TestCase):
 
 
 class TestCadzow(unittest.TestCase):
-
     def test_trajectory_matrixes(self):
-        assert np.all(cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]]))
+        assert np.all(
+            cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]])
+        )
         assert np.all(cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]]))
 
 
 class TestStack(unittest.TestCase):
-
     def test_simple_stack(self):
         ntr, ns = (24, 400)
         data = np.zeros((ntr, ns), dtype=np.float32)
         word = np.flipud(np.floor(np.arange(ntr) / 3))
         data += word[:, np.newaxis] * 10
         stack, fold = voltage.stack(data, word=word)
-        assert (np.all(fold == 3))
-        assert (np.all(np.squeeze(np.unique(stack, axis=-1)) == np.arange(8) * 10))
+        assert np.all(fold == 3)
+        assert np.all(np.squeeze(np.unique(stack, axis=-1)) == np.arange(8) * 10)
         # test with a header
-        header = {'toto': np.random.randn(ntr)}
+        header = {"toto": np.random.randn(ntr)}
         stack, hstack = voltage.stack(data, word=word, header=header)
-        assert (list(hstack.keys()) == ['toto', 'fold'])
-        assert (np.all(hstack['fold'] == 3))
+        assert list(hstack.keys()) == ["toto", "fold"]
+        assert np.all(hstack["fold"] == 3)
+
+
+class TestSpikeTrains(unittest.TestCase):
+    def test_spikes_venn3(self):
+        rng = np.random.default_rng()
+        # make sure each 'spiketrain' goes up to around 30000 samples
+        samples_tuple = (
+            np.cumsum(rng.poisson(30, 1000)),
+            np.cumsum(rng.poisson(20, 1500)),
+            np.cumsum(rng.poisson(15, 2000)),
+        )
+        # used reduced number of channels for speed and to increase collision chance
+        channels_tuple = (
+            rng.integers(20, size=(1000,)),
+            rng.integers(20, size=(1500,)),
+            rng.integers(20, size=(2000,)),
+        )
+        # check that spikes have been accounted for exactly once
+        venn_info = spiketrains.spikes_venn3(
+            samples_tuple, channels_tuple, num_channels=20
+        )
+        assert (
+            venn_info["100"] + venn_info["101"] + venn_info["110"] + venn_info["111"]
+            == 1000
+        )
+        assert (
+            venn_info["010"] + venn_info["011"] + venn_info["110"] + venn_info["111"]
+            == 1500
+        )
+        assert (
+            venn_info["001"] + venn_info["101"] + venn_info["011"] + venn_info["111"]
+            == 2000
+        )
