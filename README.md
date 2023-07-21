@@ -42,9 +42,8 @@ https://doi.org/10.6084/m9.figshare.19705522
 Pypi Release checklist:
 ```shell
 flake8
-rm -fR dist
-rm -fR build
-python setup.py sdist bdist_wheel
-twine upload dist/*
-#twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+git tag -a vX.Y.Z
+git push origin vX.Y.Z
 ```
+
+Create new release with tag vX.Y.Z (will automatically publish to PyPI)
