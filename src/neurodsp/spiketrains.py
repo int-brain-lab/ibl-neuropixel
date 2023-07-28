@@ -8,13 +8,13 @@ _logger.setLevel("INFO")
 
 
 def spikes_venn2(
-        samples_tuple,
-        channels_tuple,
-        samples_binsize=None,
-        channels_binsize=4,
-        fs=30000,
-        num_channels=384,
-        chunk_size=None,
+    samples_tuple,
+    channels_tuple,
+    samples_binsize=None,
+    channels_binsize=4,
+    fs=30000,
+    num_channels=384,
+    chunk_size=None,
 ):
     assert len(samples_tuple) == 2, "Must have 2 sets of samples."
     assert len(channels_tuple) == 2, "Must have 2 sets of channels."
@@ -23,8 +23,16 @@ def spikes_venn2(
     ), "Samples and channels must match for each sorter."
 
     num_sorters = 2
-    return _spikes_venn(samples_tuple, channels_tuple, samples_binsize, channels_binsize,
-                        fs, num_channels, chunk_size, num_sorters)
+    return _spikes_venn(
+        samples_tuple,
+        channels_tuple,
+        samples_binsize,
+        channels_binsize,
+        fs,
+        num_channels,
+        chunk_size,
+        num_sorters,
+    )
 
 
 def spikes_venn3(
@@ -60,10 +68,7 @@ def spikes_venn3(
     ), "Samples and channels must match for each sorter."
 
     num_sorters = 3
-    return _spikes_venn(samples_tuple, channels_tuple, samples_binsize, channels_binsize,
-                        fs, num_channels, chunk_size, num_sorters)
-
-def _spikes_venn(
+    return _spikes_venn(
         samples_tuple,
         channels_tuple,
         samples_binsize,
@@ -71,9 +76,20 @@ def _spikes_venn(
         fs,
         num_channels,
         chunk_size,
-        num_sorters
-        ):
-    
+        num_sorters,
+    )
+
+
+def _spikes_venn(
+    samples_tuple,
+    channels_tuple,
+    samples_binsize,
+    channels_binsize,
+    fs,
+    num_channels,
+    chunk_size,
+    num_sorters,
+):
     if not samples_binsize:
         # set default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)

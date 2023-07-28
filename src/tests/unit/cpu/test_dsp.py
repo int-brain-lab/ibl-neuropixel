@@ -519,4 +519,3 @@ class TestSpikeTrains(unittest.TestCase):
 
         assert venn_info["10"] + venn_info["11"] == 1000
         assert venn_info["01"] + venn_info["11"] == 1500
-        
