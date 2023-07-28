@@ -1,10 +1,51 @@
 import numpy as np
 from iblutil.numerical import bincount2D
 import tqdm
-import logging
 
-_logger = logging.getLogger("ibllib")
-_logger.setLevel("INFO")
+
+def spikes_venn2(
+    samples_tuple,
+    channels_tuple,
+    samples_binsize=None,
+    channels_binsize=4,
+    fs=30000,
+    num_channels=384,
+    chunk_size=None,
+):
+    """
+    Given a set of spikes found by two different spike sorters over the same snippet,
+    return the venn diagram counts as a dictionary suitable for the `subsets` arg of
+    `matplotlib_venn.venn2()`. "10" represents the number of spikes found by sorter 1
+    but not the second sorter, "11" represents the number of spikes found by both
+    sorters, etc. The algorithm works by binning in the time and channel dimensions and
+    counting spikes found by different sorters within the same bins.
+
+    :param samples_tuple: A tuple of 2 sample times of spikes (each a 1D NumPy array).
+    :param channels_tuple: A tuple of 2 channel locations of spikes (each a 1D NumPy array).
+    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
+    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
+    :param fs: Sampling rate (Hz). Defaults to 30000.
+    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 20 seconds.
+    :return: dict containing venn diagram spike counts for the spike sorters.
+    """
+    assert len(samples_tuple) == 2, "Must have 2 sets of samples."
+    assert len(channels_tuple) == 2, "Must have 2 sets of channels."
+    assert all(
+        samples_tuple[i].shape == channels_tuple[i].shape for i in range(2)
+    ), "Samples and channels must match for each sorter."
+
+    num_sorters = 2
+    return _spikes_venn(
+        samples_tuple,
+        channels_tuple,
+        samples_binsize,
+        channels_binsize,
+        fs,
+        num_channels,
+        chunk_size,
+        num_sorters,
+    )
 
 
 def spikes_venn3(
@@ -39,6 +80,32 @@ def spikes_venn3(
         samples_tuple[i].shape == channels_tuple[i].shape for i in range(3)
     ), "Samples and channels must match for each sorter."
 
+    num_sorters = 3
+    return _spikes_venn(
+        samples_tuple,
+        channels_tuple,
+        samples_binsize,
+        channels_binsize,
+        fs,
+        num_channels,
+        chunk_size,
+        num_sorters,
+    )
+
+
+def _spikes_venn(
+    samples_tuple,
+    channels_tuple,
+    samples_binsize,
+    channels_binsize,
+    fs,
+    num_channels,
+    chunk_size,
+    num_sorters,
+):
+    """
+    Internal spike venn generation for n sorters.
+    """
     if not samples_binsize:
         # set default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
@@ -54,11 +121,11 @@ def spikes_venn3(
 
     # each spike falls into one of 7 conditions based on whether it was found
     # by different sortings
-    cond_names = ["100", "010", "110", "001", "101", "011", "111"]
-    pre_result = np.zeros(7, int)
-    vec = np.array([1, 2, 4])
+    cond_names = [format(i, f"0{num_sorters}b") for i in range(1, 2**num_sorters)]
+    pre_result = np.zeros(2**num_sorters - 1, int)
+    vec = np.array([2**i for i in range(num_sorters - 1, -1, -1)])
 
-    _logger.info(f"Running spike venning routine with {num_chunks} chunks.")
+    print(f"Running spike venning routine with {num_chunks} chunks.")
     for ch in tqdm.tqdm(range(num_chunks)):
         # select spikes within this chunk's time snippet
         sample_offset = ch * chunk_size
@@ -91,7 +158,7 @@ def spikes_venn3(
                     [0, chunk_size],
                     [0, num_channels],
                 )[0].flatten()
-                for i in range(3)
+                for i in range(num_sorters)
             ]
         )
 
