@@ -1,10 +1,6 @@
 import numpy as np
 from iblutil.numerical import bincount2D
 import tqdm
-import logging
-
-_logger = logging.getLogger("neurodsp")
-_logger.setLevel("INFO")
 
 
 def spikes_venn2(
@@ -129,7 +125,7 @@ def _spikes_venn(
     pre_result = np.zeros(2**num_sorters - 1, int)
     vec = np.array([2**i for i in range(num_sorters - 1, -1, -1)])
 
-    _logger.info(f"Running spike venning routine with {num_chunks} chunks.")
+    print(f"Running spike venning routine with {num_chunks} chunks.")
     for ch in tqdm.tqdm(range(num_chunks)):
         # select spikes within this chunk's time snippet
         sample_offset = ch * chunk_size
