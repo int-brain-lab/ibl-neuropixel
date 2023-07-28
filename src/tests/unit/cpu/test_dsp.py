@@ -498,3 +498,25 @@ class TestSpikeTrains(unittest.TestCase):
             venn_info["001"] + venn_info["101"] + venn_info["011"] + venn_info["111"]
             == 2000
         )
+
+    def test_spikes_venn2(self):
+        rng = np.random.default_rng()
+
+        # make sure each 'spiketrain' goes up to around 30000 samples
+        samples_tuple = (
+            np.cumsum(rng.poisson(30, 1000)),
+            np.cumsum(rng.poisson(20, 1500)),
+        )
+        # used reduced number of channels for speed and to increase collision chance
+        channels_tuple = (
+            rng.integers(20, size=(1000,)),
+            rng.integers(20, size=(1500,)),
+        )
+
+        venn_info = spiketrains.spikes_venn2(
+            samples_tuple, channels_tuple, num_channels=20
+        )
+
+        assert venn_info["10"] + venn_info["11"] == 1000
+        assert venn_info["01"] + venn_info["11"] == 1500
+        

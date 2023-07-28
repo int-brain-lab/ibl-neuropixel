@@ -91,7 +91,7 @@ def _spikes_venn(
     # by different sortings
     cond_names = [format(i, f"0{num_sorters}b") for i in range(1, 2**num_sorters)]
     pre_result = np.zeros(2**num_sorters - 1, int)
-    vec = np.array([2**i for i in range(num_sorters)])
+    vec = np.array([2**i for i in range(num_sorters - 1, -1, -1)])
 
     _logger.info(f"Running spike venning routine with {num_chunks} chunks.")
     for ch in tqdm.tqdm(range(num_chunks)):
