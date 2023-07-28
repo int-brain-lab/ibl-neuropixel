@@ -16,6 +16,23 @@ def spikes_venn2(
     num_channels=384,
     chunk_size=None,
 ):
+    """
+    Given a set of spikes found by two different spike sorters over the same snippet,
+    return the venn diagram counts as a dictionary suitable for the `subsets` arg of
+    `matplotlib_venn.venn2()`. "10" represents the number of spikes found by sorter 1
+    but not the second sorter, "11" represents the number of spikes found by both
+    sorters, etc. The algorithm works by binning in the time and channel dimensions and
+    counting spikes found by different sorters within the same bins.
+
+    :param samples_tuple: A tuple of 2 sample times of spikes (each a 1D NumPy array).
+    :param channels_tuple: A tuple of 2 channel locations of spikes (each a 1D NumPy array).
+    :param samples_binsize: Size of sample bins in number of samples. Defaults to 0.4 ms.
+    :param channels_binsize: Size of channel bins in number of channels. Defaults to 4.
+    :param fs: Sampling rate (Hz). Defaults to 30000.
+    :param num_channels: Total number of channels where spikes appear. Defaults to 384.
+    :param chunk_size: Chunk size to process spike data (in samples). Defaults to 20 seconds.
+    :return: dict containing venn diagram spike counts for the spike sorters.
+    """
     assert len(samples_tuple) == 2, "Must have 2 sets of samples."
     assert len(channels_tuple) == 2, "Must have 2 sets of channels."
     assert all(
@@ -90,6 +107,9 @@ def _spikes_venn(
     chunk_size,
     num_sorters,
 ):
+    """
+    Internal spike venn generation for n sorters.
+    """
     if not samples_binsize:
         # set default: 0.4 ms
         samples_binsize = int(0.4 * fs / 1000)
