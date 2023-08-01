@@ -385,9 +385,9 @@ def decompress_destripe_cbin(
     h=None,
     wrot=None,
     append=False,
-    nc_out=None,
+    save_sync_channels=False,
     butter_kwargs=None,
-    dtype=np.int16,
+    dtype=np.float32,
     ns2add=0,
     nbatch=None,
     nprocesses=None,
@@ -400,16 +400,17 @@ def decompress_destripe_cbin(
 ):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
-    Saves output as a flat binary file in int16
-    Production version with optimized FFTs - requires pyfftw
-    :param sr: seismic reader object (spikeglx.Reader)
+    Saves output as a flat binary file in float32 by default.
+    Production version with optimized FFTs - requires pyfftw.
+
+    :param sr_file: Path to a mtscomp-compressed .cbin file.
     :param output_file: (optional, defaults to .bin extension of the compressed bin file)
     :param h: (optional) neuropixel trace header. Dictionary with key 'sample_shift'
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
-    :param nc_out: (optional, True) saves non selected channels (synchronisation trace) in output
-    :param butterworth filter parameters: {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
-    :param dtype: (optional, np.int16) output sample format
+    :param save_sync_channels: (optional, False) saves non selected channels (synchronisation trace) in output
+    :param butter_kwargs: Keyword arguments to scipy.signal.butter. By default, {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}.
+    :param dtype: (optional, np.float32) Datatype to cast output.
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
     :param nbatch: (optional) batch size
@@ -423,53 +424,94 @@ def decompress_destripe_cbin(
     :param output_qc_path: (None) if specified, will save the QC rms in a different location than the output
     :return:
     """
-    import pyfftw
+    # confirm pyfftw installed.
+    try:
+        import pyfftw
+    except ImportError as e:
+        raise RuntimeError(
+            "Failed to import pyfftw. decompress_destripe_cbin() requires pyfftw."
+        )
 
-    SAMPLES_TAPER = 1024
-    NBATCH = nbatch or 65536
-    # handles input parameters
-    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
-    sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
-    if reject_channels:  # get bad channels if option is on
-        channel_labels = detect_bad_channels_cbin(sr)
-    assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
-        sr.fs, butter_kwargs, k_kwargs, k_filter
-    )
-    h = sr.geometry if h is None else h
-    ncv = h["sample_shift"].size  # number of channels
+    # file I/O
+    assert isinstance(sr_file, str) or isinstance(
+        sr_file, Path
+    ), "Input file must be str or Path."
     output_file = (
         sr.file_bin.with_suffix(".bin") if output_file is None else Path(output_file)
     )
-    assert output_file != sr.file_bin
-    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
-    # create the FFT stencils
-    nc_out = nc_out or sr.nc
-    # compute LP filter coefficients
-    sos = scipy.signal.butter(**butter_kwargs, output="sos")
-    nbytes = dtype(1).nbytes
+    assert output_file != sr.file_bin, "Output filename is identical to input filename."
+    if append:
+        assert (
+            output_file.exists()
+        ), f"Append mode specified but output file {output_file} does not exist."
+
+    # important information for writing the output binary file
+    nbytes = dtype(1).nbytes  # 4 for float32
+    if append:
+        # need to find the end of the file and the offset
+        offset = Path(output_file).stat().st_size
+    else:
+        offset = 0
+        # create empty output file
+        open(output_file, "wb").close()
+
+    # create spikeglx Reader object with provided kwargs
+    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
+    sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
+
+    # detect & interpolate bad channels and account for sr sync channel
+    if reject_channels:
+        channel_labels = detect_bad_channels_cbin(sr)
+        channel_labels_file = output_file.parent.joinpath("channel_labels.npy")
+        np.save(channel_labels_file, channel_labels.astype(int))
+    # remove sync channel(s) by default
+    nc_out = sr.nc if save_sync_channels else sr.nc - sr.nsync
+
+    # get channel geometry from Reader
+    h = sr.geometry if h is None else h
+    ncv = h["sample_shift"].size  # number of channels
+
+    # parallel processing parameters
+    NBATCH = nbatch or 65536
     nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
+    CHUNK_SIZE = int(sr.ns / nprocesses)
+
+    # Create samples taper
+    SAMPLES_TAPER = 1024
+    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
+
+    # Create Butterworth filter
+    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
+        sr.fs, butter_kwargs, k_kwargs, k_filter
+    )
+    sos = scipy.signal.butter(**butter_kwargs, output="sos")
+
+    # Create PyFFTW object
     win = pyfftw.empty_aligned((ncv, NBATCH), dtype="float32")
     WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype="complex64")
     fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction="FFTW_FORWARD", threads=4)
+
+    # Create dephasing array
     dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
     dephas[:, 1] = 1.0
     DEPHAS = np.exp(
         1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
     )
 
-    # save bad channels array
-    if reject_channels:
-        channel_labels_file = output_file.parent.joinpath("channel_labels.npy")
-        np.save(channel_labels_file, channel_labels.astype(int))
-
-    # if we want to compute the rms ap across the session
+    # handle rms files, create new or append to existing
     if compute_rms:
         ap_rms_file = output_file.parent.joinpath("ap_rms.bin")
         ap_time_file = output_file.parent.joinpath("ap_time.bin")
         rms_nbytes = np.float32(1).nbytes
 
         if append:
+            # compute offsets for appending to RMS files
+            assert (
+                ap_rms_file.exists()
+            ), f"compute_rms and append flags were set but RMS file {ap_rms_file} does not exist."
+            assert (
+                ap_time_file.exists()
+            ), f"compute_rms and append flags were set but time file {ap_time_file} does not exist."
             rms_offset = Path(ap_rms_file).stat().st_size
             time_offset = Path(ap_time_file).stat().st_size
             with open(ap_time_file, "rb") as tid:
@@ -477,30 +519,21 @@ def decompress_destripe_cbin(
             time_data = np.frombuffer(t, dtype=np.float32)
             t0 = time_data[-1]
         else:
+            # create empty RMS files
             rms_offset = 0
             time_offset = 0
             t0 = 0
             open(ap_rms_file, "wb").close()
             open(ap_time_file, "wb").close()
 
-    if append:
-        # need to find the end of the file and the offset
-        offset = Path(output_file).stat().st_size
-    else:
-        offset = 0
-        open(output_file, "wb").close()
-
-    # chunks to split the file into, dependent on number of parallel processes
-    CHUNK_SIZE = int(sr.ns / nprocesses)
-
-    def my_function(i_chunk, n_chunk):
+    def decompress_destripe_chunk(i_chunk):
         _sr = spikeglx.Reader(sr_file, **reader_kwargs)
 
         n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
         first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
 
         # Find the maximum sample for each chunk
-        max_s = _sr.ns if i_chunk == n_chunk - 1 else (i_chunk + 1) * CHUNK_SIZE
+        max_s = _sr.ns if i_chunk == nprocesses - 1 else (i_chunk + 1) * CHUNK_SIZE
         # need to redefine this here to avoid 4 byte boundary error
         win = pyfftw.empty_aligned((ncv, NBATCH), dtype="float32")
         WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype="complex64")
@@ -590,7 +623,7 @@ def decompress_destripe_cbin(
                 break
 
     _ = Parallel(n_jobs=nprocesses)(
-        delayed(my_function)(i, nprocesses) for i in range(nprocesses)
+        delayed(decompress_destripe_chunk)(i) for i in range(nprocesses)
     )
     sr.close()
 
