@@ -64,13 +64,13 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
 
         out_file = self.file_path.parent.joinpath('one_process.bin')
         shutil.copy(self.meta_file, out_file.with_suffix('.meta'))
-        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=1, nbatch=6556)
+        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=1, batch_size=6556)
         sr_one = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_one)
 
         out_file = self.file_path.parent.joinpath('four_process.bin')
         shutil.copy(self.meta_file, out_file.with_suffix('.meta'))
-        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, nbatch=6556)
+        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, batch_size=6556)
         sr_four = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_four)
         assert np.array_equal(sr_one[:, :], sr_four[:, :])
@@ -79,7 +79,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         out_file = self.file_path.parent.joinpath('four_process_extra.bin')
         shutil.copy(self.meta_file, out_file.with_suffix('.meta'))
         ns2add = 100
-        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, nbatch=6556, ns2add=ns2add)
+        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, batch_size=6556, ns2add=ns2add)
         sr_four_extra = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_four_extra)
         assert sr_four_extra.ns == sr_four.ns + ns2add
@@ -90,7 +90,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         wm = np.identity(sr_one.nc - 1)
         out_file = self.file_path.parent.joinpath('four_process_whiten.bin')
         shutil.copy(self.meta_file, out_file.with_suffix('.meta'))
-        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, nbatch=6556, wrot=wm)
+        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, batch_size=6556, wrot=wm)
         sr_four_whiten = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_four_whiten)
         assert np.array_equal(sr_four_whiten._raw[:, :-1], sr_four._raw[:, :-1])
@@ -98,7 +98,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         # Now test appending on the the end of an existing file
         out_file = self.file_path.parent.joinpath('four_process.bin')
         shutil.copy(self.meta_file, out_file.with_suffix('.meta'))
-        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, nbatch=6556, append=True)
+        voltage.decompress_destripe_cbin(self.file_path, out_file, nprocesses=4, batch_size=6556, append=True)
         sr_four_append = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_four_append)
         assert sr_four_append.ns == 2 * sr_four.ns

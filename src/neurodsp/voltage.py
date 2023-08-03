@@ -389,7 +389,7 @@ def decompress_destripe_cbin(
     butter_kwargs=None,
     dtype=np.float32,
     ns2add=0,
-    nbatch=None,
+    batch_size=None,
     nprocesses=None,
     compute_rms=True,
     reject_channels=True,
@@ -413,7 +413,7 @@ def decompress_destripe_cbin(
     :param dtype: (optional, np.float32) Datatype to cast output.
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
-    :param nbatch: (optional) batch size
+    :param batch_size: (optional, 65536) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
      interp 3:outside of brain and discard
     :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
@@ -439,7 +439,7 @@ def decompress_destripe_cbin(
     output_file = (
         sr.file_bin.with_suffix(".bin") if output_file is None else Path(output_file)
     )
-    assert output_file != sr.file_bin, "Output filename is identical to input filename."
+    assert output_file != sr_file, "Output filename is identical to input filename."
     if append:
         assert (
             output_file.exists()
@@ -472,7 +472,8 @@ def decompress_destripe_cbin(
     ncv = h["sample_shift"].size  # number of channels
 
     # parallel processing parameters
-    NBATCH = nbatch or 65536
+    BATCH_SIZE = batch_size or 65536
+    # max number of processes
     nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
     CHUNK_SIZE = int(sr.ns / nprocesses)
 
@@ -487,12 +488,12 @@ def decompress_destripe_cbin(
     sos = scipy.signal.butter(**butter_kwargs, output="sos")
 
     # Create PyFFTW object
-    win = pyfftw.empty_aligned((ncv, NBATCH), dtype="float32")
-    WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype="complex64")
+    win = pyfftw.empty_aligned((ncv, BATCH_SIZE), dtype="float32")
+    WIN = pyfftw.empty_aligned((ncv, int(BATCH_SIZE / 2 + 1)), dtype="complex64")
     fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction="FFTW_FORWARD", threads=4)
 
     # Create dephasing array
-    dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
+    dephas = np.zeros((ncv, BATCH_SIZE), dtype=np.float32)
     dephas[:, 1] = 1.0
     DEPHAS = np.exp(
         1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
@@ -529,14 +530,14 @@ def decompress_destripe_cbin(
     def decompress_destripe_chunk(i_chunk):
         _sr = spikeglx.Reader(sr_file, **reader_kwargs)
 
-        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
-        first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
+        n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / BATCH_SIZE))
+        first_s = (BATCH_SIZE - SAMPLES_TAPER * 2) * n_batch
 
         # Find the maximum sample for each chunk
         max_s = _sr.ns if i_chunk == nprocesses - 1 else (i_chunk + 1) * CHUNK_SIZE
         # need to redefine this here to avoid 4 byte boundary error
-        win = pyfftw.empty_aligned((ncv, NBATCH), dtype="float32")
-        WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype="complex64")
+        win = pyfftw.empty_aligned((ncv, BATCH_SIZE), dtype="float32")
+        WIN = pyfftw.empty_aligned((ncv, int(BATCH_SIZE / 2 + 1)), dtype="complex64")
         fft_object = pyfftw.FFTW(
             win, WIN, axes=(1,), direction="FFTW_FORWARD", threads=4
         )
@@ -561,7 +562,7 @@ def decompress_destripe_cbin(
                 tid.seek(time_offset + (n_batch * rms_nbytes))
 
         while True:
-            last_s = np.minimum(NBATCH + first_s, _sr.ns)
+            last_s = np.minimum(BATCH_SIZE + first_s, _sr.ns)
             # Apply tapers
             chunk = _sr[first_s:last_s, :ncv].T
             chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
@@ -569,11 +570,11 @@ def decompress_destripe_cbin(
             # Apply filters
             chunk = scipy.signal.sosfiltfilt(sos, chunk)
             # Find the indices to save
-            ind2save = [SAMPLES_TAPER, NBATCH - SAMPLES_TAPER]
+            ind2save = [SAMPLES_TAPER, BATCH_SIZE - SAMPLES_TAPER]
             if last_s == _sr.ns:
                 # for the last batch just use the normal fft as the stencil doesn't fit
                 chunk = fourier.fshift(chunk, s=h["sample_shift"])
-                ind2save[1] = NBATCH
+                ind2save[1] = BATCH_SIZE
             else:
                 # apply precomputed fshift of the proper length
                 chunk = ifft_object(fft_object(chunk) * DEPHAS)
@@ -608,7 +609,7 @@ def decompress_destripe_cbin(
             if wrot is not None:
                 chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
             chunk[:, :nc_out].astype(dtype).tofile(fid)
-            first_s += NBATCH - SAMPLES_TAPER * 2
+            first_s += BATCH_SIZE - SAMPLES_TAPER * 2
 
             if last_s >= max_s:
                 if last_s == _sr.ns:
@@ -625,6 +626,7 @@ def decompress_destripe_cbin(
     _ = Parallel(n_jobs=nprocesses)(
         delayed(decompress_destripe_chunk)(i) for i in range(nprocesses)
     )
+
     sr.close()
 
     # Here convert the ap_rms bin files to the ibl format and save
