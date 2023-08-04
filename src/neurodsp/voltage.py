@@ -877,7 +877,8 @@ def decompress_destripe_cbin_snippet(
         # fill in beginning patch to avoid taper
         if job_id == 0 and s_start > SAMPLES_TAPER:
             # backfills the first 1024 samples by shifting window
-            run_segment(start - SAMPLES_TAPER, end - SAMPLES_TAPER, -1)
+            fout.seek(0)
+            run_segment(s_start, s_start + batch_size, -1)
 
         fout.close()
 
