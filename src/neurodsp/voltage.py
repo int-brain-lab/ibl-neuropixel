@@ -16,6 +16,9 @@ import neuropixel
 import neurodsp.fourier as fourier
 import neurodsp.utils as utils
 
+import logging
+import traceback
+
 
 def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
     """
@@ -409,7 +412,8 @@ def decompress_destripe_cbin(
     :param wrot: (optional) whitening matrix [nc x nc] or amplitude scalar to apply to the output
     :param append: (optional, False) for chronic recordings, append to end of file
     :param save_sync_channels: (optional, False) saves non selected channels (synchronisation trace) in output
-    :param butter_kwargs: Keyword arguments to scipy.signal.butter. By default, {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}.
+    :param butter_kwargs: Keyword arguments to scipy.signal.butter.
+    By default, {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}.
     :param dtype: (optional, np.float32) Datatype to cast output.
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
@@ -427,10 +431,14 @@ def decompress_destripe_cbin(
     # confirm pyfftw installed.
     try:
         import pyfftw
-    except ImportError as e:
+    except ImportError:
         raise RuntimeError(
             "Failed to import pyfftw. decompress_destripe_cbin() requires pyfftw."
         )
+
+    # create spikeglx Reader object with provided kwargs
+    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
+    sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
 
     # file I/O
     assert isinstance(sr_file, str) or isinstance(
@@ -454,10 +462,6 @@ def decompress_destripe_cbin(
         offset = 0
         # create empty output file
         open(output_file, "wb").close()
-
-    # create spikeglx Reader object with provided kwargs
-    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
-    sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
 
     # detect & interpolate bad channels and account for sr sync channel
     if reject_channels:
@@ -643,6 +647,241 @@ def decompress_destripe_cbin(
         np.save(
             output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
         )
+
+
+def decompress_destripe_cbin_snippet(
+    sr_file,
+    output_file,
+    s_start,
+    s_end,
+    log=False,
+):
+    """
+    Pared-down version of decompress_destripe_cbin suitable for extracting
+    and destriping 1-10 minutes of data from an mtscomp compressed cbin file
+    and saving to flat float32 binary. Optimized to run on a single 48-core node and not
+    tested for > 10 minute snippets. Does not provide the customizable options of
+    decompress_destripe_cbin.
+
+    Uses a default Butterworth low-cut filter, applies ADC shifts, detects and interpolates
+    bad channels, and applies a spatial filter.
+
+    Runs in parallel on batches with a hardcoded size of 65536 samples. If `s_start`
+    is greater than 1024 samples into the file, an extra batch is run to fill in the
+    beginning of the traces using the 1024 samples prior to `s_start`.
+
+    Recommended SLURM parameters:
+
+    ```
+    #!/bin/bash
+    #SBATCH --job-name="destripe"
+    #SBATCH --cpus-per-task=48
+    #SBATCH --time=00:10:00
+    #SBATCH --nodes=1
+    ```
+
+    :param sr_file: Path to a mtscomp compressed cbin file.
+    :param output_file: Path to an output binary file.
+    :s_start: Starting time in samples.
+    :s_end: Ending time in samples.
+    :log: (optional, False) Create logs for each job spawned under `destripe_logs`
+        in the output file's directory.
+    """
+    # confirm pyfftw installed.
+    try:
+        import pyfftw
+    except ImportError:
+        raise RuntimeError(
+            "Failed to import pyfftw. decompress_destripe_cbin() requires pyfftw."
+        )
+
+    # Setup dtype for writing to binary
+    dtype = np.float32
+    nbytes = dtype(1).itemsize
+
+    # Create output file
+    open(output_file, "wb").close()
+
+    with spikeglx.Reader(sr_file) as sr:
+        h = sr.geometry
+        fs = sr.fs
+        # Detect bad channels for interpolation
+        channel_labels = detect_bad_channels_cbin(sr)
+    num_channels = h["sample_shift"].size
+
+    if log:
+        log_dir = output_file.parent / "destripe_log"
+        log_dir.mkdir(exist_ok=True)
+
+    # Length of snippet
+    s_length = s_end - s_start
+
+    if s_length > sr.fs * 600:  # 10 minutes
+        print(
+            "WARNING: You are trying to destripe a snippet greater than 10 minutes in"
+            "length, which may be inefficient and/or create too many jobs"
+            "for your CPU."
+        )
+
+    #### PARALLEL PROCESSING
+    SAMPLES_TAPER = 1024
+    batch_size = 65536 - SAMPLES_TAPER * 2
+    num_batches = s_length // batch_size + 1
+
+    print(f"num_batches: {num_batches}")
+
+    # assign batches per job
+    # Timing / CPU heuristics
+    if s_length > sr.fs * 60 * 5:  # >5 minutes
+        num_batches_per_job = 6  # Will spawn 48 jobs for 10 minutes
+    elif s_length > sr.fs * 60:  # >1 minute
+        num_batches_per_job = 4  # Will spawn 36 jobs for 5 minutes
+    elif s_length > batch_size:  # <= 1 minute
+        num_batches_per_job = 1  # Will spawn 29 jobs for 1 minute
+    else:
+        raise RuntimeError("Cannot destripe less than batch size")
+
+    num_jobs = num_batches // num_batches_per_job + 1
+
+    print(f"num_jobs: {num_jobs}")
+
+    ## assign batches per job
+    batches_per_job = [[] for i in range(num_jobs)]
+    for i in range(num_jobs):
+        batches = [
+            b
+            for b in range(num_batches)
+            if b // num_batches_per_job < i + 1 and b // num_batches_per_job >= i
+        ]
+        batches_per_job[i] = batches
+        print(f"Job {i}: batches {batches}")
+
+    ## assign start and end samples per batch
+    ranges_per_batch = [[] for i in range(num_batches)]
+    for i in range(num_batches):
+        start = s_start + i * batch_size + SAMPLES_TAPER
+        end = min(s_end, s_start + (i + 1) * batch_size + SAMPLES_TAPER)
+        ranges_per_batch[i] = [start, end]
+        print(f"Batch {i}: [{start}, {end-1}]. Length: {end - start + 1}")
+
+    # Edge taper for each batch
+    SAMPLES_TAPER = 1024
+    taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
+
+    # Create Butterworth filter
+    butter_kwargs = None
+    k_kwargs = None
+    k_filter = None
+    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
+        fs, butter_kwargs, k_kwargs, k_filter
+    )
+    sos = scipy.signal.butter(**butter_kwargs, output="sos")
+
+    def run_job(job_id):
+        print(f"Running job {job_id}")
+        _sr = spikeglx.Reader(sr_file, open=True)
+        fout = open(output_file, "r+b")
+
+        batches = batches_per_job[job_id]
+        if not batches:
+            return
+        seek_sample = ranges_per_batch[batches[0]][0]
+
+        if log:
+            logger = logging.getLogger(f"logger_{job_id}")
+            logger.addHandler(
+                logging.FileHandler(log_dir / f"log_{job_id}.txt", mode="w")
+            )
+            logger.setLevel("DEBUG")
+            logger.debug(f"Job {job_id}")
+            logger.debug(f"Working on batches {batches}")
+
+        win = pyfftw.empty_aligned(
+            (num_channels, batch_size + 2 * SAMPLES_TAPER), dtype="float32"
+        )
+        WIN = pyfftw.empty_aligned(
+            (num_channels, int((batch_size + 2 * SAMPLES_TAPER) / 2 + 1)),
+            dtype="complex64",
+        )
+        fft_object = pyfftw.FFTW(
+            win, WIN, axes=(1,), direction="FFTW_FORWARD", threads=4
+        )
+        ifft_object = pyfftw.FFTW(
+            WIN, win, axes=(1,), direction="FFTW_BACKWARD", threads=4
+        )
+
+        # Create dephasing array
+        dephas = np.zeros(
+            (num_channels, batch_size + 2 * SAMPLES_TAPER), dtype=np.float32
+        )
+        dephas[:, 1] = 1.0
+        DEPHAS = np.exp(
+            1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
+        )
+
+        if job_id == 0:
+            fout.seek(0)
+        else:
+            fout.seek((seek_sample - s_start) * num_channels * nbytes)
+
+        def run_segment(start, end, batch_number):
+            chunk = _sr[start - SAMPLES_TAPER: end + SAMPLES_TAPER, :num_channels].T
+            # apply taper to edges
+            chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
+            chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
+
+            # Highpass temporal filter
+            chunk = scipy.signal.sosfiltfilt(sos, chunk)
+
+            # Fourier shift
+            if batch_number == num_batches - 1:
+                chunk = fourier.fshift(chunk, s=h["sample_shift"])
+            else:
+                chunk = ifft_object(fft_object(chunk) * DEPHAS)
+
+            # interpolate bad channels
+            chunk = interpolate_bad_channels(
+                chunk, channel_labels, h["x"], h["y"]
+            )
+            inside_brain = np.where(channel_labels != 3)[0]
+
+            # apply highpass spatial filter ignoring channels outside brain
+            chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])
+
+            # chop off tapers
+            if batch_number == 0:
+                # save tapered beginning
+                ind2save = [0, batch_size + SAMPLES_TAPER]
+            elif batch_number == num_batches - 1:
+                # cut off the taper that was tacked on to the end
+                # of the last batch when loaded
+                ind2save = [SAMPLES_TAPER, -SAMPLES_TAPER]
+            else:
+                ind2save = [SAMPLES_TAPER, batch_size + SAMPLES_TAPER]
+
+            # add back in sync
+            chunk = np.r_[
+                chunk, _sr[start - SAMPLES_TAPER: end + SAMPLES_TAPER, num_channels:].T
+            ].T
+            # normalize
+            chunk = chunk[slice(*ind2save), :] * (1 / _sr.sample2volts)
+            chunk[:, :num_channels].astype(np.float32).tofile(fout)
+
+        for i, batch_number in enumerate(batches):
+            try:
+                start, end = ranges_per_batch[batch_number]
+                run_segment(start, end, batch_number)
+            except Exception:
+                if log:
+                    logger.exception(traceback.format_exc())
+        # fill in beginning patch to avoid taper
+        if job_id == 0 and s_start > SAMPLES_TAPER:
+            # backfills the first 1024 samples by shifting window
+            run_segment(start - SAMPLES_TAPER, end - SAMPLES_TAPER, -1)
+
+        fout.close()
+
+    _ = Parallel(n_jobs=num_jobs)(delayed(run_job)(i) for i in range(num_jobs))
 
 
 def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
