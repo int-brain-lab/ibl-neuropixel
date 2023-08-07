@@ -771,7 +771,7 @@ def decompress_destripe_cbin_snippet(
     # Create Butterworth filter
     butter_kwargs = None
     k_kwargs = None
-    k_filter = None
+    k_filter = True
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
         fs, butter_kwargs, k_kwargs, k_filter
     )
