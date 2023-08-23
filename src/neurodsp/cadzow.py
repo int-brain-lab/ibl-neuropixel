@@ -143,9 +143,7 @@ def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None, ovx=int(16), n
         else:
             gw = gain_window
         gain[firstx:lastx] += gw
-        T, it, itr, trcount = trajectory(x=x[firstx:lastx], y=y[firstx:lastx])
         array = WAV[firstx:lastx, :]
-        # print(firstx, lastx, x[firstx:lastx].shape, WAV[firstx:lastx, :].shape, T.shape)
         array = denoise(array, x=x[firstx:lastx], y=y[firstx:lastx], r=rank, imax=imax, niter=niter)
         WAV_[firstx:lastx, :] += array * gw[:, np.newaxis]
 

@@ -745,6 +745,8 @@ def current_source_density(lfp, h, method='diff', sigma=1 / 3):
         dx = np.median(np.diff(np.abs(xy[itr])))
         if method == 'diff':
             csd[itr[1:-1], :] = np.diff(lfp[itr, :].astype(np.float64), n=2, axis=0) / dx ** 2 * sigma
+            csd[itr[0], :] = csd[itr[1], :]
+            csd[itr[-1], :] = csd[itr[-2], :]
         elif method == 'kcsd':
             from kcsd import KCSD1D
             # here we could eventually expose the KCSD kwargs
