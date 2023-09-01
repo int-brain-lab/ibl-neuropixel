@@ -269,6 +269,14 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 ns=32, nc=2, sync_depth=8, int2volts=int2volts)
             self.assert_read_glx(nidq)
 
+    def test_read_geometry_new_version_2023_04(self):
+        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3B_version202304.ap.meta'))
+        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        for k in g_old.keys():
+            if k == 'flag':
+                continue
+            np.testing.assert_array_equal(g_new[k], g_old[k])
+
     def test_read_geometry(self):
 
         g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))

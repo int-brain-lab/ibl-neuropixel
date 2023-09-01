@@ -543,15 +543,20 @@ def _geometry_from_meta(meta_data):
         th['flag'] = th['x'] * 0 + 1.
         return th
     th = cm.copy()
-    if major_version == 1:
-        # the spike sorting channel maps have a flipped version of the channel map
-        th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
-    nc = th['col'].size
-    th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
-    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version, nc=nc)
-
+    # as of 2023-04 spikeglx stores only x, y coordinates of sites in UM and no col / row. Here
+    # we convert to col / row for consistency with previous versions
+    if 'x' in cm.keys():
+        if major_version == 1:  # the spike sorting channel maps have a flipped version of the channel map
+            th['x'] = 70 - (th['x'])
+        th['y'] += 20  # there is a 20um offset between the probe tip and the first site in the coordinate conversion
+        th.update(neuropixel.xy2rc(th['x'], th['y'], version=major_version))
+    else:
+        if major_version == 1:  # the spike sorting channel maps have a flipped version of the channel map
+            th['col'] = - cm['col'] * 2 + 2 + np.mod(cm['row'], 2)
+        th.update(neuropixel.rc2xy(th['row'], th['col'], version=major_version))
+    th['sample_shift'], th['adc'] = neuropixel.adc_shifts(version=major_version, nc=th['col'].size)
     th = _split_geometry_into_shanks(th, meta_data)
-    th['ind'] = np.arange(nc)
+    th['ind'] = np.arange(th['col'].size)
 
     return th
 
@@ -574,8 +579,10 @@ def _map_channels_from_meta(meta_data):
     """
     if 'snsShankMap' in meta_data.keys():
         chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsShankMap'])
+        key_names = {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}
     elif 'snsGeomMap' in meta_data.keys():
         chmap = re.findall(r'([0-9]*:[0-9]*:[0-9]*:[0-9]*)', meta_data['snsGeomMap'])
+        key_names = {'shank': 0, 'x': 1, 'y': 2, 'flag': 3}
     else:
         return None
     # for digital nidq types, the key exists but does not contain any information
@@ -584,7 +591,7 @@ def _map_channels_from_meta(meta_data):
     # shank#, col#, row#, drawflag
     # (nb: drawflag is one should be drawn and considered spatial average)
     chmap = np.array([np.float32(cm.split(':')) for cm in chmap])
-    return {k: chmap[:, v] for (k, v) in {'shank': 0, 'col': 1, 'row': 2, 'flag': 3}.items()}
+    return {k: chmap[:, v] for (k, v) in key_names.items()}
 
 
 def _conversion_sample2v_from_meta(meta_data):

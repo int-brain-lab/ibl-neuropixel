@@ -82,6 +82,23 @@ def __getattr__(name: str) -> Any:
         return getattr(globals(), name)
 
 
+def xy2rc(x, y, version=1):
+    """
+    converts the um indices to row/col coordinates.
+    :param y: row coordinate on the probe
+    :param x: col coordinate on the probe
+    :param version: neuropixel major version 1 or 2
+    :return: dictionary with keys x and y
+    """
+    if version == 1:
+        col = (x - 11) / 16
+        row = (y - 20) / 20
+    elif np.floor(version) == 2:
+        col = x / 32
+        row = y / 15
+    return {'col': col, 'row': row}
+
+
 def rc2xy(row, col, version=1):
     """
     converts the row/col indices to um coordinates.
@@ -350,9 +367,7 @@ class NP2Converter:
         :param overwrite: set to True to force rerunning even if lf.bin file already exists
         :return:
         """
-
-        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
-        n_shanks = self.nshank or np.unique(chn_info['shank']).astype(np.int16)
+        n_shanks = self.nshank or np.unique(self.sr.geometry['shank']).astype(np.int16)
         label = self.ap_file.parent.parts[-1]
         shank_info = {}
         self.already_exists = False
@@ -360,7 +375,7 @@ class NP2Converter:
         for sh in n_shanks:
             _shank_info = {}
             # channels for individual shank + sync channel
-            _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
+            _shank_info['chns'] = np.r_[np.where(self.sr.geometry['shank'] == sh)[0],
                                         np.array(spikeglx._get_sync_trace_indices_from_meta(
                                             self.sr.meta))]
 
@@ -436,7 +451,7 @@ class NP2Converter:
         :return:
         """
 
-        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
+        chn_info = self.sr.geometry
         if assert_shanks:
             n_shanks = np.unique(chn_info['shank']).astype(np.int16)
             assert (len(n_shanks) == 1)
@@ -791,8 +806,7 @@ class NP2Reconstructor:
 
         ap_file = next(folders[0].glob('*ap.*bin'))
         self.save_file = self.probe_path.joinpath(ap_file.name).with_suffix('.bin')
-
-        chn_info = spikeglx._map_channels_from_meta(meta_info)
+        chn_info = spikeglx._geometry_from_meta(meta_info)
         expected_shanks = np.unique(chn_info['shank'])
 
         if len(folders) != len(expected_shanks):

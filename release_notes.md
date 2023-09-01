@@ -1,3 +1,7 @@
+# 0.8.0
+## 0.7.0 2023-09-01
+- add compatibility with spikeglx metadata version 2023-04 to get probe geometry
+
 # 0.7.0
 
 ## 0.7.0 2023-06-29
