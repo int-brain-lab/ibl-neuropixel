@@ -40,6 +40,8 @@ https://doi.org/10.6084/m9.figshare.19705522
 ## Contribution
 
 Pypi Release checklist:
+Edit the version number in `setup.py`, and add release notes in `release_notes.md`
+
 ```shell
 flake8
 git tag -a vX.Y.Z

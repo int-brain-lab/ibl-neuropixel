@@ -367,7 +367,9 @@ class NP2Converter:
         :param overwrite: set to True to force rerunning even if lf.bin file already exists
         :return:
         """
-        n_shanks = self.nshank or np.unique(self.sr.geometry['shank']).astype(np.int16)
+
+        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
+        n_shanks = self.nshank or np.unique(chn_info['shank']).astype(np.int16)
         label = self.ap_file.parent.parts[-1]
         shank_info = {}
         self.already_exists = False
@@ -375,7 +377,7 @@ class NP2Converter:
         for sh in n_shanks:
             _shank_info = {}
             # channels for individual shank + sync channel
-            _shank_info['chns'] = np.r_[np.where(self.sr.geometry['shank'] == sh)[0],
+            _shank_info['chns'] = np.r_[np.where(chn_info['shank'] == sh)[0],
                                         np.array(spikeglx._get_sync_trace_indices_from_meta(
                                             self.sr.meta))]
 
@@ -451,7 +453,7 @@ class NP2Converter:
         :return:
         """
 
-        chn_info = self.sr.geometry
+        chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
         if assert_shanks:
             n_shanks = np.unique(chn_info['shank']).astype(np.int16)
             assert (len(n_shanks) == 1)
@@ -806,7 +808,10 @@ class NP2Reconstructor:
 
         ap_file = next(folders[0].glob('*ap.*bin'))
         self.save_file = self.probe_path.joinpath(ap_file.name).with_suffix('.bin')
-        chn_info = spikeglx._geometry_from_meta(meta_info)
+
+        # note we use the private method here to make sure we get all of the original channels,
+        # as the .geometry() method returns only channels pertaining to the shank
+        chn_info = spikeglx._map_channels_from_meta(meta_info)
         expected_shanks = np.unique(chn_info['shank'])
 
         if len(folders) != len(expected_shanks):

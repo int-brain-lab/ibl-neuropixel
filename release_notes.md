@@ -1,5 +1,7 @@
 # 0.8.0
-## 0.7.0 2023-09-01
+## 0.8.1 2023-09-21
+- revert to reading channel info from private methods in shank splitting NP2.4 code to get the original channel layout from shank metadata file
+## 0.8.0 2023-09-01
 - add compatibility with spikeglx metadata version 2023-04 to get probe geometry
 
 # 0.7.0
