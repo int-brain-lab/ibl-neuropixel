@@ -763,3 +763,34 @@ def current_source_density(lfp, h, method='diff', sigma=1 / 3):
                 n_src_init=10000,
                 src_type='gauss').values('CSD')
     return csd
+
+
+def _svd_denoise(datr, rank):
+    """
+    SVD Encoder: does the decomposition, derank the mtrix and reproject in the feature's space
+    :param datr: input matrix
+    :param rank: (int) rank of the SVD to be reconstructed
+    """
+    U, sigma, V = np.linalg.svd(datr, full_matrices=False)
+    return np.matmul(np.matmul(U[:, :rank], np.diag(sigma[:rank])), V[:rank, :])
+
+
+def svd_denoise_npx(datr, rank=None, collection=None):
+    """
+
+    :param datr: [nc, ns]
+    :param rank:
+    :param collection:
+    :return:
+    """
+    svd = np.zeros_like(datr)
+    nc = datr.shape[0]
+    rank = rank or nc // 4
+    if collection is None:
+        collection = np.zeros(nc, dtype=int)
+    for col in np.unique(collection):
+        ind = np.where(collection == col)[0]
+        isort = np.argsort(collection[ind])
+        itr = ind[isort]
+        svd[itr, :] = _svd_denoise(datr[itr, :], rank=int(rank * ind.size / nc))
+    return svd
