@@ -2,9 +2,7 @@ from neurodsp.voltage import destripe, destripe_lfp, detect_bad_channels
 from neurodsp.utils import rms
 import spikeglx
 import pandas as pd
-import numpy as np
 import scipy
-from pathlib import Path
 from tqdm import trange
 
 
@@ -54,11 +52,13 @@ def raw_data_features(ap_cbin, lf_cbin, t_start, t_end):
     for i in trange(num_snippets):
         t0 = t_start[i]
         t1 = min(t_end[i], sr_ap.rl)
-        df = compute_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap, filter_lf)
+        df = compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap, filter_lf)
         dfs[i] = df
 
     out_df = pd.concat(dfs)
     out_df.index.rename(["snippet_id", "channel_id"], inplace=True)
+
+    return out_df
 
 
 def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf=None):
@@ -86,6 +86,7 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         "ap": {"fs": sr_ap.fs, "psd_hf_threshold": None},
         "lf": {"fs": sr_lf.fs, "psd_hf_threshold": 1.4},
     }
+    destripe_fn = {"ap": destripe, "lf": destripe_lfp}
 
     # sample 12x length for AP
     t1_ap = t1
@@ -93,7 +94,6 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
     t_length *= 12
     t1_lf = min(t0 + t_length, sr_lf.rl)
     t1s = {"ap": t1_ap, "lf": t1_lf}
-    num_channels = sr_ap.nc - sr_ap.nsync
 
     data = {}
 
@@ -103,7 +103,7 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         raw = sr[sl, : -sr.nsync].T
         channel_labels, xfeats = detect_bad_channels(raw, **detect_kwargs[band])
         butter = scipy.signal.sosfiltfilt(filters[band], raw)
-        destriped = destripe(raw, fs=sr.fs, channel_labels=channel_labels)
+        destriped = destripe_fn[band](raw, fs=sr.fs, channel_labels=channel_labels)
         # get raw rms for free
         raw_rms = xfeats["rms_raw"]
         butter_rms = rms(butter)
