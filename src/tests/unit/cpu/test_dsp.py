@@ -535,6 +535,7 @@ class TestRawDataFeatures(unittest.TestCase):
         self.ns_ap = 38502
         self.nc = 385
         self.features = [
+            "ap_dc_offset",
             "ap_raw_rms",
             "ap_butter_rms",
             "ap_destripe_rms",
@@ -543,6 +544,7 @@ class TestRawDataFeatures(unittest.TestCase):
             "ap_xcor_hf",
             "ap_xcor_lf",
             "ap_psd_hf",
+            "lf_dc_offset",
             "lf_raw_rms",
             "lf_butter_rms",
             "lf_destripe_rms",

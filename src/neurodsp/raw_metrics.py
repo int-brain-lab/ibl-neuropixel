@@ -4,6 +4,7 @@ import spikeglx
 import pandas as pd
 import scipy
 from tqdm import trange
+import numpy as np
 
 
 def raw_data_features(ap_cbin, lf_cbin, t_start, t_end):
@@ -101,6 +102,7 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         sr = sglx[band]
         sl = slice(int(sr.fs * t0), int(sr.fs * t1s[band]))
         raw = sr[sl, : -sr.nsync].T
+        dc_offset = np.mean(raw, axis=1)
         channel_labels, xfeats = detect_bad_channels(raw, **detect_kwargs[band])
         butter = scipy.signal.sosfiltfilt(filters[band], raw)
         destriped = destripe_fn[band](raw, fs=sr.fs, channel_labels=channel_labels)
@@ -110,6 +112,7 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         destripe_rms = rms(destriped)
         residual_rms = rms(butter - destriped)
 
+        data[f"{band}_dc_offset"] = dc_offset * factor
         data[f"{band}_raw_rms"] = raw_rms * factor
         data[f"{band}_butter_rms"] = butter_rms * factor
         data[f"{band}_destripe_rms"] = destripe_rms * factor
