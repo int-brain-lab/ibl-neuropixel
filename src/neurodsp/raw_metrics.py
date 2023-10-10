@@ -110,24 +110,31 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         sl = slice(int(sr.fs * t0), int(sr.fs * t1s[band]))
         raw = sr[sl, : -sr.nsync].T
         dc_offset = np.mean(raw, axis=1)
-        channel_labels, xfeats = detect_bad_channels(raw, **detect_kwargs[band])
+        channel_labels, xfeats_raw = detect_bad_channels(raw, **detect_kwargs[band])
         butter = scipy.signal.sosfiltfilt(filters[band], raw)
         destriped = destripe_fn[band](raw, fs=sr.fs, channel_labels=channel_labels)
-        # get raw rms for free
-        raw_rms = xfeats["rms_raw"]
+        # compute same channel feats for destripe
+        _, xfeats_destriped = detect_bad_channels(destriped, **detect_kwargs[band])
+
+        # get raw/destriped rms for free
+        raw_rms = xfeats_raw["rms_raw"]
+        destripe_rms = xfeats_destriped["rms_raw"]
+
         butter_rms = rms(butter)
-        destripe_rms = rms(destriped)
-        residual_rms = rms(butter - destriped)
+        striping_rms = rms(butter - destriped)
 
         data[f"{band}_dc_offset"] = dc_offset * factor
         data[f"{band}_raw_rms"] = raw_rms * factor
         data[f"{band}_butter_rms"] = butter_rms * factor
         data[f"{band}_destripe_rms"] = destripe_rms * factor
-        data[f"{band}_residual_rms"] = residual_rms * factor
+        data[f"{band}_striping_rms"] = striping_rms * factor
         data[f"{band}_channel_labels"] = channel_labels
         # channel detect features
-        data[f"{band}_xcor_hf"] = xfeats["xcor_hf"]
-        data[f"{band}_xcor_lf"] = xfeats["xcor_lf"]
-        data[f"{band}_psd_hf"] = xfeats["psd_hf"]
+        data[f"{band}_xcor_hf_raw"] = xfeats_raw["xcor_hf"]
+        data[f"{band}_xcor_lf_raw"] = xfeats_raw["xcor_lf"]
+        data[f"{band}_psd_hf_raw"] = xfeats_raw["psd_hf"]
+        data[f"{band}_xcor_hf_destripe"] = xfeats_destriped["xcor_hf"]
+        data[f"{band}_xcor_lf_destripe"] = xfeats_destriped["xcor_lf"]
+        data[f"{band}_psd_hf_destripe"] = xfeats_destriped["psd_hf"]
 
     return pd.DataFrame(data)
