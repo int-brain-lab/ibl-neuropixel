@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import scipy.signal
 import scipy.fft
+import spikeglx
 
 import neurodsp.fourier as fourier
 import neurodsp.utils as utils
@@ -9,6 +10,11 @@ import neurodsp.voltage as voltage
 import neurodsp.cadzow as cadzow
 import neurodsp.smooth as smooth
 import neurodsp.spiketrains as spiketrains
+import neurodsp.raw_metrics as raw_metrics
+
+from pathlib import Path
+import tempfile
+import shutil
 
 
 class TestSyncTimestamps(unittest.TestCase):
@@ -519,3 +525,82 @@ class TestSpikeTrains(unittest.TestCase):
 
         assert venn_info["10"] + venn_info["11"] == 1000
         assert venn_info["01"] + venn_info["11"] == 1500
+
+
+class TestRawDataFeatures(unittest.TestCase):
+    def setUp(self):
+        self.fixtures_path = Path(__file__).parent.joinpath("fixtures")
+        self.tmpdir = Path(tempfile.gettempdir()) / "rawdata"
+        self.tmpdir.mkdir()
+        self.ns_ap = 38502
+        self.nc = 385
+        self.features = [
+            "ap_dc_offset",
+            "ap_raw_rms",
+            "ap_butter_rms",
+            "ap_destripe_rms",
+            "ap_striping_rms",
+            "ap_channel_labels",
+            "ap_xcor_hf_raw",
+            "ap_xcor_lf_raw",
+            "ap_psd_hf_raw",
+            "ap_xcor_hf_destripe",
+            "ap_xcor_lf_destripe",
+            "ap_psd_hf_destripe",
+            "lf_dc_offset",
+            "lf_raw_rms",
+            "lf_butter_rms",
+            "lf_destripe_rms",
+            "lf_striping_rms",
+            "lf_channel_labels",
+            "lf_xcor_hf_raw",
+            "lf_xcor_lf_raw",
+            "lf_psd_hf_raw",
+            "lf_xcor_hf_destripe",
+            "lf_xcor_lf_destripe",
+            "lf_psd_hf_destripe",
+        ]
+        self.ap_meta = self.fixtures_path.joinpath("sample3B_g0_t0.imec1.ap.meta")
+        self.lf_meta = self.fixtures_path.joinpath("sample3B_g0_t0.imec1.lf.meta")
+        self.ap_cbin = spikeglx._mock_spikeglx_file(
+            self.tmpdir.joinpath("test_ap.bin"),
+            self.ap_meta,
+            self.ns_ap,
+            self.nc,
+            sync_depth=16,
+        )["bin_file"]
+        self.lf_cbin = spikeglx._mock_spikeglx_file(
+            self.tmpdir.joinpath("test_lf.bin"),
+            self.lf_meta,
+            self.ns_ap * 12,
+            self.nc,
+            sync_depth=16,
+        )["bin_file"]
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def test_compute_features_snip(self):
+        """
+        Test create features table on one snip.
+        """
+        t0 = 0.2
+        t1 = 0.7
+        sr_ap = spikeglx.Reader(self.ap_cbin)
+        sr_lf = spikeglx.Reader(self.lf_cbin)
+        df = raw_metrics.compute_raw_features_snippet(sr_ap, sr_lf, t0, t1)
+        self.assertEqual(self.nc - 1, len(df))
+        self.assertEqual(set(self.features), set(list(df.columns)))
+
+    def test_compute_features(self):
+        """
+        Test create features table from several snips.
+        """
+        num_snippets = 2
+        t_start = [0.1, 0.5]
+        t_end = [0.4, 0.8]
+        df = raw_metrics.raw_data_features(self.ap_cbin, self.lf_cbin, t_start, t_end)
+        multi_index = [(i, j) for i in range(num_snippets) for j in range(self.nc - 1)]
+        self.assertEqual(multi_index, list(df.index))
+        self.assertEqual(["snippet_id", "channel_id"], list(df.index.names))
+        self.assertEqual(num_snippets * (self.nc - 1), len(df))
