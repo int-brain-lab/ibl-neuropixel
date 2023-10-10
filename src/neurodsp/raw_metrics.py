@@ -65,7 +65,14 @@ def raw_data_features(ap_cbin, lf_cbin, t_start, t_end):
 def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf=None):
     """
     Compute raw data feature table on one snippet of AP / LF data.
-    Returns
+    :param sr_ap: SpikeGLX Reader object of AP file
+    :param sr_lf: SpikeGLX Reader object of LF file
+    :param t0: Starting time of AP snippet (in seconds)
+    :param t1: Ending time of AP snippet (in seconds)
+    :param filter_ap: scipy SOS filter to apply to AP band.
+        Default: Butterworth 300Hz highpass of order 3.
+    :param filter_lf: scipy SOS filter to apply to LF band.
+        Default: Butterworth 2-200Hz bandpass of order 3.
     """
     # conversion from V to uV
     factor = 1.0e6
