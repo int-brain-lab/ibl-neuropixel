@@ -216,7 +216,6 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True):
 def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5):
     """
     Displays a multi-trace waveform in a wiggle traces with negative
