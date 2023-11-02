@@ -39,7 +39,7 @@ class Reader:
     """
 
     def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2v=None,
-                 nsync=None, ignore_warnings=False, meta_file=None):
+                 nsync=None, ignore_warnings=False, meta_file=None, ch_file=None):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
@@ -48,6 +48,10 @@ class Reader:
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
         meta_file = meta_file or sglx_file.with_suffix('.meta')
+        
+        # only used if MTSCOMP compressed
+        self.ch_file = ch_file
+        
         if meta_file == sglx_file:
             # if a meta-data file is provided, try to get the binary file
             self.file_bin = sglx_file.with_suffix('.cbin') if sglx_file.with_suffix('.cbin').exists() else None
@@ -97,7 +101,8 @@ class Reader:
         sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
-            self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
+            ch_file = self.ch_file or self.file_bin.with_suffix('.ch')
+            self._raw.open(self.file_bin, ch_file)
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
                 if not self.ignore_warnings:  # avoid the checks for streaming data
