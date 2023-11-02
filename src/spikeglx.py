@@ -48,10 +48,9 @@ class Reader:
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
         meta_file = meta_file or sglx_file.with_suffix('.meta')
-        
         # only used if MTSCOMP compressed
         self.ch_file = ch_file
-        
+
         if meta_file == sglx_file:
             # if a meta-data file is provided, try to get the binary file
             self.file_bin = sglx_file.with_suffix('.cbin') if sglx_file.with_suffix('.cbin').exists() else None
