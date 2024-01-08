@@ -550,7 +550,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
         return df
 
 
-def extract_wfs_array(arr, df, h, extract_radius=160., trough_offset=42, spike_length_samples=121):
+def extract_wfs_array(arr, df, h, extract_radius=200., trough_offset=42, spike_length_samples=121):
     """
     Extract waveforms at specified samples and peak channels
     as a stack.
@@ -559,7 +559,7 @@ def extract_wfs_array(arr, df, h, extract_radius=160., trough_offset=42, spike_l
     :param df: df containing "sample" and "peak_channel" columns.
     :param h: probe geometry dict.
     :param extract_radius: Radius of channels to include. (um,
-    defaults to 160)
+    defaults to 200)
     :param trough_offset: Number of samples to include before peak.
     (defaults to 42)
     :param spike_length_samples: Total length of wf in samples.
