@@ -548,3 +548,53 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
         return df, arr_peak_real
     else:
         return df
+
+
+def extract_wfs_array(arr, df, h, extract_radius=160., trough_offset=42, spike_length_samples=121):
+    """
+    Extract waveforms at specified samples and peak channels
+    as a stack.
+
+    :param arr: Array of traces.
+    :param df: df containing "sample" and "peak_channel" columns.
+    :param h: probe geometry dict.
+    :param extract_radius: Radius of channels to include. (um,
+    defaults to 160)
+    :param trough_offset: Number of samples to include before peak.
+    (defaults to 42)
+    :param spike_length_samples: Total length of wf in samples.
+    (defaults to 121)
+    """
+    # Get channel indices
+    xy = h["x"] + 1j * h["y"]
+    chans = df["peak_channel"].to_numpy()
+    N = chans.shape[0]
+    chans_tile = np.repeat(xy[chans][:, np.newaxis], 384, 1)
+    xy_tile = np.tile(xy, (N, 1))
+    mask = np.abs(xy_tile - chans_tile) <= extract_radius
+    counts = np.sum(mask, axis=1)
+    nchan = np.max(counts)
+    cind = np.zeros((N, nchan), int)
+    for i in range(N):
+        ind = np.arange(384)[mask[i, :]]
+        if counts[i] == nchan:
+            cind[i, :] = ind
+            continue
+        # bottom of probe
+        elif ind[0] < 1:
+            cind[i, :] = np.pad(ind, (nchan - counts[i], 0), constant_values=-1)
+        # top of probe
+        else:
+            cind[i, :] = np.pad(ind, (0, nchan - counts[i]), constant_values=-1)
+
+    # Get sample indices
+    s0 = df["sample"].to_numpy() - trough_offset
+    srange = [(s, s + spike_length_samples) for s in s0]
+    sind = np.vstack([np.arange(i, j) for i, j in srange])
+
+    nwf = len(df)
+    wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
+    for i in range(nwf):
+        wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
+
+    return wfs
