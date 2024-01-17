@@ -1,3 +1,8 @@
+# 0.9.0
+## 0.9.0 2024-01-17
+-   `neurodsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
+-   `waveforms`: new wiggle plot for multi-trace waveforms
+
 # 0.8.0
 ## 0.8.1 2023-09-21
 - revert to reading channel info from private methods in shank splitting NP2.4 code to get the original channel layout from shank metadata file

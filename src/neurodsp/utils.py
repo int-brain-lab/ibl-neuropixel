@@ -2,7 +2,7 @@
 Window generator, front detections, rms
 """
 import numpy as np
-from scipy import interpolate
+import scipy
 
 
 def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
@@ -23,7 +23,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
     def _interp_fcn(tsa, tsb, ib):
         # now compute the bpod/fpga drift and precise time shift
         drift_ppm = np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)[0] * 1e6
-        fcn_a2b = interpolate.interp1d(tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate")
+        fcn_a2b = scipy.interpolate.interp1d(tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate")
         return fcn_a2b, drift_ppm
 
     # assert sorted inputs
@@ -34,8 +34,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
     y = np.zeros_like(x)
     x[np.int32(np.floor((tsa - tmin) / tbin))] = 1
     y[np.int32(np.floor((tsb - tmin) / tbin))] = 1
-    delta_t = (parabolic_max(np.correlate(x, y, mode='full'))[0] - x.shape[0] + 1) * tbin
-
+    delta_t = (parabolic_max(scipy.signal.correlate(x, y, mode='full'))[0] - x.shape[0] + 1) * tbin
     # do a first assignment at a DT threshold
     ib = np.zeros(tsa.shape, dtype=np.int32) - 1
     threshold = tbin

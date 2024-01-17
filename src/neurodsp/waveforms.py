@@ -5,6 +5,7 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 """
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def _validate_arr_in(arr_in):
@@ -215,7 +216,57 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True):
+def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
+    """
+    Displays a multi-trace waveform in a wiggle traces with negative
+    amplitudes filled
+    :param wav: (nchannels, nsamples)
+    :param axkwargs: keyword arguments to feed to ax.set()
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+    nc, ns = wav.shape
+    vals = np.c_[wav, wav[:, :1] * np.nan].ravel()  # flat view of the 2d array.
+    vect = np.arange(vals.size).astype(
+        np.float32)  # flat index array, for correctly locating zero crossings in the flat view
+    crossing = np.where(np.diff(np.signbit(vals)))[0]  # index before zero crossing
+    # use linear interpolation to find the zero crossing, i.e. y = mx + c.
+    x1 = vals[crossing]
+    x2 = vals[crossing + 1]
+    y1 = vect[crossing]
+    y2 = vect[crossing + 1]
+    m = (y2 - y1) / (x2 - x1)
+    c = y1 - m * x1
+    # tack these values onto the end of the existing data
+    x = np.hstack([vals, np.zeros_like(c)]) * scalar
+    x = np.maximum(np.minimum(x, clip), -clip)
+    y = np.hstack([vect, c])
+    # resort the data
+    order = np.argsort(y)
+    # shift from amplitudes to plotting coordinates
+    x_shift, y = y[order].__divmod__(ns + 1)
+    ax.plot(y, x[order] + x_shift + 1, 'k', linewidth=.5)
+    x[x > 0] = np.nan
+    x = x[order] + x_shift + 1
+    ax.fill(y, x, 'k', aa=True)
+    ax.set(xlim=[0, ns], ylim=[0, nc], xlabel='sample', ylabel='trace')
+    plt.tight_layout()
+    return ax
+
+
+def plot_peaktiptrough(df, arr, ax=None, nth_wav=0, plot_grey=True):
+    """
+    Plots the peak, tip and trough of a waveform to check the feature extraction
+    :param df:
+    :param arr:
+    :param ax:
+    :param nth_wav:
+    :param plot_grey:
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
     if plot_grey:
         ax.plot(arr[nth_wav], c='gray', alpha=0.5)
     # Peak channel
