@@ -44,8 +44,9 @@ Edit the version number in `setup.py`, and add release notes in `release_notes.m
 
 ```shell
 flake8
-git tag -a vX.Y.Z
-git push origin vX.Y.Z
+tag=vX.Y.Z
+git tag -a $tag 
+git push origin %tag
 ```
 
 Create new release with tag vX.Y.Z (will automatically publish to PyPI)
