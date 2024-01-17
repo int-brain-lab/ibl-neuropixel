@@ -1,5 +1,6 @@
 iblutil >= 1.7.0
 joblib
+matplotlib
 mtscomp
 numpy
 one-api
