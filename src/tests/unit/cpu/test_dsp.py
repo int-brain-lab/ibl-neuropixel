@@ -4,13 +4,13 @@ import scipy.signal
 import scipy.fft
 import spikeglx
 
-import neurodsp.fourier as fourier
-import neurodsp.utils as utils
-import neurodsp.voltage as voltage
-import neurodsp.cadzow as cadzow
-import neurodsp.smooth as smooth
-import neurodsp.spiketrains as spiketrains
-import neurodsp.raw_metrics as raw_metrics
+import ibldsp.fourier as fourier
+import ibldsp.utils as utils
+import ibldsp.voltage as voltage
+import ibldsp.cadzow as cadzow
+import ibldsp.smooth as smooth
+import ibldsp.spiketrains as spiketrains
+import ibldsp.raw_metrics as raw_metrics
 
 from pathlib import Path
 import tempfile

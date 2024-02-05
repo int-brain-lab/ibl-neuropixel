@@ -13,7 +13,7 @@ This relies on a fast fourier transform external library: `pip install pyfftw`.
 Minimal working example to destripe a neuropixel binary file. 
 ```python
 from pathlib import Path
-from neurodsp.voltage import decompress_destripe_cbin
+from ibldsp.voltage import decompress_destripe_cbin
 sr_file = Path('/datadisk/Data/spike_sorting/pykilosort_tests/imec_385_100s.ap.bin')
 out_file = Path('/datadisk/scratch/imec_385_100s.ap.bin')
 

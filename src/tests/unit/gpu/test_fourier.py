@@ -2,7 +2,7 @@ import numpy as np
 import cupy as cp
 import unittest
 
-from neurodsp.fourier import fshift, channel_shift
+from ibldsp.fourier import fshift, channel_shift
 
 
 class TestFourierAlignmentGpuCpuParity(unittest.TestCase):

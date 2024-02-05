@@ -1,6 +1,6 @@
 # 0.9.0
 ## 0.9.0 2024-01-17
--   `neurodsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
+-   `ibldsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
 -   `waveforms`: new wiggle plot for multi-trace waveforms
 
 # 0.8.0
@@ -12,7 +12,7 @@
 # 0.7.0
 
 ## 0.7.0 2023-06-29
-- Add function `spike_venn3` in new module `neurodsp.spiketrains`
+- Add function `spike_venn3` in new module `ibldsp.spiketrains`
 - Update `iblutil` dependency to 1.7.0 to use `iblutil.numerical.bincount2D`
 
 ## 0.6.2 2023-06-19
@@ -51,7 +51,7 @@
 - spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
 - agc: gain refers to the inverse of applied gains for agc - done to handle dead channels in destriping
 ## 0.3.1
-- neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
+- ibldsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
 
 
 ## 0.3.0

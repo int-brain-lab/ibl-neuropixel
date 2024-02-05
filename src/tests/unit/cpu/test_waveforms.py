@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import neurodsp.waveforms as waveforms
+import ibldsp.waveforms as waveforms
 from neurowaveforms.model import generate_waveform
 
 

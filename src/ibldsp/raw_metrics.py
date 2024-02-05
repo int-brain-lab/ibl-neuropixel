@@ -1,5 +1,5 @@
-from neurodsp.voltage import destripe, destripe_lfp, detect_bad_channels
-from neurodsp.utils import rms
+from ibldsp.voltage import destripe, destripe_lfp, detect_bad_channels
+from ibldsp.utils import rms
 import spikeglx
 import pandas as pd
 import scipy
