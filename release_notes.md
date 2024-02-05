@@ -55,7 +55,7 @@
 - spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
 - agc: gain refers to the inverse of applied gains for agc - done to handle dead channels in destriping
 ## 0.3.1
-- ibldsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
+- neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
 
 
 ## 0.3.0
