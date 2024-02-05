@@ -1,6 +1,10 @@
+# 0.9.1
+## 0.9.1 
+-   `neurodsp` is now `ibldsp`. Drop-in replacement of the module name is all that is required to update.
+
 # 0.9.0
 ## 0.9.0 2024-01-17
--   `ibldsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
+-   `neurodsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
 -   `waveforms`: new wiggle plot for multi-trace waveforms
 
 # 0.8.0
@@ -12,7 +16,7 @@
 # 0.7.0
 
 ## 0.7.0 2023-06-29
-- Add function `spike_venn3` in new module `ibldsp.spiketrains`
+- Add function `spike_venn3` in new module `neurodsp.spiketrains`
 - Update `iblutil` dependency to 1.7.0 to use `iblutil.numerical.bincount2D`
 
 ## 0.6.2 2023-06-19
