@@ -255,36 +255,34 @@ def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     return ax
 
 
-def plot_peaktiptrough(df, arr, ax=None, nth_wav=0, plot_grey=True):
-    """
-    Plots the peak, tip and trough of a waveform to check the feature extraction
-    :param df:
-    :param arr:
-    :param ax:
-    :param nth_wav:
-    :param plot_grey:
-    :return:
-    """
+def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True, fs=30000):
+    # Time axix
+    nech, ntr = arr[nth_wav].shape
+    tscale = np.array([0, nech - 1]) / fs * 1e3
+
     if ax is None:
         fig, ax = plt.subplots()
     if plot_grey:
-        ax.plot(arr[nth_wav], c='gray', alpha=0.5)
+        ax.plot(tscale, arr[nth_wav], c='gray', alpha=0.5)
     # Peak channel
-    ax.plot(arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
+    ax.plot(tscale, arr[nth_wav][:, int(df.iloc[nth_wav].peak_trace_idx)], marker=".", c='blue')
     # Peak point
-    ax.plot(df.iloc[nth_wav].peak_time_idx, df.iloc[nth_wav].peak_val, 'r*')
+    ax.plot(tscale[df.iloc[nth_wav].peak_time_idx], df.iloc[nth_wav].peak_val, 'r*')
     # Trough point
-    ax.plot(df.iloc[nth_wav].trough_time_idx, df.iloc[nth_wav].trough_val, 'g*')
+    ax.plot(tscale[df.iloc[nth_wav].trough_time_idx], df.iloc[nth_wav].trough_val, 'g*')
     # Tip point
-    ax.plot(df.iloc[nth_wav].tip_time_idx, df.iloc[nth_wav].tip_val, 'k*')
+    ax.plot(tscale[df.iloc[nth_wav].tip_time_idx], df.iloc[nth_wav].tip_val, 'k*')
     # Half peak points
-    ax.plot(df.iloc[nth_wav].half_peak_post_time_idx, df.iloc[nth_wav].half_peak_post_val, 'c*')
-    ax.plot(df.iloc[nth_wav].half_peak_pre_time_idx, df.iloc[nth_wav].half_peak_pre_val, 'c*')
+    ax.plot(tscale[df.iloc[nth_wav].half_peak_post_time_idx], df.iloc[nth_wav].half_peak_post_val, 'c*')
+    ax.plot(tscale[df.iloc[nth_wav].half_peak_pre_time_idx], df.iloc[nth_wav].half_peak_pre_val, 'c*')
     # Line for half peak boundary
-    ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val / 2, '-k')
+    # ax.plot((0, arr.shape[1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val / 2, '-k')
+    ax.plot((tscale[0], tscale[-1]), np.array((1, 1)) * df.iloc[nth_wav].peak_val / 2, '-k')
     # Recovery point
-    ax.plot(df.iloc[nth_wav].recovery_time_idx, df.iloc[nth_wav].recovery_val, 'y*')
-
+    ax.plot(tscale[df.iloc[nth_wav].recovery_time_idx], df.iloc[nth_wav].recovery_val, 'y*')
+    # Axis labels
+    ax.set_ylabel('(Volt)')
+    ax.set_xlabel('Time (ms)')
 
 def half_peak_point(arr_peak, df):
     '''
