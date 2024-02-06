@@ -610,7 +610,8 @@ class TestNameDeprecationDate(unittest.TestCase):
     def test_neurodsp_import(self):
         # Check that the old import still works and gives the same package.
         # (ibldsp.voltage is imported at the top of this file.)
-        import neurodsp
+        with self.assertWarnsRegex(FutureWarning, "01-Sep-2024"):
+            import neurodsp
         self.assertEqual(neurodsp.voltage, voltage)
 
     def test_deprecation_countdown(self):
