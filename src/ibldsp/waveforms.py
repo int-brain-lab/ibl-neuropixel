@@ -284,6 +284,7 @@ def plot_peaktiptrough(df, arr, ax, nth_wav=0, plot_grey=True, fs=30000):
     ax.set_ylabel('(Volt)')
     ax.set_xlabel('Time (ms)')
 
+
 def half_peak_point(arr_peak, df):
     '''
     Compute the two intersection points at halp-maximum peak
