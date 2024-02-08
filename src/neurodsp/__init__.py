@@ -1,5 +1,5 @@
 import ibldsp, sys
-from warnings import warn, simplefilter
+from warnings import warn
 
 sys.modules["neurodsp"] = ibldsp
 warn(
