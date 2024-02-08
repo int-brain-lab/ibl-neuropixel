@@ -1,9 +1,6 @@
-# 0.9.1
-## 0.9.1 
--   `neurodsp` is now `ibldsp`. Drop-in replacement of the package name is all that is required to update. The `neurodsp` name will disappear on
-01-Sep-2024; until then both names will work.
-
 # 0.9.0
+## 0.9.2 2024-02-08
+-   `neurodsp` is now `ibldsp`. Drop-in replacement of the package name is all that is required to update. The `neurodsp` name will disappear on 01-Sep-2024; until then both names will work.
 ## 0.9.0 2024-01-17
 -   `neurodsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
 -   `waveforms`: new wiggle plot for multi-trace waveforms
