@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 
-import neurodsp.fourier as ft
+import ibldsp.fourier as ft
 
 
 def lp(ts, fac, pad=0.2):

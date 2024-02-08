@@ -7,7 +7,7 @@ from pathlib import Path
 
 from neuropixel import trace_header
 import spikeglx
-from neurodsp import voltage, utils
+from ibldsp import voltage, utils
 
 _logger = logging.getLogger(__name__)
 

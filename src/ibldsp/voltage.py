@@ -13,8 +13,8 @@ from iblutil.numerical import rcoeff
 import spikeglx
 import neuropixel
 
-import neurodsp.fourier as fourier
-import neurodsp.utils as utils
+import ibldsp.fourier as fourier
+import ibldsp.utils as utils
 
 
 def agc(x, wl=.5, si=.002, epsilon=1e-8, gpu=False):

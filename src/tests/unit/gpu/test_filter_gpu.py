@@ -3,7 +3,7 @@ import cupy as cp
 from scipy.signal import butter, sosfiltfilt
 import unittest
 
-from neurodsp.filter_gpu import sosfiltfilt_gpu
+from ibldsp.filter_gpu import sosfiltfilt_gpu
 
 
 class TestFilterGpuCpuParity(unittest.TestCase):

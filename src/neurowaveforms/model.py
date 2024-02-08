@@ -1,5 +1,5 @@
 import numpy as np
-from neurodsp.fourier import fshift
+from ibldsp.fourier import fshift
 
 
 def generate_waveform(spike=None, sxy=None, wxy=None, fs=30000, vertical_velocity_mps=3):

@@ -9,7 +9,7 @@ from brainbox.io.one import SpikeSortingLoader
 from ibllib.atlas import BrainRegions
 from viewephys.gui import viewephys
 
-from neurodsp import voltage, fourier
+from ibldsp import voltage, fourier
 from neuropixel import trace_header
 
 
