@@ -178,7 +178,7 @@ def test_extract_waveforms():
     nc = 384
     samples = np.arange(100, ns, 100)
     channels = np.arange(12, 384, 45)
-    
+
     arr = np.zeros((ns, nc + 1), np.float32)
     for i in range(9):
         s, c = samples[i], channels[i]
@@ -199,7 +199,7 @@ def test_extract_waveforms():
     # with NaNs
     assert wfs[0, channels[0], trough_offset] == 1.
     assert np.all(np.isnan(wfs[0, num_channels // 2 + channels[0] + 1:, :]))
-    
+
     for i in range(1, 8):
         # center channel depends on odd/even of channel
         if channels[i] % 2 == 0:
@@ -207,7 +207,7 @@ def test_extract_waveforms():
         else:
             centered_channel_idx = 19
         assert wfs[i, centered_channel_idx, trough_offset] == float(i + 1)
-        
+
     # last wf is a special case analogous to the first wf, but at the bottom
     # of the probe
     if channels[-1] % 2 == 0:

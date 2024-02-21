@@ -286,5 +286,3 @@ class WindowGenerator(object):
         :return: time axis scale
         """
         return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.firstlast])
-
-    
