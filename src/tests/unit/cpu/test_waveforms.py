@@ -3,9 +3,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
 from neurowaveforms.model import generate_waveform
-from neuropixel import dense_layout
+from neuropixel import trace_header
 
 
 def make_array_peak_through_tip():
@@ -170,23 +171,47 @@ def test_generate_waveforms():
 
 
 def test_extract_waveforms():
-    # create sample array with 8 point wfs at different
+    # create sample array with 10 point wfs at different
     # channel locations
     trough_offset = 42
     ns = 1000
     nc = 384
-    samples = np.arange(100, ns - 100, 100)
-    channels = np.arange(4, 384, 50)
-    # default extract radius = 200um, 40 chans
-    centered_channel_idx = 19
-    arr = np.zeros((ns, nc), np.float32)
-    for i in range(8):
+    samples = np.arange(100, ns, 100)
+    channels = np.arange(12, 384, 45)
+    
+    arr = np.zeros((ns, nc + 1), np.float32)
+    for i in range(9):
         s, c = samples[i], channels[i]
         arr[s, c] = float(i + 1)
+    arr[:, -1] = np.nan
 
     df = pd.DataFrame({"sample": samples, "peak_channel": channels})
+    # generate channel neighbor matrix for NP1, default radius 200um
+    geom_dict = trace_header(version=1)
+    geom = np.c_[geom_dict["x"], geom_dict["y"]]
+    channel_neighbors = utils.make_channel_index(geom, radius=200.)
+    # radius = 200um, 38 chans
+    num_channels = 38
+    wfs = waveforms.extract_wfs_array(arr, df, channel_neighbors)
 
-    wfs = waveforms.extract_wfs_array(arr, df, h=dense_layout())
-
-    for i in range(8):
-        assert wfs[i, trough_offset, centered_channel_idx] == float(i + 1)
+    # first wf is a special case: it's at the top of the probe so the center
+    # index is the actual channel index, and the rest of the wf has been padded
+    # with NaNs
+    assert wfs[0, channels[0], trough_offset] == 1.
+    assert np.all(np.isnan(wfs[0, num_channels // 2 + channels[0] + 1:, :]))
+    
+    for i in range(1, 8):
+        # center channel depends on odd/even of channel
+        if channels[i] % 2 == 0:
+            centered_channel_idx = 18
+        else:
+            centered_channel_idx = 19
+        assert wfs[i, centered_channel_idx, trough_offset] == float(i + 1)
+        
+    # last wf is a special case analogous to the first wf, but at the bottom
+    # of the probe
+    if channels[-1] % 2 == 0:
+        centered_channel_idx = 18
+    else:
+        centered_channel_idx = 19
+    assert wfs[-1, centered_channel_idx, trough_offset] == 9.
