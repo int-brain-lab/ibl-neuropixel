@@ -550,19 +550,33 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
         return df
 
 
-def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length_samples=121):
+def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length_samples=121, add_nan_trace=False):
     """
     Extract waveforms at specified samples and peak channels
     as a stack.
 
-    :param arr: Array of traces. (samples, channels)
+    :param arr: Array of traces. (samples, channels). The last trace of the array should be a
+        row of non-data NaNs. If this has not been added set the `add_nan_trace` flag.
     :param df: df containing "sample" and "peak_channel" columns.
     :param channel_neighbors: Channel neighbor matrix (384x384)
     :param trough_offset: Number of samples to include before peak.
     (defaults to 42)
     :param spike_length_samples: Total length of wf in samples.
     (defaults to 121)
+    :param add_nan_trace: Whether to add a row of `NaN`s as the last trace.
+        (If False, code assumes this has already been added)
     """
+    # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
+    if add_nan_trace:
+        newcol = np.empty((arr.shape[0], 1))
+        newcol[:] = np.nan
+        arr = np.hstack([arr, newcol])
+
+    # check that the spike window is included in the recording:
+    last_idx = df["sample"].iloc[-1]
+    assert last_idx + (spike_length_samples - trough_offset) < arr.shape[0], \
+        f"Spike index {last_idx} extends past end of recording ({arr.shape[0]} samples)."
+
     nwf = len(df)
 
     # Get channel indices
@@ -573,7 +587,13 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
     nchan = cind.shape[1]
 
     wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
-    for i in range(nwf):
+
+    try:
+        from tqdm import trange
+        fun = trange
+    except ImportError:
+        fun = range
+    for i in fun(nwf):
         wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
 
-    return wfs.swapaxes(1, 2)
+    return wfs.swapaxes(1, 2), cind, trough_offset

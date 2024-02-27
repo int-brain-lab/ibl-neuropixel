@@ -8,6 +8,8 @@ import ibldsp.waveforms as waveforms
 from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
 
+import unittest
+
 
 def make_array_peak_through_tip():
     arr = np. array([[[1, 1, np.nan],
@@ -170,7 +172,7 @@ def test_generate_waveforms():
     assert wav.shape == (121, 40)
 
 
-def test_extract_waveforms():
+class TestWaveformExtractor(unittest.TestCase):
     # create sample array with 10 point wfs at different
     # channel locations
     trough_offset = 42
@@ -192,26 +194,44 @@ def test_extract_waveforms():
     channel_neighbors = utils.make_channel_index(geom, radius=200.)
     # radius = 200um, 38 chans
     num_channels = 38
-    wfs = waveforms.extract_wfs_array(arr, df, channel_neighbors)
 
-    # first wf is a special case: it's at the top of the probe so the center
-    # index is the actual channel index, and the rest of the wf has been padded
-    # with NaNs
-    assert wfs[0, channels[0], trough_offset] == 1.
-    assert np.all(np.isnan(wfs[0, num_channels // 2 + channels[0] + 1:, :]))
+    def test_extract_waveforms(self):
+        wfs, _, _ = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
 
-    for i in range(1, 8):
-        # center channel depends on odd/even of channel
-        if channels[i] % 2 == 0:
+        # first wf is a special case: it's at the top of the probe so the center
+        # index is the actual channel index, and the rest of the wf has been padded
+        # with NaNs
+        assert wfs[0, self.channels[0], self.trough_offset] == 1.
+        assert np.all(np.isnan(wfs[0, self.num_channels // 2 + self.channels[0] + 1:, :]))
+
+        for i in range(1, 8):
+            # center channel depends on odd/even of channel
+            if self.channels[i] % 2 == 0:
+                centered_channel_idx = 18
+            else:
+                centered_channel_idx = 19
+            assert wfs[i, centered_channel_idx, self.trough_offset] == float(i + 1)
+
+        # last wf is a special case analogous to the first wf, but at the bottom
+        # of the probe
+        if self.channels[-1] % 2 == 0:
             centered_channel_idx = 18
         else:
             centered_channel_idx = 19
-        assert wfs[i, centered_channel_idx, trough_offset] == float(i + 1)
+        assert wfs[-1, centered_channel_idx, self.trough_offset] == 9.
 
-    # last wf is a special case analogous to the first wf, but at the bottom
-    # of the probe
-    if channels[-1] % 2 == 0:
-        centered_channel_idx = 18
-    else:
-        centered_channel_idx = 19
-    assert wfs[-1, centered_channel_idx, trough_offset] == 9.
+    def test_spike_window(self):
+        # check that we have an error when the last spike window
+        # extends past end of recording
+        df = self.df.copy()
+        df["sample"].iloc[-1] = 996
+        with self.assertRaisesRegex(AssertionError, "extends"):
+            _ = waveforms.extract_wfs_array(self.arr, df, self.channel_neighbors)
+
+    def test_nan_channel(self):
+        # test that if user does not fill last column with NaNs
+        # the user can set the flag and the result will be the same
+        arr = self.arr.copy()[:, :-1]
+        wfs = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
+        wfs_nan = waveforms.extract_wfs_array(arr, self.df, self.channel_neighbors, add_nan_trace=True)
+        np.testing.assert_equal(wfs, wfs_nan)
