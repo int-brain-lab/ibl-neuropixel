@@ -579,7 +579,7 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
         fun = trange
     except ImportError:
         fun = range
-    for i in trange(nwf):
+    for i in fun(nwf):
         wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
 
     return wfs.swapaxes(1, 2)
