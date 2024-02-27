@@ -573,7 +573,13 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
     nchan = cind.shape[1]
 
     wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
-    for i in range(nwf):
+
+    try:
+        from tqdm import trange
+        fun = trange
+    except ImportError:
+        fun = range
+    for i in trange(nwf):
         wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
 
     return wfs.swapaxes(1, 2)
