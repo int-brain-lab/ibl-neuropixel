@@ -563,7 +563,8 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
     :param spike_length_samples: Total length of wf in samples.
     (defaults to 121)
     """
-    # Add a last row filled with nan
+    # Add a last column (i.e. last channel) filled with nan
+    # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
     newcol = np.empty((arr.shape[0], 1))
     newcol[:] = np.nan
     arr = np.hstack([arr, newcol])
