@@ -11,7 +11,6 @@ from neuropixel import trace_header
 import unittest
 
 
-
 def make_array_peak_through_tip():
     arr = np. array([[[1, 1, np.nan],
                       [2, 2, np.nan],
