@@ -192,7 +192,7 @@ def test_extract_waveforms():
     channel_neighbors = utils.make_channel_index(geom, radius=200.)
     # radius = 200um, 38 chans
     num_channels = 38
-    wfs, _ = waveforms.extract_wfs_array(arr, df, channel_neighbors)
+    wfs, _, _ = waveforms.extract_wfs_array(arr, df, channel_neighbors)
 
     # first wf is a special case: it's at the top of the probe so the center
     # index is the actual channel index, and the rest of the wf has been padded
