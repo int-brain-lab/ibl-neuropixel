@@ -548,3 +548,32 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
         return df, arr_peak_real
     else:
         return df
+
+
+def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length_samples=121):
+    """
+    Extract waveforms at specified samples and peak channels
+    as a stack.
+
+    :param arr: Array of traces. (samples, channels)
+    :param df: df containing "sample" and "peak_channel" columns.
+    :param channel_neighbors: Channel neighbor matrix (384x384)
+    :param trough_offset: Number of samples to include before peak.
+    (defaults to 42)
+    :param spike_length_samples: Total length of wf in samples.
+    (defaults to 121)
+    """
+    nwf = len(df)
+
+    # Get channel indices
+    cind = channel_neighbors[df["peak_channel"].to_numpy()]
+
+    # Get sample indices
+    sind = df["sample"].to_numpy()[:, np.newaxis] + (np.arange(spike_length_samples) - trough_offset)
+    nchan = cind.shape[1]
+
+    wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
+    for i in range(nwf):
+        wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
+
+    return wfs.swapaxes(1, 2)

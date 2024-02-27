@@ -203,6 +203,21 @@ def rms(x, axis=-1):
     return np.sqrt(np.mean(x ** 2, axis=axis))
 
 
+def make_channel_index(geom, radius=200., pad_val=384):
+    neighbors = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) < radius
+    n_nbors = np.max(np.sum(neighbors, 0))
+
+    nc = geom.shape[0]
+    if pad_val is None:
+        pad_val = nc
+    channel_idx = np.full((nc, n_nbors), pad_val, dtype=int)
+    for c in range(nc):
+        ch_idx = np.flatnonzero(neighbors[c, :])
+        channel_idx[c, :ch_idx.shape[0]] = ch_idx
+
+    return channel_idx
+
+
 class WindowGenerator(object):
     """
     `wg = WindowGenerator(ns, nswin, overlap)`
