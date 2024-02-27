@@ -574,7 +574,8 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
 
     # check that the spike window is included in the recording:
     last_idx = df["sample"].iloc[-1]
-    assert last_idx + (spike_length_samples - trough_offset) < arr.shape[0]
+    assert last_idx + (spike_length_samples - trough_offset) < arr.shape[0], \
+        f"Spike index {last_idx} extends past end of recording ({arr.shape[0]} samples)."
 
     nwf = len(df)
 
