@@ -564,9 +564,9 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
     (defaults to 121)
     """
     # Add a last row filled with nan
-    newrow = np.empty((1, arr.shape[1]))
-    newrow[:] = np.nan
-    arr = np.vstack([arr, newrow])
+    newcol = np.empty((arr.shape[0], 1))
+    newcol[:] = np.nan
+    arr = np.hstack([arr, newcol])
 
     nwf = len(df)
 
