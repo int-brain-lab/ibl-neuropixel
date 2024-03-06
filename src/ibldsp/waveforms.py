@@ -216,7 +216,7 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
+def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     """
     Displays a multi-trace waveform in a wiggle traces with negative
     amplitudes filled
@@ -246,11 +246,11 @@ def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     order = np.argsort(y)
     # shift from amplitudes to plotting coordinates
     x_shift, y = y[order].__divmod__(ns + 1)
-    ax.plot(y, x[order] + x_shift + 1, 'k', linewidth=.5)
+    ax.plot(y / fs, x[order] + x_shift + 1, 'k', linewidth=.5)
     x[x > 0] = np.nan
     x = x[order] + x_shift + 1
-    ax.fill(y, x, 'k', aa=True)
-    ax.set(xlim=[0, ns], ylim=[0, nc], xlabel='sample', ylabel='trace')
+    ax.fill(y / fs, x, 'k', aa=True)
+    ax.set(xlim=[0, ns / fs], ylim=[0, nc], xlabel='sample', ylabel='trace')
     plt.tight_layout()
     return ax
 
