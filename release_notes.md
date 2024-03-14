@@ -1,3 +1,7 @@
+# 0.10.0
+## 0.10.0 2024-03-14
+-  add support for online spikeglx reader
+
 # 0.9.0
 ## 0.9.2 2024-02-08
 -   `neurodsp` is now `ibldsp`. Drop-in replacement of the package name is all that is required to update. The `neurodsp` name will disappear on 01-Sep-2024; until then both names will work.

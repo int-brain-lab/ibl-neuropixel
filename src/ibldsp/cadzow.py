@@ -99,7 +99,17 @@ def denoise(WAV, x, y, r, imax=None, niter=1):
     return WAV_
 
 
-def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None, ovx=int(16), nswx=int(32), npad=int(0)):
+def cadzow_np1(
+    wav,
+    fs=30000,
+    rank=5,
+    niter=1,
+    fmax=7500,
+    h=None,
+    ovx=int(16),
+    nswx=int(32),
+    npad=int(0),
+):
     """
     Apply Fxy rank-denoiser to a full recording of Neuropixel 1 probe geometry
     ntr - nswx has to be a multiple of (nswx - ovx)
@@ -124,11 +134,19 @@ def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None, ovx=int(16), n
     imax = np.searchsorted(fscale, fmax)
     WAV = scipy.fft.rfft(wav[:, :])
     padgain = scipy.signal.windows.hann(npad * 2)[:npad]
-    WAV = np.r_[np.flipud(WAV[1:npad + 1, :]) * padgain[:, np.newaxis],
-                WAV,
-                np.flipud(WAV[-npad - 2: - 1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis]]  # apply padding
-    x = np.r_[np.flipud(h['x'][1:npad + 1]), h['x'], np.flipud(h['x'][-npad - 2: - 1])]
-    y = np.r_[np.flipud(h['y'][1:npad + 1]) - 120, h['y'], np.flipud(h['y'][-npad - 2: - 1]) + 120]
+    WAV = np.r_[
+        np.flipud(WAV[1 : npad + 1, :]) * padgain[:, np.newaxis],
+        WAV,
+        np.flipud(WAV[-npad - 2 : -1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis],
+    ]  # apply padding
+    x = np.r_[
+        np.flipud(h["x"][1 : npad + 1]), h["x"], np.flipud(h["x"][-npad - 2 : -1])
+    ]
+    y = np.r_[
+        np.flipud(h["y"][1 : npad + 1]) - 120,
+        h["y"],
+        np.flipud(h["y"][-npad - 2 : -1]) + 120,
+    ]
     WAV_ = np.zeros_like(WAV)
     gain = np.zeros(ntr + npad * 2 + 1)
     hanning = scipy.signal.windows.hann(ovx * 2 - 1)[0:ovx]
@@ -144,9 +162,11 @@ def cadzow_np1(wav, fs=30000, rank=5, niter=1, fmax=7500, h=None, ovx=int(16), n
             gw = gain_window
         gain[firstx:lastx] += gw
         array = WAV[firstx:lastx, :]
-        array = denoise(array, x=x[firstx:lastx], y=y[firstx:lastx], r=rank, imax=imax, niter=niter)
+        array = denoise(
+            array, x=x[firstx:lastx], y=y[firstx:lastx], r=rank, imax=imax, niter=niter
+        )
         WAV_[firstx:lastx, :] += array * gw[:, np.newaxis]
 
-    WAV_ = WAV_[npad:-npad - 1]  # remove padding
+    WAV_ = WAV_[npad : -npad - 1]  # remove padding
     wav_ = scipy.fft.irfft(WAV_)
     return wav_

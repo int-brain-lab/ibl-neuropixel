@@ -620,6 +620,9 @@ class TestNameDeprecationDate(unittest.TestCase):
         # `neurodsp` package at the top level of the ibl-neuropixel
         # repository
         import datetime
+
         if datetime.datetime.now() > datetime.datetime(2024, 9, 1):
-            raise NotImplementedError("neurodsp will not longer be supported. "
-                                      "Change all references to ibldsp.")
+            raise NotImplementedError(
+                "neurodsp will not longer be supported. "
+                "Change all references to ibldsp."
+            )

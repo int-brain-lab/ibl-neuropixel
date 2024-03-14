@@ -6,7 +6,6 @@ from ibldsp.fourier import fshift, channel_shift
 
 
 class TestFourierAlignmentGpuCpuParity(unittest.TestCase):
-
     def test_parity(self):
         N_TIMES = 65600
         N_CHANNELS = 384

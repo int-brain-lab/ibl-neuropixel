@@ -9,34 +9,37 @@ from iblutil.io import hashfile
 import neuropixel
 import spikeglx
 
-TEST_PATH = Path(__file__).parent.joinpath('fixtures')
+TEST_PATH = Path(__file__).parent.joinpath("fixtures")
 
 
 class TestSpikeGLX_hardwareInfo(unittest.TestCase):
-
     def setUp(self) -> None:
         self.workdir = TEST_PATH
-        self.map3A = {'left_camera': 2,
-                      'right_camera': 3,
-                      'body_camera': 4,
-                      'bpod': 7,
-                      'frame2ttl': 12,
-                      'rotary_encoder_0': 13,
-                      'rotary_encoder_1': 14,
-                      'audio': 15}
-        self.map3B = {'left_camera': 0,
-                      'right_camera': 1,
-                      'body_camera': 2,
-                      'imec_sync': 3,
-                      'frame2ttl': 4,
-                      'rotary_encoder_0': 5,
-                      'rotary_encoder_1': 6,
-                      'audio': 7,
-                      'bpod': 16,
-                      'laser': 17,
-                      'laser_ttl': 18}
-        self.file3a = self.workdir / 'sample3A_g0_t0.imec.wiring.json'
-        self.file3b = self.workdir / 'sample3B_g0_t0.nidq.wiring.json'
+        self.map3A = {
+            "left_camera": 2,
+            "right_camera": 3,
+            "body_camera": 4,
+            "bpod": 7,
+            "frame2ttl": 12,
+            "rotary_encoder_0": 13,
+            "rotary_encoder_1": 14,
+            "audio": 15,
+        }
+        self.map3B = {
+            "left_camera": 0,
+            "right_camera": 1,
+            "body_camera": 2,
+            "imec_sync": 3,
+            "frame2ttl": 4,
+            "rotary_encoder_0": 5,
+            "rotary_encoder_1": 6,
+            "audio": 7,
+            "bpod": 16,
+            "laser": 17,
+            "laser_ttl": 18,
+        }
+        self.file3a = self.workdir / "sample3A_g0_t0.imec.wiring.json"
+        self.file3b = self.workdir / "sample3B_g0_t0.nidq.wiring.json"
 
     def test_get_wiring(self):
         # get params providing full file path
@@ -54,7 +57,7 @@ class TestSpikeGLX_hardwareInfo(unittest.TestCase):
 
     def test_get_channel_map(self):
         with tempfile.TemporaryDirectory() as tdir:
-            self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / 'idontexist.json'))
+            self.assertIsNone(spikeglx.get_sync_map(Path(tdir) / "idontexist.json"))
 
 
 class TestSpikeGLX_glob_ephys(unittest.TestCase):
@@ -76,6 +79,7 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
             ├── sync_testing_g0_t0.imec1.ap.bin
             └── sync_testing_g0_t0.imec1.lf.bin
     """
+
     def setUp(self):
         def touchfile(p):
             if isinstance(p, Path):
@@ -83,52 +87,74 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
                     p.parent.mkdir(exist_ok=True, parents=True)
                     p.touch(exist_ok=True)
                 except Exception:
-                    print('tutu')
+                    print("tutu")
 
         def create_tree(root_dir, dico):
             root_dir.mkdir(exist_ok=True, parents=True)
             for ldir in dico:
                 for k in ldir:
-                    if k == 'path' or k == 'label':
+                    if k == "path" or k == "label":
                         continue
                     touchfile(ldir[k])
-                    Path(ldir[k]).with_suffix('.meta').touch()
+                    Path(ldir[k]).with_suffix(".meta").touch()
 
-        self.tmpdir = Path(tempfile.gettempdir()) / 'test_glob_ephys'
+        self.tmpdir = Path(tempfile.gettempdir()) / "test_glob_ephys"
         self.tmpdir.mkdir(exist_ok=True)
-        self.dir3a = self.tmpdir.joinpath('3A').joinpath('raw_ephys_data')
-        self.dir3b = self.tmpdir.joinpath('3B').joinpath('raw_ephys_data')
-        self.dict3a = [{'label': 'imec0',
-                        'ap': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.ap.bin',
-                        'lf': self.dir3a / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
-                        'path': self.dir3a / 'imec0'},
-                       {'label': 'imec1',
-                        'ap': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3a / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
-                        'path': self.dir3a / 'imec1'}]
+        self.dir3a = self.tmpdir.joinpath("3A").joinpath("raw_ephys_data")
+        self.dir3b = self.tmpdir.joinpath("3B").joinpath("raw_ephys_data")
+        self.dict3a = [
+            {
+                "label": "imec0",
+                "ap": self.dir3a / "imec0" / "sync_testing_g0_t0.imec0.ap.bin",
+                "lf": self.dir3a / "imec0" / "sync_testing_g0_t0.imec0.lf.bin",
+                "path": self.dir3a / "imec0",
+            },
+            {
+                "label": "imec1",
+                "ap": self.dir3a / "imec1" / "sync_testing_g0_t0.imec1.ap.bin",
+                "lf": self.dir3a / "imec1" / "sync_testing_g0_t0.imec1.lf.bin",
+                "path": self.dir3a / "imec1",
+            },
+        ]
         # surprise ! one of them happens to be compressed
-        self.dict3b = [{'label': 'imec0',
-                        'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.cbin',
-                        'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.bin',
-                        'path': self.dir3b / 'imec0'},
-                       {'label': 'imec1',
-                        'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.bin',
-                        'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.bin',
-                        'path': self.dir3b / 'imec1'},
-                       {'label': '',
-                        'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.bin',
-                        'path': self.dir3b}]
-        self.dict3b_ch = [{'label': 'imec0',
-                           'ap': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.ap.ch',
-                           'lf': self.dir3b / 'imec0' / 'sync_testing_g0_t0.imec0.lf.ch',
-                           'path': self.dir3b / 'imec0'},
-                          {'label': 'imec1',
-                           'ap': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.ap.ch',
-                           'lf': self.dir3b / 'imec1' / 'sync_testing_g0_t0.imec1.lf.ch',
-                           'path': self.dir3b / 'imec1'},
-                          {'label': '',
-                           'nidq': self.dir3b / 'sync_testing_g0_t0.nidq.ch',
-                           'path': self.dir3b}]
+        self.dict3b = [
+            {
+                "label": "imec0",
+                "ap": self.dir3b / "imec0" / "sync_testing_g0_t0.imec0.ap.cbin",
+                "lf": self.dir3b / "imec0" / "sync_testing_g0_t0.imec0.lf.bin",
+                "path": self.dir3b / "imec0",
+            },
+            {
+                "label": "imec1",
+                "ap": self.dir3b / "imec1" / "sync_testing_g0_t0.imec1.ap.bin",
+                "lf": self.dir3b / "imec1" / "sync_testing_g0_t0.imec1.lf.bin",
+                "path": self.dir3b / "imec1",
+            },
+            {
+                "label": "",
+                "nidq": self.dir3b / "sync_testing_g0_t0.nidq.bin",
+                "path": self.dir3b,
+            },
+        ]
+        self.dict3b_ch = [
+            {
+                "label": "imec0",
+                "ap": self.dir3b / "imec0" / "sync_testing_g0_t0.imec0.ap.ch",
+                "lf": self.dir3b / "imec0" / "sync_testing_g0_t0.imec0.lf.ch",
+                "path": self.dir3b / "imec0",
+            },
+            {
+                "label": "imec1",
+                "ap": self.dir3b / "imec1" / "sync_testing_g0_t0.imec1.ap.ch",
+                "lf": self.dir3b / "imec1" / "sync_testing_g0_t0.imec1.lf.ch",
+                "path": self.dir3b / "imec1",
+            },
+            {
+                "label": "",
+                "nidq": self.dir3b / "sync_testing_g0_t0.nidq.ch",
+                "path": self.dir3b,
+            },
+        ]
         create_tree(self.dir3a, self.dict3a)
         create_tree(self.dir3b, self.dict3b)
         create_tree(self.dir3b, self.dict3b_ch)
@@ -136,36 +162,41 @@ class TestSpikeGLX_glob_ephys(unittest.TestCase):
     def test_glob_ephys(self):
         def dict_equals(d1, d2):
             return all([x in d1 for x in d2]) and all([x in d2 for x in d1])
+
         ef3b = spikeglx.glob_ephys_files(self.dir3b)
         ef3a = spikeglx.glob_ephys_files(self.dir3a)
-        ef3b_ch = spikeglx.glob_ephys_files(self.dir3b, ext='ch')
+        ef3b_ch = spikeglx.glob_ephys_files(self.dir3b, ext="ch")
         # test glob
         self.assertTrue(dict_equals(self.dict3a, ef3a))
         self.assertTrue(dict_equals(self.dict3b, ef3b))
         self.assertTrue(dict_equals(self.dict3b_ch, ef3b_ch))
         # test the version from glob
-        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3a) == '3A')
-        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3b) == '3B')
+        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3a) == "3A")
+        self.assertTrue(spikeglx.get_neuropixel_version_from_files(ef3b) == "3B")
         # test the version from paths
-        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3a) == '3A')
-        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3b) == '3B')
-        self.dir3b.joinpath('imec1', 'sync_testing_g0_t0.imec1.ap.bin').unlink()
-        self.assertEqual(spikeglx.glob_ephys_files(self.dir3b.joinpath('imec1')), [])
+        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3a) == "3A")
+        self.assertTrue(spikeglx.get_neuropixel_version_from_folder(self.dir3b) == "3B")
+        self.dir3b.joinpath("imec1", "sync_testing_g0_t0.imec1.ap.bin").unlink()
+        self.assertEqual(spikeglx.glob_ephys_files(self.dir3b.joinpath("imec1")), [])
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
 
 
 class TestsSpikeGLX_compress(unittest.TestCase):
-
     def setUp(self):
         self._tempdir = tempfile.TemporaryDirectory()
         # self.addClassCleanup(self._tempdir.cleanup)  # py3.8
         self.workdir = Path(self._tempdir.name)
-        file_meta = TEST_PATH.joinpath('sample3A_short_g0_t0.imec.ap.meta')
+        file_meta = TEST_PATH.joinpath("sample3A_short_g0_t0.imec.ap.meta")
         self.file_bin = spikeglx._mock_spikeglx_file(
-            self.workdir.joinpath('sample3A_short_g0_t0.imec.ap.bin'), file_meta, ns=76104,
-            nc=385, sync_depth=16, random=True)['bin_file']
+            self.workdir.joinpath("sample3A_short_g0_t0.imec.ap.bin"),
+            file_meta,
+            ns=76104,
+            nc=385,
+            sync_depth=16,
+            random=True,
+        )["bin_file"]
         self.sr = spikeglx.Reader(self.file_bin)
         assert self.sr._raw is not None
         assert self.sr.is_open
@@ -176,7 +207,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
 
     def test_read_slices(self):
         sr = self.sr
-        s2mv = sr.channel_conversion_sample2v['ap'][0]
+        s2mv = sr.channel_conversion_sample2v["ap"][0]
         # test the slicing of reader object
         self.assertTrue(np.all(np.isclose(sr._raw[5:500, :-1] * s2mv, sr[5:500, :-1])))
         self.assertTrue(np.all(np.isclose(sr._raw[5:500, 5] * s2mv, sr[5:500, 5])))
@@ -186,7 +217,6 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
 
     def test_compress(self):
-
         def compare_data(sr0, sr1):
             # test direct reading through memmap / mtscompreader
             self.assertTrue(np.all(sr0._raw[1200:1210, 12] == sr1._raw[1200:1210, 12]))
@@ -201,10 +231,12 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.sr.close()
 
         # create a reference file that will serve to compare for inplace operations
-        ref_file = self.file_bin.parent.joinpath('REF_' + self.file_bin.name)
-        ref_meta = self.file_bin.parent.joinpath('REF_' + self.file_bin.with_suffix('.meta').name)
+        ref_file = self.file_bin.parent.joinpath("REF_" + self.file_bin.name)
+        ref_meta = self.file_bin.parent.joinpath(
+            "REF_" + self.file_bin.with_suffix(".meta").name
+        )
         shutil.copy(self.file_bin, ref_file)
-        shutil.copy(self.file_bin.with_suffix('.meta'), ref_meta)
+        shutil.copy(self.file_bin.with_suffix(".meta"), ref_meta)
 
         # test file compression copy
         with spikeglx.Reader(ref_file, open=False) as sr_ref:
@@ -227,11 +259,10 @@ class TestsSpikeGLX_compress(unittest.TestCase):
 
 
 class TestsSpikeGLX_Meta(unittest.TestCase):
-
     def setUp(self):
         self.workdir = TEST_PATH
-        self.meta_files = list(Path.glob(self.workdir, '*.meta'))
-        self.tmpdir = Path(tempfile.gettempdir()) / 'test_meta'
+        self.meta_files = list(Path.glob(self.workdir, "*.meta"))
+        self.tmpdir = Path(tempfile.gettempdir()) / "test_meta"
         self.tmpdir.mkdir(exist_ok=True)
 
     def tearDown(self) -> None:
@@ -239,115 +270,154 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def test_fix_meta_file(self):
         # test the case where the meta file shows a larger amount of samples
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3a = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sample3A_g0_t0.imec.ap.bin'),
-                self.workdir / 'sample3A_g0_t0.imec.ap.meta', ns=32, nc=385, sync_depth=16)
-            with open(bin_3a['bin_file'], 'wb') as fp:
+                Path(tdir).joinpath("sample3A_g0_t0.imec.ap.bin"),
+                self.workdir / "sample3A_g0_t0.imec.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
+            with open(bin_3a["bin_file"], "wb") as fp:
                 np.random.randint(-20000, 20000, 385 * 22, dtype=np.int16).tofile(fp)
-            with spikeglx.Reader(bin_3a['bin_file'], open=False) as sr:
-                verifiable = sr.meta['fileTimeSecs'] * 30000
+            with spikeglx.Reader(bin_3a["bin_file"], open=False) as sr:
+                verifiable = sr.meta["fileTimeSecs"] * 30000
             self.assertEqual(verifiable, 22)
 
     def test_read_corrupt(self):
         # nidq has 1 analog and 1 digital sync channels
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             int2volts = 5 / 32768
             nidq = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sample3B_g0_t0.nidq.bin'),
-                self.workdir / 'sample3B_g0_t0.nidq.meta',
-                ns=32, nc=2, sync_depth=8, int2volts=int2volts, corrupt=True)
+                Path(tdir).joinpath("sample3B_g0_t0.nidq.bin"),
+                self.workdir / "sample3B_g0_t0.nidq.meta",
+                ns=32,
+                nc=2,
+                sync_depth=8,
+                int2volts=int2volts,
+                corrupt=True,
+            )
             self.assert_read_glx(nidq)
 
     def test_read_nidq(self):
         # nidq has 1 analog and 1 digital sync channels
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             int2volts = 5 / 32768
             nidq = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sample3B_g0_t0.nidq.bin'),
-                self.workdir / 'sample3B_g0_t0.nidq.meta',
-                ns=32, nc=2, sync_depth=8, int2volts=int2volts)
+                Path(tdir).joinpath("sample3B_g0_t0.nidq.bin"),
+                self.workdir / "sample3B_g0_t0.nidq.meta",
+                ns=32,
+                nc=2,
+                sync_depth=8,
+                int2volts=int2volts,
+            )
             self.assert_read_glx(nidq)
 
     def test_read_geometry_new_version_2023_04(self):
-        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3B_version202304.ap.meta'))
-        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        g_new = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3B_version202304.ap.meta")
+        )
+        g_old = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta")
+        )
         for k in g_old.keys():
-            if k == 'flag':
+            if k == "flag":
                 continue
             np.testing.assert_array_equal(g_new[k], g_old[k])
 
     def test_read_geometry(self):
-
-        g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        g = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta")
+        )
         sizes = np.array([g[k].size for k in g])
         np.testing.assert_array_equal(sizes, 384)
 
-        g = spikeglx.read_geometry(Path(TEST_PATH).joinpath('sample3A_376_channels.ap.meta'))
+        g = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3A_376_channels.ap.meta")
+        )
         sizes = np.array([g[k].size for k in g])
         np.testing.assert_array_equal(sizes, 276)
 
     def test_read_3A(self):
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3a = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sample3A_g0_t0.imec.ap.bin'),
-                self.workdir / 'sample3A_g0_t0.imec.ap.meta',
-                ns=32, nc=385, sync_depth=16)
+                Path(tdir).joinpath("sample3A_g0_t0.imec.ap.bin"),
+                self.workdir / "sample3A_g0_t0.imec.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
             self.assert_read_glx(bin_3a)
 
     def test_read_3B(self):
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sample3B_g0_t0.imec1.ap.bin'),
-                self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-                ns=32, nc=385, sync_depth=16)
+                Path(tdir).joinpath("sample3B_g0_t0.imec1.ap.bin"),
+                self.workdir / "sample3B_g0_t0.imec1.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
             self.assert_read_glx(bin_3b)
 
     def test_read_NP21(self):
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sampleNP2.1_g0_t0.imec.ap.bin'),
-                self.workdir / 'sampleNP2.1_g0_t0.imec.ap.meta',
-                ns=32, nc=385, sync_depth=16)
+                Path(tdir).joinpath("sampleNP2.1_g0_t0.imec.ap.bin"),
+                self.workdir / "sampleNP2.1_g0_t0.imec.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
             self.assert_read_glx(bin_3b)
 
     def test_read_NP24(self):
-        with tempfile.TemporaryDirectory(prefix='glx_test') as tdir:
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath('sampleNP2.4_4shanks_g0_t0.imec.ap.bin'),
-                self.workdir / 'sampleNP2.4_4shanks_g0_t0.imec.ap.meta',
-                ns=32, nc=385, sync_depth=16)
+                Path(tdir).joinpath("sampleNP2.4_4shanks_g0_t0.imec.ap.bin"),
+                self.workdir / "sampleNP2.4_4shanks_g0_t0.imec.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
             self.assert_read_glx(bin_3b)
 
     def test_check_ephys_file(self):
-        self.tdir = tempfile.TemporaryDirectory(prefix='glx_test')
+        self.tdir = tempfile.TemporaryDirectory(prefix="glx_test")
         self.addCleanup(self.tdir.cleanup)
         bin_3b = spikeglx._mock_spikeglx_file(
-            Path(self.tdir.name).joinpath('sample3B_g0_t0.imec1.ap.bin'),
-            self.workdir / 'sample3B_g0_t0.imec1.ap.meta',
-            ns=32, nc=385, sync_depth=16)
-        self.assertEqual(hashfile.md5(bin_3b['bin_file']), "207ba1666b866a091e5bb8b26d19733f")
-        self.assertEqual(hashfile.sha1(bin_3b['bin_file']),
-                         '1bf3219c35dea15409576f6764dd9152c3f8a89c')
-        sr = spikeglx.Reader(bin_3b['bin_file'], open=False)
+            Path(self.tdir.name).joinpath("sample3B_g0_t0.imec1.ap.bin"),
+            self.workdir / "sample3B_g0_t0.imec1.ap.meta",
+            ns=32,
+            nc=385,
+            sync_depth=16,
+        )
+        self.assertEqual(
+            hashfile.md5(bin_3b["bin_file"]), "207ba1666b866a091e5bb8b26d19733f"
+        )
+        self.assertEqual(
+            hashfile.sha1(bin_3b["bin_file"]),
+            "1bf3219c35dea15409576f6764dd9152c3f8a89c",
+        )
+        sr = spikeglx.Reader(bin_3b["bin_file"], open=False)
         self.assertTrue(sr.verify_hash())
 
     def assert_read_glx(self, tglx):
-        with spikeglx.Reader(tglx['bin_file']) as sr:
-            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx['D']
-            d, sync = sr.read_samples(0, tglx['ns'])
+        with spikeglx.Reader(tglx["bin_file"]) as sr:
+            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx["D"]
+            d, sync = sr.read_samples(0, tglx["ns"])
             # could be rounding errors with non-integer sampling rates
             self.assertTrue(sr.nsync == 1)
             self.assertTrue(sr.rl == sr.ns / sr.fs)
-            self.assertTrue(sr.nc == tglx['nc'])
-            self.assertTrue(sr.ns == tglx['ns'])
+            self.assertTrue(sr.nc == tglx["nc"])
+            self.assertTrue(sr.ns == tglx["ns"])
             # test the data reading with gain
             self.assertTrue(np.all(np.isclose(dexpected, d)))
             # test the sync reading, one front per channel
-            self.assertTrue(np.sum(sync) == tglx['sync_depth'])
-            for m in np.arange(tglx['sync_depth']):
+            self.assertTrue(np.sum(sync) == tglx["sync_depth"])
+            for m in np.arange(tglx["sync_depth"]):
                 self.assertTrue(sync[m + 1, m] == 1)
-            if sr.type in ['ap', 'lf']:  # exclude nidq from the slicing circus
+            if sr.type in ["ap", "lf"]:  # exclude nidq from the slicing circus
                 # teast reading only one channel
                 d, _ = sr.read(slice(None), 10)
                 self.assertTrue(np.all(np.isclose(d, dexpected[:, 10])))
@@ -389,23 +459,25 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test the channel geometries but skip when meta data doesn't correspond to NP
             if sr.major_version is not None:
                 th = sr.geometry
-                h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
+                h = neuropixel.trace_header(
+                    sr.major_version, nshank=np.unique(th["shank"]).size
+                )
                 for k in h.keys():
-                    assert (np.all(th[k] == h[k])), print(k)
+                    assert np.all(th[k] == h[k]), print(k)
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
         high_expectations = {
-            'sample3A_g0_t0.imec.ap.meta': 641251510,
-            'sample3A_g0_t0.imec.lf.meta': 641251510,
-            'sample3A_short_g0_t0.imec.ap.meta': 641251510,
-            'sample3B2_exported.imec0.ap.meta': 17216703352,
-            'sample3B_g0_t0.imec1.ap.meta': 18005116811,
-            'sample3B_g0_t0.imec1.lf.meta': 18005116811,
-            'sample3B_g0_t0.nidq.meta': None,
-            'sampleNP2.1_g0_t0.imec.ap.meta': 19011116954,
-            'sampleNP2.4_1shank_g0_t0.imec.ap.meta': 20403308181,
-            'sampleNP2.4_4shanks_g0_t0.imec.ap.meta': 19011110513,
+            "sample3A_g0_t0.imec.ap.meta": 641251510,
+            "sample3A_g0_t0.imec.lf.meta": 641251510,
+            "sample3A_short_g0_t0.imec.ap.meta": 641251510,
+            "sample3B2_exported.imec0.ap.meta": 17216703352,
+            "sample3B_g0_t0.imec1.ap.meta": 18005116811,
+            "sample3B_g0_t0.imec1.lf.meta": 18005116811,
+            "sample3B_g0_t0.nidq.meta": None,
+            "sampleNP2.1_g0_t0.imec.ap.meta": 19011116954,
+            "sampleNP2.4_1shank_g0_t0.imec.ap.meta": 20403308181,
+            "sampleNP2.4_4shanks_g0_t0.imec.ap.meta": 19011110513,
         }
         for meta_data_file in self.meta_files:
             with self.subTest(meta_data_file=meta_data_file):
@@ -416,11 +488,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
-
             md = spikeglx.read_meta_data(meta_data_file)
             self.assertTrue(len(md.keys()) >= 37)
 
-            if meta_data_file.name.split('.')[-2] in ['lf', 'ap']:
+            if meta_data_file.name.split(".")[-2] in ["lf", "ap"]:
                 # for ap and lf look for version number
                 # test getting revision
                 revision = meta_data_file.name[6:8]
@@ -429,58 +500,66 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 print(revision, minor, major)
                 self.assertEqual(minor, revision)
                 # test the major version
-                if revision.startswith('3'):
+                if revision.startswith("3"):
                     assert major == 1
                 else:
                     assert np.floor(major) == 2
             # test getting acquisition type for all ap, lf and nidq
-            type = meta_data_file.name.split('.')[-2]
+            type = meta_data_file.name.split(".")[-2]
             self.assertEqual(spikeglx._get_type_from_meta(md), type)
 
     def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
-            if meta_data_file.name.split('.')[-2] not in ['lf', 'ap']:
+            if meta_data_file.name.split(".")[-2] not in ["lf", "ap"]:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
             cg = spikeglx._conversion_sample2v_from_meta(md)
-            if 'NP2' in spikeglx._get_neuropixel_version_from_meta(md):
-                i2v = md.get('imAiRangeMax') / int(md.get('imMaxInt'))
-                self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 80))
-                self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 80))
+            if "NP2" in spikeglx._get_neuropixel_version_from_meta(md):
+                i2v = md.get("imAiRangeMax") / int(md.get("imMaxInt"))
+                self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 80))
+                self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 80))
             else:
-                i2v = md.get('imAiRangeMax') / 512
-                self.assertTrue(np.all(cg['lf'][0:-1] == i2v / 250))
-                self.assertTrue(np.all(cg['ap'][0:-1] == i2v / 500))
+                i2v = md.get("imAiRangeMax") / 512
+                self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 250))
+                self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 500))
             # also test consistent dimension with nchannels
             nc = spikeglx._get_nchannels_from_meta(md)
-            self.assertTrue(len(cg['ap']) == len(cg['lf']) == nc)
+            self.assertTrue(len(cg["ap"]) == len(cg["lf"]) == nc)
 
     def testGetAnalogSyncIndex(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
-            if spikeglx._get_type_from_meta(md) in ['ap', 'lf']:
-                self.assertTrue(spikeglx._get_analog_sync_trace_indices_from_meta(md) == [])
+            if spikeglx._get_type_from_meta(md) in ["ap", "lf"]:
+                self.assertTrue(
+                    spikeglx._get_analog_sync_trace_indices_from_meta(md) == []
+                )
             else:
-                self.assertEqual(spikeglx._get_analog_sync_trace_indices_from_meta(md), [0])
+                self.assertEqual(
+                    spikeglx._get_analog_sync_trace_indices_from_meta(md), [0]
+                )
 
     def testReadChannelGainNIDQ(self):
         for meta_data_file in self.meta_files:
-            if meta_data_file.name.split('.')[-2] not in ['nidq']:
+            if meta_data_file.name.split(".")[-2] not in ["nidq"]:
                 continue
             md = spikeglx.read_meta_data(meta_data_file)
             nc = spikeglx._get_nchannels_from_meta(md)
             cg = spikeglx._conversion_sample2v_from_meta(md)
-            i2v = md.get('niAiRangeMax') / 32768
-            self.assertTrue(np.all(cg['nidq'][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v))
-            self.assertTrue(np.all(cg['nidq'][slice(int(np.sum(md.acqMnMaXaDw[-1])), None)] == 1.))
-            self.assertTrue(len(cg['nidq']) == nc)
+            i2v = md.get("niAiRangeMax") / 32768
+            self.assertTrue(
+                np.all(cg["nidq"][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v)
+            )
+            self.assertTrue(
+                np.all(cg["nidq"][slice(int(np.sum(md.acqMnMaXaDw[-1])), None)] == 1.0)
+            )
+            self.assertTrue(len(cg["nidq"]) == nc)
 
     def testReadChannelMap(self):
         for meta_data_file in self.meta_files:
             md = spikeglx.read_meta_data(meta_data_file)
             cm = spikeglx._map_channels_from_meta(md)
-            if 'snsShankMap' in md.keys():
-                self.assertEqual(set(cm.keys()), set(['shank', 'col', 'row', 'flag']))
+            if "snsShankMap" in md.keys():
+                self.assertEqual(set(cm.keys()), set(["shank", "col", "row", "flag"]))
 
     def testSplitSyncTrace(self):
         sc = np.uint16(2 ** np.linspace(-1, 15, 17))
@@ -501,14 +580,16 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
     def testSaveSubset(self):
         chns = np.r_[np.arange(0, 11), np.arange(50, 91), 384]
         subset = spikeglx._get_savedChans_subset(chns)
-        self.assertEqual(subset, '0:10,50:90,384')
+        self.assertEqual(subset, "0:10,50:90,384")
 
         chns = np.r_[np.arange(30, 101), np.arange(250, 301), 384]
         subset = spikeglx._get_savedChans_subset(chns)
-        self.assertEqual(subset, '30:100,250:300,384')
+        self.assertEqual(subset, "30:100,250:300,384")
 
     def test_write_meta_file(self):
-        meta = spikeglx.read_meta_data(Path(TEST_PATH).joinpath('sample3A_g0_t0.imec.ap.meta'))
+        meta = spikeglx.read_meta_data(
+            Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta")
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_meta = Path(tmpdir) / "sample.meta"
             spikeglx.write_meta_data(meta, temp_meta)
@@ -520,10 +601,11 @@ class TestsBasicReader(unittest.TestCase):
     """
     Tests the basic usage where there is a flat binary and no metadata associated
     """
+
     def test_read_flat_binary_float32(self):
         # here we expect no scaling to V applied and no sync trace as the format is float32
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
-        data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
+        data = np.random.randn(kwargs["ns"], kwargs["nc"]).astype(np.float32)
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_bin = Path(tmpdir) / "sample.bin"
             with open(temp_bin, "w") as fp:
@@ -539,7 +621,7 @@ class TestsBasicReader(unittest.TestCase):
         kwargs = dict(ns=60000, nc=385, fs=30000, dtype=np.int16)
         s2v = np.ones(385) * neuropixel.S2V_AP
         s2v[-1] = 1
-        data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
+        data = np.random.randn(kwargs["ns"], kwargs["nc"]) / s2v
         data[:, -1] = 1
         data = data.astype(np.int16)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -553,7 +635,10 @@ class TestsBasicReader(unittest.TestCase):
                         print(sr.shape, kw)
                         assert sr.nsync == 1
                         np.testing.assert_allclose(
-                            sr[:, :-1], data[:, :-1].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                            sr[:, :-1],
+                            data[:, :-1].astype(np.float32) * neuropixel.S2V_AP,
+                            rtol=1e-5,
+                        )
                         np.testing.assert_array_equal(sr.sample2volts, s2v)
 
     def test_read_flat_binary_int16_no_sync(self):
@@ -561,11 +646,11 @@ class TestsBasicReader(unittest.TestCase):
         np.random.seed(42)
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.int16)
         s2v = np.ones(384) * neuropixel.S2V_AP
-        data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
+        data = np.random.randn(kwargs["ns"], kwargs["nc"]) / s2v
         data = data.astype(np.int16)
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_bin = Path(tmpdir) / "sample.bin"
-            with open(temp_bin, mode='w') as fp:
+            with open(temp_bin, mode="w") as fp:
                 data.tofile(fp)
             # test for both arguments specifed and auto-detection of filesize / nchannels for neuropixel
             for kw in (kwargs, {}):
@@ -573,12 +658,30 @@ class TestsBasicReader(unittest.TestCase):
                     with spikeglx.Reader(temp_bin, **kw) as sr:
                         print(sr.shape, kw)
                         np.testing.assert_allclose(
-                            sr[:, :], data[:, :].astype(np.float32) * neuropixel.S2V_AP, rtol=1e-5)
+                            sr[:, :],
+                            data[:, :].astype(np.float32) * neuropixel.S2V_AP,
+                            rtol=1e-5,
+                        )
                         assert sr.nsync == 0
                         np.testing.assert_array_equal(sr.sample2volts, s2v)
 
     def test_load_meta_file_only(self):
         # here we load only a meta-file
-        meta_file = Path(TEST_PATH).joinpath('sample3B_g0_t0.imec1.ap.meta')
+        meta_file = Path(TEST_PATH).joinpath("sample3B_g0_t0.imec1.ap.meta")
         sr = spikeglx.Reader(meta_file)
         assert sr.shape == (24734244, 385)
+
+
+class TestOnlineSpikeGlxReader(unittest.TestCase):
+    def test_read_current_acquisition(self):
+        file_meta_original = Path(TEST_PATH).joinpath(
+            "sampleNP2.4_4shanks_while_acquiring_incomplete.ap.meta"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            file_meta = Path(td).joinpath("test.ap.meta")
+            shutil.copy(file_meta_original, file_meta)
+            file_ap = file_meta.with_suffix(".bin")
+            np.memmap(file_ap, mode="w+", shape=(300_000, 385), dtype=np.int16)
+            sr = spikeglx.OnlineReader(file_ap)
+            # just try to read the last sample of the bunch
+            assert np.all(sr[299_999, :] == 0)

@@ -22,8 +22,12 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
 
     def _interp_fcn(tsa, tsb, ib):
         # now compute the bpod/fpga drift and precise time shift
-        drift_ppm = np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)[0] * 1e6
-        fcn_a2b = scipy.interpolate.interp1d(tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate")
+        drift_ppm = (
+            np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)[0] * 1e6
+        )
+        fcn_a2b = scipy.interpolate.interp1d(
+            tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
+        )
         return fcn_a2b, drift_ppm
 
     # assert sorted inputs
@@ -34,7 +38,9 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
     y = np.zeros_like(x)
     x[np.int32(np.floor((tsa - tmin) / tbin))] = 1
     y[np.int32(np.floor((tsb - tmin) / tbin))] = 1
-    delta_t = (parabolic_max(scipy.signal.correlate(x, y, mode='full'))[0] - x.shape[0] + 1) * tbin
+    delta_t = (
+        parabolic_max(scipy.signal.correlate(x, y, mode="full"))[0] - x.shape[0] + 1
+    ) * tbin
     # do a first assignment at a DT threshold
     ib = np.zeros(tsa.shape, dtype=np.int32) - 1
     threshold = tbin
@@ -85,12 +91,16 @@ def parabolic_max(x):
         v010 = x[np.maximum(np.minimum(imax + np.array([-1, 0, 1]), ns - 1), 0)]
         v010 = v010[:, np.newaxis]
     else:
-        v010 = np.vstack((x[..., np.arange(x.shape[0]), np.maximum(imax - 1, 0)],
-                          x[..., np.arange(x.shape[0]), imax],
-                          x[..., np.arange(x.shape[0]), np.minimum(imax + 1, ns - 1)]))
-    poly = np.matmul(.5 * np.array([[1, -2, 1], [-1, 0, 1], [0, 2, 0]]), v010)
-    ipeak = - poly[1] / (poly[0] + np.double(poly[0] == 0)) / 2
-    maxi = poly[2] + ipeak * poly[1] + ipeak ** 2. * poly[0]
+        v010 = np.vstack(
+            (
+                x[..., np.arange(x.shape[0]), np.maximum(imax - 1, 0)],
+                x[..., np.arange(x.shape[0]), imax],
+                x[..., np.arange(x.shape[0]), np.minimum(imax + 1, ns - 1)],
+            )
+        )
+    poly = np.matmul(0.5 * np.array([[1, -2, 1], [-1, 0, 1], [0, 2, 0]]), v010)
+    ipeak = -poly[1] / (poly[0] + np.double(poly[0] == 0)) / 2
+    maxi = poly[2] + ipeak * poly[1] + ipeak**2.0 * poly[0]
     ipeak += imax
     # handle edges
     iedges = np.logical_or(imax == 0, imax == ns - 1)
@@ -133,6 +143,7 @@ def fcn_cosine(bounds, gpu=False):
 
     def _cos(x):
         return (1 - gp.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * gp.pi)) / 2
+
     func = lambda x: _fcn_extrap(x, _cos, bounds)  # noqa
     return func
 
@@ -200,11 +211,13 @@ def rms(x, axis=-1):
     :param axis: (optional, -1)
     :return: numpy array
     """
-    return np.sqrt(np.mean(x ** 2, axis=axis))
+    return np.sqrt(np.mean(x**2, axis=axis))
 
 
-def make_channel_index(geom, radius=200., pad_val=384):
-    neighbors = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) < radius
+def make_channel_index(geom, radius=200.0, pad_val=384):
+    neighbors = (
+        scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) < radius
+    )
     n_nbors = np.max(np.sum(neighbors, 0))
 
     nc = geom.shape[0]
@@ -213,7 +226,7 @@ def make_channel_index(geom, radius=200., pad_val=384):
     channel_idx = np.full((nc, n_nbors), pad_val, dtype=int)
     for c in range(nc):
         ch_idx = np.flatnonzero(neighbors[c, :])
-        channel_idx[c, :ch_idx.shape[0]] = ch_idx
+        channel_idx[c, : ch_idx.shape[0]] = ch_idx
 
     return channel_idx
 
@@ -227,6 +240,7 @@ class WindowGenerator(object):
 
     Example of implementations in test_dsp.py.
     """
+
     def __init__(self, ns, nswin, overlap):
         """
         :param ns: number of sample of the signal along the direction to be windowed
@@ -285,4 +299,6 @@ class WindowGenerator(object):
         :param fs: sampling frequency (Hz)
         :return: time axis scale
         """
-        return np.array([(first + (last - first - 1) / 2) / fs for first, last in self.firstlast])
+        return np.array(
+            [(first + (last - first - 1) / 2) / fs for first, last in self.firstlast]
+        )

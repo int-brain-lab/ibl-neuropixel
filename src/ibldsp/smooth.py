@@ -17,12 +17,12 @@ def lp(ts, fac, pad=0.2):
     """
     # keep at least two periods for the padding
     lpad = int(np.ceil(ts.shape[0] * pad))
-    ts_ = np.pad(ts, lpad, mode='edge')
+    ts_ = np.pad(ts, lpad, mode="edge")
     ts_ = ft.lp(ts_, 1, np.array(fac) / 2)
     return ts_[lpad:-lpad]
 
 
-def rolling_window(x, window_len=11, window='blackman'):
+def rolling_window(x, window_len=11, window="blackman"):
     """
     Smooth the data using a window with requested size.
 
@@ -62,19 +62,21 @@ def rolling_window(x, window_len=11, window='blackman'):
     if window_len < 3:
         return x
 
-    if window not in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError("Window is not one of 'flat', 'hanning', 'hamming',\
-'bartlett', 'blackman'")
+    if window not in ["flat", "hanning", "hamming", "bartlett", "blackman"]:
+        raise ValueError(
+            "Window is not one of 'flat', 'hanning', 'hamming',\
+'bartlett', 'blackman'"
+        )
 
-    s = np.r_[x[window_len - 1:0:-1], x, x[-1:-window_len:-1]]
+    s = np.r_[x[window_len - 1 : 0 : -1], x, x[-1:-window_len:-1]]
     # print(len(s))
-    if window == 'flat':  # moving average
-        w = np.ones(window_len, 'd')
+    if window == "flat":  # moving average
+        w = np.ones(window_len, "d")
     else:
-        w = eval('np.' + window + '(window_len)')
+        w = eval("np." + window + "(window_len)")
 
-    y = np.convolve(w / w.sum(), s, mode='valid')
-    return y[round((window_len / 2 - 1)):round(-(window_len / 2))]
+    y = np.convolve(w / w.sum(), s, mode="valid")
+    return y[round((window_len / 2 - 1)) : round(-(window_len / 2))]
 
 
 def non_uniform_savgol(x, y, window, polynom):
@@ -102,7 +104,7 @@ def non_uniform_savgol(x, y, window, polynom):
     if len(x) != len(y):
         raise ValueError('"x" and "y" must be of the same size')
     if len(x) < window:
-        raise ValueError('The data size must be larger than the window size')
+        raise ValueError("The data size must be larger than the window size")
     if type(window) is not int:
         raise TypeError('"window" must be an integer')
     if window % 2 == 0:
@@ -177,7 +179,7 @@ def non_uniform_savgol(x, y, window, polynom):
     return y_smoothed
 
 
-def smooth_interpolate_savgol(signal, window=31, order=3, interp_kind='cubic'):
+def smooth_interpolate_savgol(signal, window=31, order=3, interp_kind="cubic"):
     """Run savitzy-golay filter on signal, interpolate through nan points.
 
     Parameters
@@ -201,12 +203,20 @@ def smooth_interpolate_savgol(signal, window=31, order=3, interp_kind='cubic'):
     good_idxs = np.where(~np.isnan(signal_noisy_w_nans))[0]
     # perform savitzky-golay filtering on non-nan points
     signal_smooth_nonans = non_uniform_savgol(
-        timestamps[good_idxs], signal_noisy_w_nans[good_idxs], window=window, polynom=order)
+        timestamps[good_idxs],
+        signal_noisy_w_nans[good_idxs],
+        window=window,
+        polynom=order,
+    )
     signal_smooth_w_nans = np.copy(signal_noisy_w_nans)
     signal_smooth_w_nans[good_idxs] = signal_smooth_nonans
     # interpolate nan points
     interpolater = interp1d(
-        timestamps[good_idxs], signal_smooth_nonans, kind=interp_kind, fill_value='extrapolate')
+        timestamps[good_idxs],
+        signal_smooth_nonans,
+        kind=interp_kind,
+        fill_value="extrapolate",
+    )
     signal = interpolater(timestamps)
 
     return signal
