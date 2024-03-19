@@ -357,10 +357,10 @@ class NP2Converter:
 
         for first, last in wg.firstlast:
             chunk_ap = self.sr[first:last, : self.napch].T
-            chunk_ap_sync = self.sr[first:last, self.idxsyncch :].T
+            chunk_ap_sync = self.sr[first:last, self.idxsyncch:].T
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch :].T
+                self.sr[first:last, self.idxsyncch:].T
             )
 
             chunk_ap2save = self._ind2save(
@@ -466,7 +466,7 @@ class NP2Converter:
 
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch :].T
+                self.sr[first:last, self.idxsyncch:].T
             )
 
             chunk_lf2save = self._ind2save(
@@ -670,7 +670,7 @@ class NP2Converter:
                 chunk[:, slice(*ind2save)].T
                 / self.sr.channel_conversion_sample2v[etype][: self.napch],
                 chunk_sync[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
+                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch:],
             ]
         ).astype(np.int16)
 
@@ -686,7 +686,7 @@ class NP2Converter:
         """
 
         chunk[:, : self.samples_taper] *= self.taper[: self.samples_taper]
-        chunk[:, -self.samples_taper :] *= self.taper[self.samples_taper :]
+        chunk[:, -self.samples_taper:] *= self.taper[self.samples_taper:]
         chunk = scipy.signal.sosfiltfilt(self.sos_lp, chunk)
         chunk = chunk[:, :: self.ratio]
         return chunk

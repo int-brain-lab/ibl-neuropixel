@@ -196,7 +196,7 @@ class TestWaveformExtractor(unittest.TestCase):
         # with NaNs
         assert wfs[0, self.channels[0], self.trough_offset] == 1.0
         assert np.all(
-            np.isnan(wfs[0, self.num_channels // 2 + self.channels[0] + 1 :, :])
+            np.isnan(wfs[0, self.num_channels // 2 + self.channels[0] + 1:, :])
         )
 
         for i in range(1, 8):

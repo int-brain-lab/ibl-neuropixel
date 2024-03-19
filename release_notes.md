@@ -1,4 +1,6 @@
 # 0.10.0
+## 0.10.1 2024-03-19
+-  ensure compatibility with spikeglx 202309 metadata coordinates
 ## 0.10.0 2024-03-14
 -  add support for online spikeglx reader
 

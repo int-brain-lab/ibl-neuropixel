@@ -126,7 +126,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         self.sglx_instances.append(sr_four_append)
         assert sr_four_append.ns == 2 * sr_four.ns
         assert np.array_equal(
-            sr_four_append[sr_four.ns :, :], sr_four_append[: sr_four.ns, :]
+            sr_four_append[sr_four.ns:, :], sr_four_append[: sr_four.ns, :]
         )
         assert np.array_equal(sr_four_append[: sr_four.ns, :], sr_four[:, :])
-        assert np.array_equal(sr_four_append[sr_four.ns :, :], sr_four[:, :])
+        assert np.array_equal(sr_four_append[sr_four.ns:, :], sr_four[:, :])

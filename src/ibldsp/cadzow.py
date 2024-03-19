@@ -135,17 +135,15 @@ def cadzow_np1(
     WAV = scipy.fft.rfft(wav[:, :])
     padgain = scipy.signal.windows.hann(npad * 2)[:npad]
     WAV = np.r_[
-        np.flipud(WAV[1 : npad + 1, :]) * padgain[:, np.newaxis],
+        np.flipud(WAV[1: npad + 1, :]) * padgain[:, np.newaxis],
         WAV,
-        np.flipud(WAV[-npad - 2 : -1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis],
+        np.flipud(WAV[-npad - 2: -1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis],
     ]  # apply padding
-    x = np.r_[
-        np.flipud(h["x"][1 : npad + 1]), h["x"], np.flipud(h["x"][-npad - 2 : -1])
-    ]
+    x = np.r_[np.flipud(h["x"][1: npad + 1]), h["x"], np.flipud(h["x"][-npad - 2: -1])]
     y = np.r_[
-        np.flipud(h["y"][1 : npad + 1]) - 120,
+        np.flipud(h["y"][1: npad + 1]) - 120,
         h["y"],
-        np.flipud(h["y"][-npad - 2 : -1]) + 120,
+        np.flipud(h["y"][-npad - 2: -1]) + 120,
     ]
     WAV_ = np.zeros_like(WAV)
     gain = np.zeros(ntr + npad * 2 + 1)
@@ -167,6 +165,6 @@ def cadzow_np1(
         )
         WAV_[firstx:lastx, :] += array * gw[:, np.newaxis]
 
-    WAV_ = WAV_[npad : -npad - 1]  # remove padding
+    WAV_ = WAV_[npad: -npad - 1]  # remove padding
     wav_ = scipy.fft.irfft(WAV_)
     return wav_
