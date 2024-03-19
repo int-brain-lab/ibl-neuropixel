@@ -6,6 +6,9 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy
+from ibldsp.utils import parabolic_max
+from ibldsp.fourier import fshift
 
 
 def _validate_arr_in(arr_in):
@@ -597,3 +600,21 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
         wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
 
     return wfs.swapaxes(1, 2), cind, trough_offset
+
+
+def wave_shift_corrmax(spike, spike2):
+    '''
+    Shift in time (sub-sample) the spike2 onto the spike
+    (For residual subtraction, typically, the spike2 would be the template)
+    :param spike: 1D array of float (e.g. on peak channel); same size as spike2
+    :param spike2: 1D array of float
+    :return: spike_resync: 1D array of float, shift_computed: in time sample (e.g. -4.03)
+    '''
+    # Numpy implementation of correlation centers it in the middle at np.floor(len_sample/2)
+    assert spike.shape[0] == spike2.shape[0]
+    sig_len = spike.shape[0]
+    c = scipy.signal.correlate(spike, spike2, mode='same')
+    ipeak, maxi = parabolic_max(c)
+    shift_computed = (ipeak - np.floor(sig_len / 2)) * -1
+    spike_resync = fshift(spike2, -shift_computed)
+    return spike_resync, shift_computed
