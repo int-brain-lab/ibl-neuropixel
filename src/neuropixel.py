@@ -59,6 +59,8 @@ S2V_LFP = 4.6875e-06
 TIP_SIZE_UM = 200
 NC = 384
 SITES_COORDINATES: np.array
+# channel layouts for neuropixel probes as a function of the major version (1 or 2)
+CHANNEL_GRID = {1: dict(DX=16, X0=11, DY=20, Y0=20), 2: dict(DX=32, X0=27, DY=15, Y0=20)}
 
 
 def _deprecated_sites_coordinates() -> np.array:
@@ -95,12 +97,9 @@ def xy2rc(x, y, version=1):
     :param version: neuropixel major version 1 or 2
     :return: dictionary with keys x and y
     """
-    if version == 1:
-        col = (x - 11) / 16
-        row = (y - 20) / 20
-    elif np.floor(version) == 2:
-        col = x / 32
-        row = y / 15
+    grid = CHANNEL_GRID[np.floor(version)]
+    col = (x - grid['X0']) / grid['DX']
+    row = (y - grid['Y0']) / grid['DY']
     return {"col": col, "row": row}
 
 
@@ -112,12 +111,9 @@ def rc2xy(row, col, version=1):
     :param version: neuropixel major version 1 or 2
     :return: dictionary with keys x and y
     """
-    if version == 1:
-        x = col * 16 + 11
-        y = (row * 20) + 20
-    elif np.floor(version) == 2:
-        x = col * 32
-        y = row * 15
+    grid = CHANNEL_GRID[np.floor(version)]
+    x = col * grid['DX'] + grid['X0']
+    y = row * grid['DY'] + grid['Y0']
     return {"x": x, "y": y}
 
 

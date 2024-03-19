@@ -516,10 +516,10 @@ def _get_neuropixel_version_from_meta(md):
         else:
             return "3B1"
     # Neuropixel 2.0 single shank
-    if prb_type == 21:
+    elif prb_type == 21:
         return "NP2.1"
     # Neuropixel 2.0 four shank
-    if prb_type == 24:
+    elif prb_type == 24 or prb_type == 2013:
         return "NP2.4"
 
 
@@ -600,9 +600,7 @@ def _geometry_from_meta(meta_data):
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
     if cm is None:
-        _logger.warning(
-            "Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults"
-        )
+        _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
         th = neuropixel.trace_header(version=major_version)
         th["flag"] = th["x"] * 0 + 1.0
         return th
@@ -610,18 +608,16 @@ def _geometry_from_meta(meta_data):
     # as of 2023-04 spikeglx stores only x, y coordinates of sites in UM and no col / row. Here
     # we convert to col / row for consistency with previous versions
     if "x" in cm.keys():
-        if (
-            major_version == 1
-        ):  # the spike sorting channel maps have a flipped version of the channel map
+        # the spike sorting channel maps have a flipped version of the channel map
+        # there is a 20um offset between the probe tip and the first site in the coordinate conversion
+        if major_version == 1:
             th["x"] = 70 - (th["x"])
-        th[
-            "y"
-        ] += 20  # there is a 20um offset between the probe tip and the first site in the coordinate conversion
+
+        th["y"] += 20
         th.update(neuropixel.xy2rc(th["x"], th["y"], version=major_version))
     else:
-        if (
-            major_version == 1
-        ):  # the spike sorting channel maps have a flipped version of the channel map
+        # the spike sorting channel maps have a flipped version of the channel map
+        if major_version == 1:
             th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
     th["sample_shift"], th["adc"] = neuropixel.adc_shifts(

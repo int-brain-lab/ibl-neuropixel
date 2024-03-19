@@ -314,16 +314,27 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assert_read_glx(nidq)
 
     def test_read_geometry_new_version_2023_04(self):
-        g_new = spikeglx.read_geometry(
-            Path(TEST_PATH).joinpath("sample3B_version202304.ap.meta")
-        )
-        g_old = spikeglx.read_geometry(
-            Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta")
-        )
-        for k in g_old.keys():
-            if k == "flag":
-                continue
-            np.testing.assert_array_equal(g_new[k], g_old[k])
+        def assert_geom(hnew, href):
+            for k in href.keys():
+                with self.subTest(key=k):
+                    if k == "flag":
+                        continue
+                    np.testing.assert_array_equal(hnew[k], href[k])
+
+        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sample3B_version202304.ap.meta"))
+        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta"))
+        assert_geom(g_new, g_old)
+        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_appVersion20230905.ap.meta"))
+        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_g0_t0.imec.ap.meta"))
+        assert_geom(g_new, g_old)
+        # import matplotlib.pyplot as plt
+        # plt.plot(g_old['x'] + g_old['shank'] * 200, g_new['y'], 'o')
+        # plt.plot(g_new['x'] + g_new['shank'] * 200, g_new['y'], 'o')
+        # plt.axis('equal') # set axis equal
+        # plt.figure()
+        # plt.plot(g_old['col'] + g_old['shank'] * 5, g_new['row'], 'o')
+        # plt.plot(g_new['col'] + g_new['shank'] * 5, g_new['row'], 'o')
+        # plt.axis('equal') # set axis equal
 
     def test_read_geometry(self):
         g = spikeglx.read_geometry(
@@ -488,43 +499,44 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def testGetRevisionAndType(self):
         for meta_data_file in self.meta_files:
-            md = spikeglx.read_meta_data(meta_data_file)
-            self.assertTrue(len(md.keys()) >= 37)
+            with self.subTest(meta_data_file=meta_data_file):
+                md = spikeglx.read_meta_data(meta_data_file)
+                self.assertTrue(len(md.keys()) >= 37)
 
-            if meta_data_file.name.split(".")[-2] in ["lf", "ap"]:
-                # for ap and lf look for version number
-                # test getting revision
-                revision = meta_data_file.name[6:8]
-                minor = spikeglx._get_neuropixel_version_from_meta(md)[0:2]
-                major = spikeglx._get_neuropixel_major_version_from_meta(md)
-                print(revision, minor, major)
-                self.assertEqual(minor, revision)
-                # test the major version
-                if revision.startswith("3"):
-                    assert major == 1
-                else:
-                    assert np.floor(major) == 2
-            # test getting acquisition type for all ap, lf and nidq
-            type = meta_data_file.name.split(".")[-2]
-            self.assertEqual(spikeglx._get_type_from_meta(md), type)
+                if meta_data_file.name.split(".")[-2] in ["lf", "ap"]:
+                    # for ap and lf look for version number
+                    # test getting revision
+                    revision = meta_data_file.name[6:8]
+                    minor = spikeglx._get_neuropixel_version_from_meta(md)[0:2]
+                    major = spikeglx._get_neuropixel_major_version_from_meta(md)
+                    self.assertEqual(minor, revision)
+                    # test the major version
+                    if revision.startswith("3"):
+                        self.assertEqual(major, 1)
+                    else:
+                        self.assertGreaterEqual(major, 2)
+                # test getting acquisition type for all ap, lf and nidq
+                type = meta_data_file.name.split(".")[-2]
+                self.assertEqual(spikeglx._get_type_from_meta(md), type)
 
     def testReadChannelGainAPLF(self):
         for meta_data_file in self.meta_files:
-            if meta_data_file.name.split(".")[-2] not in ["lf", "ap"]:
-                continue
-            md = spikeglx.read_meta_data(meta_data_file)
-            cg = spikeglx._conversion_sample2v_from_meta(md)
-            if "NP2" in spikeglx._get_neuropixel_version_from_meta(md):
-                i2v = md.get("imAiRangeMax") / int(md.get("imMaxInt"))
-                self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 80))
-                self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 80))
-            else:
-                i2v = md.get("imAiRangeMax") / 512
-                self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 250))
-                self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 500))
-            # also test consistent dimension with nchannels
-            nc = spikeglx._get_nchannels_from_meta(md)
-            self.assertTrue(len(cg["ap"]) == len(cg["lf"]) == nc)
+            with self.subTest(meta_data_file=meta_data_file):
+                if meta_data_file.name.split(".")[-2] not in ["lf", "ap"]:
+                    continue
+                md = spikeglx.read_meta_data(meta_data_file)
+                cg = spikeglx._conversion_sample2v_from_meta(md)
+                if "NP2" in spikeglx._get_neuropixel_version_from_meta(md):
+                    i2v = md.get("imAiRangeMax") / int(md.get("imMaxInt"))
+                    self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 80))
+                    self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 80))
+                else:
+                    i2v = md.get("imAiRangeMax") / 512
+                    self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 250))
+                    self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 500))
+                # also test consistent dimension with nchannels
+                nc = spikeglx._get_nchannels_from_meta(md)
+                self.assertTrue(len(cg["ap"]) == len(cg["lf"]) == nc)
 
     def testGetAnalogSyncIndex(self):
         for meta_data_file in self.meta_files:
