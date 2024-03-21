@@ -7,6 +7,8 @@ import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
 from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
+from ibldsp.fourier import fshift
+import scipy
 
 import unittest
 
@@ -235,3 +237,16 @@ class TestWaveformExtractor(unittest.TestCase):
         wfs = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
         wfs_nan = waveforms.extract_wfs_array(arr, self.df, self.channel_neighbors, add_nan_trace=True)
         np.testing.assert_equal(wfs, wfs_nan)
+
+    def test_wave_shift_corrmax(self):
+        sample_shifts = [4.43, -1.0]
+        sig_lens = [100, 101]
+        for sample_shift in sample_shifts:
+            for sig_len in sig_lens:
+                spike = scipy.signal.morlet2(sig_len, 8.0, 2.0)
+                spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+
+                spike2 = fshift(spike, sample_shift)
+                spike3, shift_computed = waveforms.wave_shift_corrmax(spike, spike2)
+
+                np.testing.assert_equal(sample_shift, np.around(shift_computed, decimals=2))
