@@ -618,3 +618,85 @@ def wave_shift_corrmax(spike, spike2):
     shift_computed = (ipeak - np.floor(sig_len / 2)) * -1
     spike_resync = fshift(spike2, -shift_computed)
     return spike_resync, shift_computed
+
+# -------------------------------------------------------------
+# Functions to fit the phase slope, and find the relationship between phase slope and sample shift
+
+def line_fit(x, a, b):  # function to fit a line and get the slope out
+    return a * x + b
+
+
+def get_apf_from2spikes(spike, spike2, fs):
+    fscale = np.fft.rfftfreq(spike.size, 1 / fs)
+    C = np.fft.rfft(spike) * np.conj(np.fft.rfft(spike2))
+
+    # Take the phase for freq at high amplitude, and compute slope
+    amp = np.abs(C)
+    phase = np.unwrap(np.angle(C))
+    return amp, phase, fscale
+
+
+def get_phase_slope(amp, phase, fscale, q=90):
+    # Take 90 percentile of distribution to find high amplitude freq
+    thresh_amp = np.percentile(amp, q)
+    indx_highamp = np.where(amp >= thresh_amp)[0]
+    # Perform linear fit to get the slope
+    popt, _ = scipy.optimize.curve_fit(line_fit, xdata=fscale[indx_highamp], ydata=phase[indx_highamp])
+    a, b = popt
+    return a, b
+
+def fit_phaseshift(phase_slopes, sample_shifts):
+    # Get parameters for the phase slope / sample shift curve
+    popt, _ = scipy.optimize.curve_fit(line_fit, xdata=sample_shifts, ydata=phase_slopes)
+    a, b = popt
+    return a, b
+
+
+def get_phase_from_fit(sample_shifts, a, b):
+    # phases = line_fit(np.abs(sample_shifts), a, b) * np.sign(sample_shifts)
+    phases = line_fit(sample_shifts, a, b)
+    return phases
+
+def get_shift_from_fit(phases, a, b):
+    # Invert the line function: x = (y-b)/a
+    sample_shifts = (phases - b) / a
+    return sample_shifts
+
+def get_spike_slopeparams(spike, fs, num_estim=50):
+    sample_shifts = np.linspace(-1, 1, num=num_estim)
+    phase_slopes = np.empty(shape=sample_shifts.shape)
+
+    for i_shift, sample_shift in enumerate(sample_shifts):
+        spike2 = fshift(spike, sample_shift)
+        # Get amplitude, phase, fscale
+        amp, phase, fscale = get_apf_from2spikes(spike, spike2, fs)
+        # Perform linear fit to get the slope
+        a, b = get_phase_slope(amp, phase, fscale)
+        phase_slopes[i_shift] = a
+
+    a_pslope, b_pslope = fit_phaseshift(phase_slopes, sample_shifts)
+    return a_pslope, b_pslope, sample_shifts, phase_slopes
+
+
+def wave_shift_phase(spike, spike2, fs, a_pos=None, b_pos=None):
+    '''
+    Resynch spike2 onto spike using the phase spectrum's slope
+    (this work perfectly in theory, but does not work well with raw daw sampled at 30kHz!)
+    '''
+    # Get template parameters if not passed in
+    if a_pos is None or b_pos is None:
+        a_pos, b_pos, _, _ = get_spike_slopeparams(spike, fs)
+    # Get amplitude, phase, fscale
+    amp, phase, fscale = get_apf_from2spikes(spike, spike2, fs)
+    # Perform linear fit to get the slope
+    a, b = get_phase_slope(amp, phase, fscale)
+    phase_slope = a
+    # Get sample shift
+    sample_shift = get_shift_from_fit(phase_slope, a_pos, b_pos)
+
+    # Resynch in time given phase slope
+    spike_resync = fshift(spike2, -sample_shift)  # Use negative to re-synch
+    return spike_resync, sample_shift
+
+# End of functions
+# -------------------------------------------------------------

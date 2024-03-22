@@ -250,3 +250,15 @@ class TestWaveformExtractor(unittest.TestCase):
                 spike3, shift_computed = waveforms.wave_shift_corrmax(spike, spike2)
 
                 np.testing.assert_equal(sample_shift, np.around(shift_computed, decimals=2))
+
+    def test_wave_shift_phase(self):
+        fs = 30000
+        # Resynch in time spike2 onto spike
+        sample_shift_original = 0.323
+        spike = scipy.signal.morlet2(100, 8.5, 2.0)
+        spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+        spike = np.append(spike, np.zeros((1, 25)))
+        spike2 = fshift(spike, sample_shift_original)
+        # Resynch
+        spike_resync, sample_shift_applied = waveforms.wave_shift_phase(spike, spike2, fs)
+        np.testing.assert_equal(sample_shift_original, np.around(sample_shift_applied, decimals=3))
