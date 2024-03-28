@@ -171,7 +171,7 @@ def test_weights_all_channels():
 
 def test_generate_waveforms():
     wav = generate_waveform()
-    assert wav.shape == (121, 40)
+    assert wav.shape == (40, 121)
 
 
 class TestWaveformExtractor(unittest.TestCase):

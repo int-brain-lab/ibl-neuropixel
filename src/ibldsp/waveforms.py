@@ -622,6 +622,7 @@ def wave_shift_corrmax(spike, spike2):
 # -------------------------------------------------------------
 # Functions to fit the phase slope, and find the relationship between phase slope and sample shift
 
+
 def line_fit(x, a, b):  # function to fit a line and get the slope out
     return a * x + b
 
@@ -645,6 +646,7 @@ def get_phase_slope(amp, phase, fscale, q=90):
     a, b = popt
     return a, b
 
+
 def fit_phaseshift(phase_slopes, sample_shifts):
     # Get parameters for the phase slope / sample shift curve
     popt, _ = scipy.optimize.curve_fit(line_fit, xdata=sample_shifts, ydata=phase_slopes)
@@ -657,10 +659,12 @@ def get_phase_from_fit(sample_shifts, a, b):
     phases = line_fit(sample_shifts, a, b)
     return phases
 
+
 def get_shift_from_fit(phases, a, b):
     # Invert the line function: x = (y-b)/a
     sample_shifts = (phases - b) / a
     return sample_shifts
+
 
 def get_spike_slopeparams(spike, fs, num_estim=50):
     sample_shifts = np.linspace(-1, 1, num=num_estim)
