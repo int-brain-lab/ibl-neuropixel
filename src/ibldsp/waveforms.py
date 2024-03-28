@@ -704,3 +704,46 @@ def wave_shift_phase(spike, spike2, fs, a_pos=None, b_pos=None):
 
 # End of functions
 # -------------------------------------------------------------
+
+
+def shift_waveform(wf_cluster):
+    '''
+    :param wf_cluster: # A matrix of spike waveforms per cluster (N spike, trace, time)
+    :return: wf_out (same shape as waveform cluster): A matrix with the waveforms shifted in time
+    '''
+    # Take first the average as template to compute shift on
+    wfs_avg = np.nanmedian(wf_cluster, axis=0)
+    # Find the peak channel from template
+    template = np.transpose(wfs_avg.copy())  # wfs_avg is 2D (trace, time) -> transpose: (time, trace)
+    arr_temp = np.expand_dims(template, axis=0)  # 3D dimension have to be (wav, time, trace) -> add 1 dimension (ax=0)
+    df_temp = find_peak(arr_temp)
+    spike_template = arr_temp[:, :, df_temp['peak_trace_idx'][0]]  # Take template at peak trace
+    spike_template = np.squeeze(spike_template)
+
+    # Take the raw spikes at that channel
+    # Create df for all spikes
+    '''
+    Note: took the party here to NOT recompute the peak channel of each waveform, but to reuse the one from the 
+    template — this is because the function to find the peak assumes the waveform has been denoised
+    and uses the maximum amplitude value --> which here would lead to failures in the case of collision
+    '''
+    df = pd.DataFrame()
+    df['peak_trace_idx'] = [df_temp['peak_trace_idx'][0]]*wf_cluster.shape[0]
+
+    # Per waveform, keep only trace that contains the peak
+    arr_in = np.swapaxes(wf_cluster, axis1=1, axis2=2)  # wfs size (wav, trace, time) -> swap (wav, time, trace)
+    arr_peak_real = get_array_peak(arr_in, df)
+
+    # Resynch 1 spike with 1 template (using only peak channel) ; Apply shift to all wav traces
+    wf_out = np.zeros(wf_cluster.shape)
+    for i_spike in range(0, wf_cluster.shape[0]):
+        # Raw spike at peak channel
+        spike_raw = arr_peak_real[i_spike, :]
+        # Resynch
+        spike_template_resynch, shift_computed = wave_shift_corrmax(spike_raw, spike_template)
+        # Apply shift to all traces at once
+        wfs_avg_resync = fshift(wf_cluster[i_spike, :, :], -shift_computed)
+        wf_out[i_spike, :, :] = wfs_avg_resync
+
+    return wf_out
+
