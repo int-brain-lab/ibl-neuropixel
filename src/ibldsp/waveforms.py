@@ -553,7 +553,7 @@ def compute_spike_features(arr_in, fs=30000, recovery_duration_ms=0.16, return_p
         return df
 
 
-def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length_samples=121, add_nan_trace=False):
+def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length_samples=128, add_nan_trace=False):
     """
     Extract waveforms at specified samples and peak channels
     as a stack.
@@ -565,7 +565,7 @@ def extract_wfs_array(arr, df, channel_neighbors, trough_offset=42, spike_length
     :param trough_offset: Number of samples to include before peak.
     (defaults to 42)
     :param spike_length_samples: Total length of wf in samples.
-    (defaults to 121)
+    (defaults to 128)
     :param add_nan_trace: Whether to add a row of `NaN`s as the last trace.
         (If False, code assumes this has already been added)
     """

@@ -195,7 +195,7 @@ class TestWaveformExtractor(unittest.TestCase):
     geom = np.c_[geom_dict["x"], geom_dict["y"]]
     channel_neighbors = utils.make_channel_index(geom, radius=200.)
     # radius = 200um, 38 chans
-    num_channels = 38
+    num_channels = 40
 
     def test_extract_waveforms(self):
         wfs, _, _ = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
@@ -206,20 +206,21 @@ class TestWaveformExtractor(unittest.TestCase):
         assert wfs[0, self.channels[0], self.trough_offset] == 1.
         assert np.all(np.isnan(wfs[0, self.num_channels // 2 + self.channels[0] + 1:, :]))
 
-        for i in range(1, 8):
+        for i in range(1, 9):
+            print(i)
             # center channel depends on odd/even of channel
             if self.channels[i] % 2 == 0:
-                centered_channel_idx = 18
-            else:
                 centered_channel_idx = 19
+            else:
+                centered_channel_idx = 20
             assert wfs[i, centered_channel_idx, self.trough_offset] == float(i + 1)
 
         # last wf is a special case analogous to the first wf, but at the bottom
         # of the probe
         if self.channels[-1] % 2 == 0:
-            centered_channel_idx = 18
-        else:
             centered_channel_idx = 19
+        else:
+            centered_channel_idx = 20
         assert wfs[-1, centered_channel_idx, self.trough_offset] == 9.
 
     def test_spike_window(self):
