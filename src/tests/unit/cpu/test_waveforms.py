@@ -262,3 +262,29 @@ class TestWaveformExtractor(unittest.TestCase):
         # Resynch
         spike_resync, sample_shift_applied = waveforms.wave_shift_phase(spike, spike2, fs)
         np.testing.assert_equal(sample_shift_original, np.around(sample_shift_applied, decimals=3))
+
+    def test_wave_shift_waveform(self):
+        sample_shift_original = 15.323
+        # Create peak channel spike
+        spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
+        spike_peak = -np.fft.irfft(np.fft.rfft(spike_peak) * np.exp(1j * 45 / 180 * np.pi))
+        # Create other channel spikes
+        spike_oth = spike_peak*0.3
+        # Create shifted spike
+        spike_peak2 = fshift(spike_peak, sample_shift_original)
+        spike_oth2 = fshift(spike_oth, sample_shift_original)
+
+        # Create matrix N=512 wavs: 511 spikes the same, 1 with shifted (one spike will have 2 channels)
+        wav_normal = np.stack([spike_peak, spike_oth])  # size (trace, time) : (2, 100)
+        wav_shifted = np.stack([spike_peak2, spike_oth2])
+
+        wav_100 = np.repeat(wav_normal[:, :, np.newaxis], 511, axis=2)
+        wav_all = np.dstack((wav_100, wav_shifted))  # size (trace, time, N spike) : (2, 100, 512)
+
+        # Change axis to (N spike, trace, time) : (512, 2, 100)
+        wav_cluster = np.swapaxes(wav_all, axis1=1, axis2=2)  # (2, 512, 100)
+        wav_cluster = np.swapaxes(wav_cluster, axis1=1, axis2=0)
+        # TODO find which wav (should be last -1) has shift after all this swapping
+        wav_out = waveforms.shift_waveform(wav_cluster)
+        # TODO test that the shift applied is the same as above, 2 decimal precision - and shift=0 for the 511 other wavs
+        # This will require changing the function to return the shift applied in a vector
