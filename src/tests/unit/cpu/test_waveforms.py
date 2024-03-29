@@ -265,7 +265,7 @@ class TestWaveformExtractor(unittest.TestCase):
         np.testing.assert_equal(sample_shift_original, np.around(sample_shift_applied, decimals=3))
 
     def test_wave_shift_waveform(self):
-        sample_shift_original = 15.323
+        sample_shift_original = 15.32
         # Create peak channel spike
         spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
         spike_peak = -np.fft.irfft(np.fft.rfft(spike_peak) * np.exp(1j * 45 / 180 * np.pi))
@@ -279,13 +279,21 @@ class TestWaveformExtractor(unittest.TestCase):
         wav_normal = np.stack([spike_peak, spike_oth])  # size (trace, time) : (2, 100)
         wav_shifted = np.stack([spike_peak2, spike_oth2])
 
-        wav_100 = np.repeat(wav_normal[:, :, np.newaxis], 511, axis=2)
-        wav_all = np.dstack((wav_100, wav_shifted))  # size (trace, time, N spike) : (2, 100, 512)
+        n_wav = 511
+        wav_rep = np.repeat(wav_normal[:, :, np.newaxis], n_wav, axis=2)
+        wav_all = np.dstack((wav_rep, wav_shifted))  # size (trace, time, N spike) : (2, 100, 512)
 
         # Change axis to (N spike, trace, time) : (512, 2, 100)
         wav_cluster = np.swapaxes(wav_all, axis1=1, axis2=2)  # (2, 512, 100)
         wav_cluster = np.swapaxes(wav_cluster, axis1=1, axis2=0)
-        # TODO find which wav (should be last -1) has shift after all this swapping
-        wav_out = waveforms.shift_waveform(wav_cluster)
-        # TODO test that the shift applied is the same as above, 2 decimal precision - and shift=0 for the 511 other wavs
-        # This will require changing the function to return the shift applied in a vector
+        # The last wav (-1) has the shift after all this swapping - checked visually by plotting below
+        '''
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(2, 1)
+        axs[0].imshow(-np.flipud(wav_cluster[0, :, :]), cmap="Grays")
+        axs[1].imshow(-np.flipud(wav_cluster[-1, :, :]), cmap="Grays")
+        '''
+        wav_out, shift_applied = waveforms.shift_waveform(wav_cluster)
+        # Test last waveform shift applied is minus the original shift, and the rest 511 waveforms are 0
+        np.testing.assert_equal(-sample_shift_original, np.around(shift_applied[-1], decimals=2))
+        np.testing.assert_equal(np.zeros(n_wav), np.abs(np.around(shift_applied[0:-1], decimals=2)))

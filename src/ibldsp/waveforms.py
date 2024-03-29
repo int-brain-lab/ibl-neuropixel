@@ -736,14 +736,16 @@ def shift_waveform(wf_cluster):
 
     # Resynch 1 spike with 1 template (using only peak channel) ; Apply shift to all wav traces
     wf_out = np.zeros(wf_cluster.shape)
+    shift_applied = np.zeros(wf_cluster.shape[0])
     for i_spike in range(0, wf_cluster.shape[0]):
         # Raw spike at peak channel
         spike_raw = arr_peak_real[i_spike, :]
         # Resynch
         spike_template_resynch, shift_computed = wave_shift_corrmax(spike_raw, spike_template)
         # Apply shift to all traces at once
-        wfs_avg_resync = fshift(wf_cluster[i_spike, :, :], -shift_computed)
+        wfs_avg_resync = fshift(wf_cluster[i_spike, :, :], shift_computed)
         wf_out[i_spike, :, :] = wfs_avg_resync
+        shift_applied[i_spike] = shift_computed
 
-    return wf_out
+    return wf_out, shift_applied
 
