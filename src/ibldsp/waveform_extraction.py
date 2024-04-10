@@ -163,7 +163,7 @@ def write_wfs_chunk(
     my_sr = spikeglx.Reader(cbin)
     s0, s1 = sr_sl
 
-    wfs_mmap = open_memmap(wfs_fn, shape=mmap_shape, mode="r+", dtype=np.float16)
+    wfs_mmap = open_memmap(wfs_fn, shape=mmap_shape, mode="r+", dtype=np.float32)
 
     # create filters
     butter_kwargs = {"N": 3, "Wn": 300 / my_sr.fs * 2, "btype": "highpass"}
@@ -187,7 +187,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset:s1 + spike_length_samples - trough_offset:-my_sr.nsync
+        s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
     ]
     snip0 = interpolate_bad_channels(
         fshift(
@@ -249,8 +249,7 @@ def extract_wfs_cbin(
 
     print("Running channel detection")
     channel_labels = _get_channel_labels(sr, num_snippets=2)
-    channel_labels = np.zeros(384, np.float32)
-
+    
     nwf = wf_flat["samples"].shape[0]
     nu = unit_ids.shape[0]
     print(f"Extracting {nwf} waveforms from {nu} units")
@@ -262,7 +261,7 @@ def extract_wfs_cbin(
 
     fn = output_path.joinpath("_wf_extract_intermediate.npy")
     wfs = open_memmap(
-        fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float16
+        fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
     )
     # wfs.close()
 
@@ -293,16 +292,21 @@ def extract_wfs_cbin(
     )
 
     wfs = open_memmap(
-        fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float16
+        fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
     )
     # bookkeeping
     wfs_by_unit = np.full(
         (nu, max_wf, nc, spike_length_samples), np.nan, dtype=np.float16
     )
+    wfs_medians = np.full(
+        (nu, nc, spike_length_samples), np.nan, dtype=np.float32
+    )
+    print("Computing templates")
     for i, u in enumerate(unit_ids):
         _wfs_unit = wfs[wf_flat["clusters"] == u]
         nwf_u = _wfs_unit.shape[0]
-        wfs_by_unit[i, : min(max_wf, nwf_u), :, :] = _wfs_unit
+        wfs_by_unit[i, : min(max_wf, nwf_u), :, :] = _wfs_unit.astype(np.float16)
+        wfs_medians[i, :, :] = np.nanmedian(_wfs_unit, axis=0)
 
     df = pd.DataFrame(
         {
@@ -311,8 +315,12 @@ def extract_wfs_cbin(
             "cluster": wf_flat["clusters"],
         }
     )
+    df = df.sort_values(["cluster", "sample"]).set_index(["cluster", "sample"])
 
     np.save(output_file, wfs_by_unit)
-    df.to_csv(output_file.with_suffix(".csv"))
+    # medians
+    avg_file = output_file.parent.joinpath(output_file.stem + "_templates.npy")
+    np.save(avg_file, wfs_medians)
+    df.to_parquet(output_file.with_suffix(".pqt"))
 
     fn.unlink()
