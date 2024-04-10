@@ -267,7 +267,7 @@ class TestWaveformExtractor(unittest.TestCase):
         spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
         spike_peak = -np.fft.irfft(np.fft.rfft(spike_peak) * np.exp(1j * 45 / 180 * np.pi))
         # Create other channel spikes
-        spike_oth = spike_peak*0.3
+        spike_oth = spike_peak * 0.3
         # Create shifted spike
         spike_peak2 = fshift(spike_peak, sample_shift_original)
         spike_oth2 = fshift(spike_oth, sample_shift_original)

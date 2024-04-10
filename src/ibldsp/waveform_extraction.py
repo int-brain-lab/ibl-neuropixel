@@ -174,7 +174,7 @@ def write_wfs_chunk(
         "lagc": int(my_sr.fs / 10),
         "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
     }
-    car_func = lambda dat: car(dat, **k_kwargs)  # flake8: noqa
+    car_func = lambda dat: car(dat, **k_kwargs)  # noqa: E731
 
     if i_chunk == 0:
         offset = 0
