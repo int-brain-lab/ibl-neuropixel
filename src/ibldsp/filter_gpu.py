@@ -22,7 +22,7 @@ def sosfiltfilt_gpu(sos, x, axis=-1):
 
     n_sections, m = sos.shape
     if m != 6:
-        raise ValueError('sos array must be shape (n_sections, 6)')
+        raise ValueError("sos array must be shape (n_sections, 6)")
 
     ntaps = 2 * n_sections + 1
     ntaps -= min((sos[:, 2] == 0).sum(), (sos[:, 5] == 0).sum())
@@ -64,20 +64,20 @@ def sosfilt_gpu(sos, x, axis, zi):
 
     n_sections, m = sos.shape
     if m != 6:
-        raise ValueError('sos array must be shape (n_sections, 6)')
+        raise ValueError("sos array must be shape (n_sections, 6)")
 
     x_zi_shape = list(x.shape)
     x_zi_shape[axis] = 2
     x_zi_shape = tuple([n_sections] + x_zi_shape)
 
     if zi is not None:
-        assert zi.shape == x_zi_shape, f'zi has shape {zi.shape}, expected {x_zi_shape}'
-        zi = cp.array(zi, dtype='float32')
+        assert zi.shape == x_zi_shape, f"zi has shape {zi.shape}, expected {x_zi_shape}"
+        zi = cp.array(zi, dtype="float32")
     else:
-        zi = cp.zeros(x_zi_shape, dtype='float32')
+        zi = cp.zeros(x_zi_shape, dtype="float32")
 
-    sos = cp.array(sos, dtype='float32')
-    assert x.dtype == 'float32', f'Expected float32 data, got {x.dtype}'
+    sos = cp.array(sos, dtype="float32")
+    assert x.dtype == "float32", f"Expected float32 data, got {x.dtype}"
 
     axis = axis % x.ndim
     x = cp.ascontiguousarray(cp.moveaxis(x, axis, -1))
@@ -91,15 +91,15 @@ def sosfilt_gpu(sos, x, axis, zi):
 
 
 def _cuda_sosfilt(sos, x, zi):
-
     n_signals, n_samples = x.shape
     n_sections = sos.shape[0]
 
     n_blocks, n_threads = sosfilt_kernel_params(n_signals)
 
-    code, consts = get_cuda('sosfilt', n_signals=n_signals, n_samples=n_samples,
-                            n_sections=n_sections)
-    kernel = cp.RawKernel(code, 'sosfilt')
+    code, consts = get_cuda(
+        "sosfilt", n_signals=n_signals, n_samples=n_samples, n_sections=n_sections
+    )
+    kernel = cp.RawKernel(code, "sosfilt")
     kernel((n_blocks,), (n_threads,), (sos, x, zi))
 
 
@@ -152,17 +152,20 @@ def odd_ext(x, n, axis=-1):
     if n < 1:
         return x
     if n > x.shape[axis] - 1:
-        raise ValueError(("The extension length n (%d) is too big. " +
-                          "It must not exceed x.shape[axis]-1, which is %d.")
-                         % (n, x.shape[axis] - 1))
+        raise ValueError(
+            (
+                "The extension length n (%d) is too big. "
+                + "It must not exceed x.shape[axis]-1, which is %d."
+            )
+            % (n, x.shape[axis] - 1)
+        )
     left_end = axis_slice(x, start=0, stop=1, axis=axis)
     left_ext = axis_slice(x, start=n, stop=0, step=-1, axis=axis)
     right_end = axis_slice(x, start=-1, axis=axis)
     right_ext = axis_slice(x, start=-2, stop=-(n + 2), step=-1, axis=axis)
-    ext = cp.concatenate((2 * left_end - left_ext,
-                          x,
-                          2 * right_end - right_ext),
-                         axis=axis)
+    ext = cp.concatenate(
+        (2 * left_end - left_ext, x, 2 * right_end - right_ext), axis=axis
+    )
     return ext
 
 
