@@ -174,7 +174,7 @@ def write_wfs_chunk(
         "lagc": int(my_sr.fs / 10),
         "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
     }
-    car_func = lambda dat: car(dat, **k_kwargs)
+    car_func = lambda dat: car(dat, **k_kwargs)  # flake8: noqa
 
     if i_chunk == 0:
         offset = 0
@@ -249,12 +249,12 @@ def extract_wfs_cbin(
 
     print("Running channel detection")
     channel_labels = _get_channel_labels(sr, num_snippets=2)
-    
+
     nwf = wf_flat["samples"].shape[0]
     nu = unit_ids.shape[0]
     print(f"Extracting {nwf} waveforms from {nu} units")
 
-    # get channel geometry
+    #  get channel geometry
     geom = np.c_[h["x"], h["y"]]
     channel_neighbors = make_channel_index(geom)
     nc = channel_neighbors.shape[1]
@@ -263,7 +263,6 @@ def extract_wfs_cbin(
     wfs = open_memmap(
         fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
     )
-    # wfs.close()
 
     slices = [
         slice(
