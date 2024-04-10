@@ -5,6 +5,7 @@ import pandas as pd
 
 import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
+import ibldsp.waveform_extraction as waveform_extraction
 from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
 from ibldsp.fourier import fshift
@@ -189,7 +190,7 @@ class TestWaveformExtractor(unittest.TestCase):
     num_channels = 40
 
     def test_extract_waveforms(self):
-        wfs, _, _ = waveforms.extract_wfs_array(
+        wfs, _, _ = waveform_extraction.extract_wfs_array(
             self.arr, self.df, self.channel_neighbors
         )
 
@@ -224,14 +225,14 @@ class TestWaveformExtractor(unittest.TestCase):
         df = self.df.copy()
         df["sample"].iloc[-1] = 996
         with self.assertRaisesRegex(AssertionError, "extends"):
-            _ = waveforms.extract_wfs_array(self.arr, df, self.channel_neighbors)
+            _ = waveform_extraction.extract_wfs_array(self.arr, df, self.channel_neighbors)
 
     def test_nan_channel(self):
         # test that if user does not fill last column with NaNs
         # the user can set the flag and the result will be the same
         arr = self.arr.copy()[:, :-1]
-        wfs = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
-        wfs_nan = waveforms.extract_wfs_array(
+        wfs = waveform_extraction.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
+        wfs_nan = waveform_extraction.extract_wfs_array(
             arr, self.df, self.channel_neighbors, add_nan_trace=True
         )
         np.testing.assert_equal(wfs, wfs_nan)

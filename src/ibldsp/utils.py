@@ -216,7 +216,7 @@ def rms(x, axis=-1):
 
 def make_channel_index(geom, radius=200.0, pad_val=384):
     neighbors = (
-        scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) < radius
+        scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) <= radius
     )
     n_nbors = np.max(np.sum(neighbors, 0))
 
