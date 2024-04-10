@@ -75,6 +75,11 @@ def extract_wfs_array(
 
 
 def _get_channel_labels(sr, num_snippets=20, verbose=True):
+    """
+    Given a spikeglx Reader object, samples `num_snippets` 1-second
+    segments of the recording and returns the median channel labels
+    across the segments as an array of size (nc,).
+    """
     if verbose:
         from tqdm import trange
 
@@ -104,6 +109,13 @@ def _make_wfs_table(
     trough_offset=42,
     spike_length_samples=128,
 ):
+    """
+    Given a recording `sr` and spike detections, pick up to `max_wf`
+    waveforms uniformly for each unit and return their times, peak channels,
+    and unit assignments.
+
+    :return: wf_flat, unit_ids Dataframe of waveform information and unit ids.
+    """
     # exclude spikes without a buffer on either end
     # of recording
     allowed_idx = (spike_times > trough_offset) & (
@@ -115,7 +127,7 @@ def _make_wfs_table(
     unit_ids = np.unique(spike_clusters)
     nu = unit_ids.shape[0]
 
-    # this array contains the (up to) 256 *indices* of the wfs
+    # this array contains the (up to) max_wf *indices* of the wfs
     # we are going to extract for that unit
     unit_wf_idx = np.zeros((nu, max_wf), int)
     unit_nspikes = np.zeros(nu, int)
@@ -160,6 +172,10 @@ def write_wfs_chunk(
     trough_offset,
     spike_length_samples,
 ):
+    """
+    Parallel job to extract waveforms from chunk `i_chunk` of a recording `sr` and
+    write them to the correct spot in the output .npy file `wfs_fn`.
+    """
     my_sr = spikeglx.Reader(cbin)
     s0, s1 = sr_sl
 
@@ -187,7 +203,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
+        s0 - offset: s1 + spike_length_samples - trough_offset, : -my_sr.nsync
     ]
     snip0 = interpolate_bad_channels(
         fshift(
@@ -216,6 +232,21 @@ def extract_wfs_cbin(
     wf_extract_params=None,
     nprocesses=None,
 ):
+    """
+    Given a cbin file and locations of spikes, extract waveforms for each unit, compute
+    the templates, and save to `output_file`.
+
+    If `output_file=Path("/path/to/example_clusters.npy")`, this array will be of shape
+    `(num_units, max_wf, nc, spike_length_samples)` where by default `max_wf=256, nc=40,
+    spike_length_samples=128`.
+
+    The file "path/to/example_clusters_templates.npy" will also be generated, of shape
+    `(num_units, nc, spike_length_samples)`, where the median across waveforms is taken
+    for each unit.
+
+    The parquet file "path/to/example_clusters.pqt" contains the samples and max channels
+    of each waveform, indexed by unit.
+    """
     if h is None:
         h = neuropixel.trace_header()
 
@@ -248,7 +279,7 @@ def extract_wfs_cbin(
     print(f"Num chunks: {num_chunks}")
 
     print("Running channel detection")
-    channel_labels = _get_channel_labels(sr, num_snippets=2)
+    channel_labels = _get_channel_labels(sr)
 
     nwf = wf_flat["samples"].shape[0]
     nu = unit_ids.shape[0]
@@ -297,9 +328,7 @@ def extract_wfs_cbin(
     wfs_by_unit = np.full(
         (nu, max_wf, nc, spike_length_samples), np.nan, dtype=np.float16
     )
-    wfs_medians = np.full(
-        (nu, nc, spike_length_samples), np.nan, dtype=np.float32
-    )
+    wfs_medians = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
     print("Computing templates")
     for i, u in enumerate(unit_ids):
         _wfs_unit = wfs[wf_flat["clusters"] == u]
