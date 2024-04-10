@@ -272,7 +272,7 @@ def extract_wfs_cbin(
     ]
 
     nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
-    _ = Parallel(n_jobs=nprocesses, verbose=100)(
+    _ = Parallel(n_jobs=nprocesses)(
         delayed(write_wfs_chunk)(
             i,
             cbin_file,
