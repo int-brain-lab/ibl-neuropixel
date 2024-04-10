@@ -5,8 +5,11 @@ import pandas as pd
 
 import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
+import ibldsp.waveform_extraction as waveform_extraction
 from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
+from ibldsp.fourier import fshift
+import scipy
 
 import unittest
 
@@ -160,7 +163,7 @@ def test_weights_all_channels():
 
 def test_generate_waveforms():
     wav = generate_waveform()
-    assert wav.shape == (121, 40)
+    assert wav.shape == (40, 121)
 
 
 class TestWaveformExtractor(unittest.TestCase):
@@ -184,10 +187,10 @@ class TestWaveformExtractor(unittest.TestCase):
     geom = np.c_[geom_dict["x"], geom_dict["y"]]
     channel_neighbors = utils.make_channel_index(geom, radius=200.0)
     # radius = 200um, 38 chans
-    num_channels = 38
+    num_channels = 40
 
     def test_extract_waveforms(self):
-        wfs, _, _ = waveforms.extract_wfs_array(
+        wfs, _, _ = waveform_extraction.extract_wfs_array(
             self.arr, self.df, self.channel_neighbors
         )
 
@@ -199,21 +202,22 @@ class TestWaveformExtractor(unittest.TestCase):
             np.isnan(wfs[0, self.num_channels // 2 + self.channels[0] + 1:, :])
         )
 
-        for i in range(1, 8):
+        for i in range(1, 9):
+            print(i)
             # center channel depends on odd/even of channel
             if self.channels[i] % 2 == 0:
-                centered_channel_idx = 18
-            else:
                 centered_channel_idx = 19
+            else:
+                centered_channel_idx = 20
             assert wfs[i, centered_channel_idx, self.trough_offset] == float(i + 1)
 
         # last wf is a special case analogous to the first wf, but at the bottom
         # of the probe
         if self.channels[-1] % 2 == 0:
-            centered_channel_idx = 18
-        else:
             centered_channel_idx = 19
-        assert wfs[-1, centered_channel_idx, self.trough_offset] == 9.0
+        else:
+            centered_channel_idx = 20
+        assert wfs[-1, centered_channel_idx, self.trough_offset] == 9.
 
     def test_spike_window(self):
         # check that we have an error when the last spike window
@@ -221,14 +225,73 @@ class TestWaveformExtractor(unittest.TestCase):
         df = self.df.copy()
         df["sample"].iloc[-1] = 996
         with self.assertRaisesRegex(AssertionError, "extends"):
-            _ = waveforms.extract_wfs_array(self.arr, df, self.channel_neighbors)
+            _ = waveform_extraction.extract_wfs_array(self.arr, df, self.channel_neighbors)
 
     def test_nan_channel(self):
         # test that if user does not fill last column with NaNs
         # the user can set the flag and the result will be the same
         arr = self.arr.copy()[:, :-1]
-        wfs = waveforms.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
-        wfs_nan = waveforms.extract_wfs_array(
+        wfs = waveform_extraction.extract_wfs_array(self.arr, self.df, self.channel_neighbors)
+        wfs_nan = waveform_extraction.extract_wfs_array(
             arr, self.df, self.channel_neighbors, add_nan_trace=True
         )
         np.testing.assert_equal(wfs, wfs_nan)
+
+    def test_wave_shift_corrmax(self):
+        sample_shifts = [4.43, -1.0]
+        sig_lens = [100, 101]
+        for sample_shift in sample_shifts:
+            for sig_len in sig_lens:
+                spike = scipy.signal.morlet2(sig_len, 8.0, 2.0)
+                spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+
+                spike2 = fshift(spike, sample_shift)
+                spike3, shift_computed = waveforms.wave_shift_corrmax(spike, spike2)
+
+                np.testing.assert_equal(sample_shift, np.around(shift_computed, decimals=2))
+
+    def test_wave_shift_phase(self):
+        fs = 30000
+        # Resynch in time spike2 onto spike
+        sample_shift_original = 0.323
+        spike = scipy.signal.morlet2(100, 8.5, 2.0)
+        spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+        spike = np.append(spike, np.zeros((1, 25)))
+        spike2 = fshift(spike, sample_shift_original)
+        # Resynch
+        spike_resync, sample_shift_applied = waveforms.wave_shift_phase(spike, spike2, fs)
+        np.testing.assert_equal(sample_shift_original, np.around(sample_shift_applied, decimals=3))
+
+    def test_wave_shift_waveform(self):
+        sample_shift_original = 15.32
+        # Create peak channel spike
+        spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
+        spike_peak = -np.fft.irfft(np.fft.rfft(spike_peak) * np.exp(1j * 45 / 180 * np.pi))
+        # Create other channel spikes
+        spike_oth = spike_peak * 0.3
+        # Create shifted spike
+        spike_peak2 = fshift(spike_peak, sample_shift_original)
+        spike_oth2 = fshift(spike_oth, sample_shift_original)
+
+        # Create matrix N=512 wavs: 511 spikes the same, 1 with shifted (one spike will have 2 channels)
+        wav_normal = np.stack([spike_peak, spike_oth])  # size (trace, time) : (2, 100)
+        wav_shifted = np.stack([spike_peak2, spike_oth2])
+
+        n_wav = 511
+        wav_rep = np.repeat(wav_normal[:, :, np.newaxis], n_wav, axis=2)
+        wav_all = np.dstack((wav_rep, wav_shifted))  # size (trace, time, N spike) : (2, 100, 512)
+
+        # Change axis to (N spike, trace, time) : (512, 2, 100)
+        wav_cluster = np.swapaxes(wav_all, axis1=1, axis2=2)  # (2, 512, 100)
+        wav_cluster = np.swapaxes(wav_cluster, axis1=1, axis2=0)
+        # The last wav (-1) has the shift after all this swapping - checked visually by plotting below
+        '''
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(2, 1)
+        axs[0].imshow(-np.flipud(wav_cluster[0, :, :]), cmap="Grays")
+        axs[1].imshow(-np.flipud(wav_cluster[-1, :, :]), cmap="Grays")
+        '''
+        wav_out, shift_applied = waveforms.shift_waveform(wav_cluster)
+        # Test last waveform shift applied is minus the original shift, and the rest 511 waveforms are 0
+        np.testing.assert_equal(-sample_shift_original, np.around(shift_applied[-1], decimals=2))
+        np.testing.assert_equal(np.zeros(n_wav), np.abs(np.around(shift_applied[0:-1], decimals=2)))

@@ -1,4 +1,7 @@
 # 0.10.0
+## 0.10.2 2024-04-10
+-  Add `waveform_extraction` module to `ibldsp`. This includes the `extract_wfs_array` and `extract_wfs_cbin` methods. 
+-  Add code for performing subsample shifts of waveforms.
 ## 0.10.1 2024-03-19
 -  ensure compatibility with spikeglx 202309 metadata coordinates
 ## 0.10.0 2024-03-14

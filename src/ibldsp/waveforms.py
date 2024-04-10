@@ -6,6 +6,9 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy
+from ibldsp.utils import parabolic_max
+from ibldsp.fourier import fshift
 
 
 def _validate_arr_in(arr_in):
@@ -228,7 +231,7 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
+def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     """
     Displays a multi-trace waveform in a wiggle traces with negative
     amplitudes filled
@@ -259,11 +262,11 @@ def plot_wiggle(wav, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     order = np.argsort(y)
     # shift from amplitudes to plotting coordinates
     x_shift, y = y[order].__divmod__(ns + 1)
-    ax.plot(y, x[order] + x_shift + 1, "k", linewidth=0.5)
+    ax.plot(y / fs, x[order] + x_shift + 1, 'k', linewidth=.5)
     x[x > 0] = np.nan
     x = x[order] + x_shift + 1
-    ax.fill(y, x, "k", aa=True)
-    ax.set(xlim=[0, ns], ylim=[0, nc], xlabel="sample", ylabel="trace")
+    ax.fill(y / fs, x, 'k', aa=True)
+    ax.set(xlim=[0, ns / fs], ylim=[0, nc], xlabel='sample', ylabel='trace')
     plt.tight_layout()
     return ax
 
@@ -609,61 +612,149 @@ def compute_spike_features(
         return df
 
 
-def extract_wfs_array(
-    arr,
-    df,
-    channel_neighbors,
-    trough_offset=42,
-    spike_length_samples=121,
-    add_nan_trace=False,
-):
-    """
-    Extract waveforms at specified samples and peak channels
-    as a stack.
+def wave_shift_corrmax(spike, spike2):
+    '''
+    Shift in time (sub-sample) the spike2 onto the spike
+    (For residual subtraction, typically, the spike2 would be the template)
+    :param spike: 1D array of float (e.g. on peak channel); same size as spike2
+    :param spike2: 1D array of float
+    :return: spike_resync: 1D array of float, shift_computed: in time sample (e.g. -4.03)
+    '''
+    # Numpy implementation of correlation centers it in the middle at np.floor(len_sample/2)
+    assert spike.shape[0] == spike2.shape[0]
+    sig_len = spike.shape[0]
+    c = scipy.signal.correlate(spike, spike2, mode='same')
+    ipeak, maxi = parabolic_max(c)
+    shift_computed = (ipeak - np.floor(sig_len / 2)) * -1
+    spike_resync = fshift(spike2, -shift_computed)
+    return spike_resync, shift_computed
 
-    :param arr: Array of traces. (samples, channels). The last trace of the array should be a
-        row of non-data NaNs. If this has not been added set the `add_nan_trace` flag.
-    :param df: df containing "sample" and "peak_channel" columns.
-    :param channel_neighbors: Channel neighbor matrix (384x384)
-    :param trough_offset: Number of samples to include before peak.
-    (defaults to 42)
-    :param spike_length_samples: Total length of wf in samples.
-    (defaults to 121)
-    :param add_nan_trace: Whether to add a row of `NaN`s as the last trace.
-        (If False, code assumes this has already been added)
-    """
-    # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
-    if add_nan_trace:
-        newcol = np.empty((arr.shape[0], 1))
-        newcol[:] = np.nan
-        arr = np.hstack([arr, newcol])
+# -------------------------------------------------------------
+# Functions to fit the phase slope, and find the relationship between phase slope and sample shift
 
-    # check that the spike window is included in the recording:
-    last_idx = df["sample"].iloc[-1]
-    assert (
-        last_idx + (spike_length_samples - trough_offset) < arr.shape[0]
-    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[0]} samples)."
 
-    nwf = len(df)
+def line_fit(x, a, b):  # function to fit a line and get the slope out
+    return a * x + b
 
-    # Get channel indices
-    cind = channel_neighbors[df["peak_channel"].to_numpy()]
 
-    # Get sample indices
-    sind = df["sample"].to_numpy()[:, np.newaxis] + (
-        np.arange(spike_length_samples) - trough_offset
-    )
-    nchan = cind.shape[1]
+def get_apf_from2spikes(spike, spike2, fs):
+    fscale = np.fft.rfftfreq(spike.size, 1 / fs)
+    C = np.fft.rfft(spike) * np.conj(np.fft.rfft(spike2))
 
-    wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
+    # Take the phase for freq at high amplitude, and compute slope
+    amp = np.abs(C)
+    phase = np.unwrap(np.angle(C))
+    return amp, phase, fscale
 
-    try:
-        from tqdm import trange
 
-        fun = trange
-    except ImportError:
-        fun = range
-    for i in fun(nwf):
-        wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
+def get_phase_slope(amp, phase, fscale, q=90):
+    # Take 90 percentile of distribution to find high amplitude freq
+    thresh_amp = np.percentile(amp, q)
+    indx_highamp = np.where(amp >= thresh_amp)[0]
+    # Perform linear fit to get the slope
+    popt, _ = scipy.optimize.curve_fit(line_fit, xdata=fscale[indx_highamp], ydata=phase[indx_highamp])
+    a, b = popt
+    return a, b
 
-    return wfs.swapaxes(1, 2), cind, trough_offset
+
+def fit_phaseshift(phase_slopes, sample_shifts):
+    # Get parameters for the phase slope / sample shift curve
+    popt, _ = scipy.optimize.curve_fit(line_fit, xdata=sample_shifts, ydata=phase_slopes)
+    a, b = popt
+    return a, b
+
+
+def get_phase_from_fit(sample_shifts, a, b):
+    # phases = line_fit(np.abs(sample_shifts), a, b) * np.sign(sample_shifts)
+    phases = line_fit(sample_shifts, a, b)
+    return phases
+
+
+def get_shift_from_fit(phases, a, b):
+    # Invert the line function: x = (y-b)/a
+    sample_shifts = (phases - b) / a
+    return sample_shifts
+
+
+def get_spike_slopeparams(spike, fs, num_estim=50):
+    sample_shifts = np.linspace(-1, 1, num=num_estim)
+    phase_slopes = np.empty(shape=sample_shifts.shape)
+
+    for i_shift, sample_shift in enumerate(sample_shifts):
+        spike2 = fshift(spike, sample_shift)
+        # Get amplitude, phase, fscale
+        amp, phase, fscale = get_apf_from2spikes(spike, spike2, fs)
+        # Perform linear fit to get the slope
+        a, b = get_phase_slope(amp, phase, fscale)
+        phase_slopes[i_shift] = a
+
+    a_pslope, b_pslope = fit_phaseshift(phase_slopes, sample_shifts)
+    return a_pslope, b_pslope, sample_shifts, phase_slopes
+
+
+def wave_shift_phase(spike, spike2, fs, a_pos=None, b_pos=None):
+    '''
+    Resynch spike2 onto spike using the phase spectrum's slope
+    (this work perfectly in theory, but does not work well with raw daw sampled at 30kHz!)
+    '''
+    # Get template parameters if not passed in
+    if a_pos is None or b_pos is None:
+        a_pos, b_pos, _, _ = get_spike_slopeparams(spike, fs)
+    # Get amplitude, phase, fscale
+    amp, phase, fscale = get_apf_from2spikes(spike, spike2, fs)
+    # Perform linear fit to get the slope
+    a, b = get_phase_slope(amp, phase, fscale)
+    phase_slope = a
+    # Get sample shift
+    sample_shift = get_shift_from_fit(phase_slope, a_pos, b_pos)
+
+    # Resynch in time given phase slope
+    spike_resync = fshift(spike2, -sample_shift)  # Use negative to re-synch
+    return spike_resync, sample_shift
+
+# End of functions
+# -------------------------------------------------------------
+
+
+def shift_waveform(wf_cluster):
+    '''
+    :param wf_cluster: # A matrix of spike waveforms per cluster (N spike, trace, time)
+    :return: wf_out (same shape as waveform cluster): A matrix with the waveforms shifted in time
+    '''
+    # Take first the average as template to compute shift on
+    wfs_avg = np.nanmedian(wf_cluster, axis=0)
+    # Find the peak channel from template
+    template = np.transpose(wfs_avg.copy())  # wfs_avg is 2D (trace, time) -> transpose: (time, trace)
+    arr_temp = np.expand_dims(template, axis=0)  # 3D dimension have to be (wav, time, trace) -> add 1 dimension (ax=0)
+    df_temp = find_peak(arr_temp)
+    spike_template = arr_temp[:, :, df_temp['peak_trace_idx'][0]]  # Take template at peak trace
+    spike_template = np.squeeze(spike_template)
+
+    # Take the raw spikes at that channel
+    # Create df for all spikes
+    '''
+    Note: took the party here to NOT recompute the peak channel of each waveform, but to reuse the one from the
+    template — this is because the function to find the peak assumes the waveform has been denoised
+    and uses the maximum amplitude value --> which here would lead to failures in the case of collision
+    '''
+    df = pd.DataFrame()
+    df['peak_trace_idx'] = [df_temp['peak_trace_idx'][0]] * wf_cluster.shape[0]
+
+    # Per waveform, keep only trace that contains the peak
+    arr_in = np.swapaxes(wf_cluster, axis1=1, axis2=2)  # wfs size (wav, trace, time) -> swap (wav, time, trace)
+    arr_peak_real = get_array_peak(arr_in, df)
+
+    # Resynch 1 spike with 1 template (using only peak channel) ; Apply shift to all wav traces
+    wf_out = np.zeros(wf_cluster.shape)
+    shift_applied = np.zeros(wf_cluster.shape[0])
+    for i_spike in range(0, wf_cluster.shape[0]):
+        # Raw spike at peak channel
+        spike_raw = arr_peak_real[i_spike, :]
+        # Resynch
+        spike_template_resynch, shift_computed = wave_shift_corrmax(spike_raw, spike_template)
+        # Apply shift to all traces at once
+        wfs_avg_resync = fshift(wf_cluster[i_spike, :, :], shift_computed)
+        wf_out[i_spike, :, :] = wfs_avg_resync
+        shift_applied[i_spike] = shift_computed
+
+    return wf_out, shift_applied
