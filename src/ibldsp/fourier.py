@@ -19,16 +19,16 @@ def channel_shift(data, sample_shifts):
 
     n_channels, n_times = data.shape
 
-    dephas = cp.tile(- 2 * pi / n_times * cp.arange(n_times), (n_channels, 1))
-    dephas += 2 * pi * (dephas < - pi)  # angles in the range (-pi,pi)
+    dephas = cp.tile(-2 * pi / n_times * cp.arange(n_times), (n_channels, 1))
+    dephas += 2 * pi * (dephas < -pi)  # angles in the range (-pi,pi)
     dephas = cp.exp(1j * dephas * sample_shifts[:, cp.newaxis])
 
     data_shifted = cp.real(cp.fft.ifft(cp.fft.fft(data) * dephas))
 
-    return cp.array(data_shifted, dtype='float32')
+    return cp.array(data_shifted, dtype="float32")
 
 
-def convolve(x, w, mode='full', gpu=False):
+def convolve(x, w, mode="full", gpu=False):
     """
     Frequency domain convolution along the last dimension (2d arrays)
     Will broadcast if a matrix is convolved with a vector
@@ -46,13 +46,19 @@ def convolve(x, w, mode='full', gpu=False):
     nsx = x.shape[-1]
     nsw = w.shape[-1]
     ns = ns_optim_fft(nsx + nsw)
-    x_ = gp.concatenate((x, gp.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1)
-    w_ = gp.concatenate((w, gp.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1)
-    xw = gp.real(gp.fft.irfft(gp.fft.rfft(x_, axis=-1) * gp.fft.rfft(w_, axis=-1), axis=-1))
-    xw = xw[..., :(nsx + nsw)]  # remove 0 padding
-    if mode == 'full':
+    x_ = gp.concatenate(
+        (x, gp.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1
+    )
+    w_ = gp.concatenate(
+        (w, gp.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1
+    )
+    xw = gp.real(
+        gp.fft.irfft(gp.fft.rfft(x_, axis=-1) * gp.fft.rfft(w_, axis=-1), axis=-1)
+    )
+    xw = xw[..., : (nsx + nsw)]  # remove 0 padding
+    if mode == "full":
         return xw
-    elif mode == 'same':
+    elif mode == "same":
         first = int(gp.floor(nsw / 2)) - ((nsw + 1) % 2)
         last = int(gp.ceil(nsw / 2)) + ((nsw + 1) % 2)
         return xw[..., first:-last]
@@ -78,7 +84,7 @@ def dephas(w, phase, axis=-1):
     :return:
     """
     ns = w.shape[axis]
-    W = freduce(np.fft.fft(w, axis=axis), axis=axis) * np.exp(- 1j * phase / 180 * np.pi)
+    W = freduce(np.fft.fft(w, axis=axis), axis=axis) * np.exp(-1j * phase / 180 * np.pi)
     return np.real(np.fft.ifft(fexpand(W, ns=ns, axis=axis), axis=axis))
 
 
@@ -142,7 +148,7 @@ def bp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='bp')
+    return _freq_filter(ts, si, b, axis=axis, typ="bp")
 
 
 def lp(ts, si, b, axis=None):
@@ -155,7 +161,7 @@ def lp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='lp')
+    return _freq_filter(ts, si, b, axis=axis, typ="lp")
 
 
 def hp(ts, si, b, axis=None):
@@ -168,38 +174,40 @@ def hp(ts, si, b, axis=None):
     :param axis: axis along which to perform reduction (last axis by default)
     :return: filtered time serie
     """
-    return _freq_filter(ts, si, b, axis=axis, typ='hp')
+    return _freq_filter(ts, si, b, axis=axis, typ="hp")
 
 
-def _freq_filter(ts, si, b, axis=None, typ='lp'):
+def _freq_filter(ts, si, b, axis=None, typ="lp"):
     """
-        Wrapper for hp/lp/bp filters
+    Wrapper for hp/lp/bp filters
     """
     if axis is None:
         axis = ts.ndim - 1
     ns = ts.shape[axis]
     f = fscale(ns, si=si, one_sided=True)
-    if typ == 'bp':
-        filc = _freq_vector(f, b[0:2], typ='hp') * _freq_vector(f, b[2:4], typ='lp')
+    if typ == "bp":
+        filc = _freq_vector(f, b[0:2], typ="hp") * _freq_vector(f, b[2:4], typ="lp")
     else:
         filc = _freq_vector(f, b, typ=typ)
     if axis < (ts.ndim - 1):
         filc = filc[:, np.newaxis]
-    return np.real(np.fft.ifft(np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis))
+    return np.real(
+        np.fft.ifft(np.fft.fft(ts, axis=axis) * fexpand(filc, ns, axis=0), axis=axis)
+    )
 
 
-def _freq_vector(f, b, typ='lp'):
+def _freq_vector(f, b, typ="lp"):
     """
-        Returns a frequency modulated vector for filtering
+    Returns a frequency modulated vector for filtering
 
-        :param f: frequency vector, uniform and monotonic
-        :param b: 2 bounds array
-        :return: amplitude modulated frequency vector
+    :param f: frequency vector, uniform and monotonic
+    :param b: 2 bounds array
+    :return: amplitude modulated frequency vector
     """
     filc = fcn_cosine(b)(f)
-    if typ.lower() in ['hp', 'highpass']:
+    if typ.lower() in ["hp", "highpass"]:
         return filc
-    elif typ.lower() in ['lp', 'lowpass']:
+    elif typ.lower() in ["lp", "lowpass"]:
         return 1 - filc
 
 
@@ -256,8 +264,13 @@ def fit_phase(w, si=1, fmin=0, fmax=None, axis=-1):
     freqs = freduce(fscale(ns, si=si))
     phi = np.unwrap(np.angle(freduce(np.fft.fft(w, axis=axis), axis=axis)))
     indf = np.logical_and(fmin < freqs, freqs < fmax)
-    dt = - np.polyfit(freqs[indf],
-                      np.swapaxes(phi.compress(indf, axis=axis), axis, 0), 1)[0] / np.pi / 2
+    dt = (
+        -np.polyfit(
+            freqs[indf], np.swapaxes(phi.compress(indf, axis=axis), axis, 0), 1
+        )[0]
+        / np.pi
+        / 2
+    )
     return dt
 
 
@@ -284,7 +297,7 @@ def dft(x, xscale=None, axis=-1, kscale=None):
     shape = np.array(x.shape)
     x = np.reshape(x, (ns, int(np.prod(x.shape) / ns)))
     # compute fourier coefficients
-    exp = np.exp(- 1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])
+    exp = np.exp(-1j * 2 * np.pi / ns * xscale * kscale[:, np.newaxis])
     X = np.matmul(exp, x)
     shape[0] = int(nk)
     X = X.reshape(shape)
@@ -306,8 +319,14 @@ def dft2(x, r, c, nk, nl):
     # it would be interesting to compare performance with numba straight loops (easier to write)
     # GPU/C implementation should implement straight loops
     nt = x.shape[-1]
-    k, h = [v.flatten() for v in np.meshgrid(np.arange(nk), np.arange(nl), indexing='ij')]
+    k, h = [
+        v.flatten() for v in np.meshgrid(np.arange(nk), np.arange(nl), indexing="ij")
+    ]
     # exp has dimension (kh, rc)
-    exp = np.exp(- 1j * 2 * np.pi * (r[np.newaxis] * k[:, np.newaxis] +
-                                     c[np.newaxis] * h[:, np.newaxis]))
+    exp = np.exp(
+        -1j
+        * 2
+        * np.pi
+        * (r[np.newaxis] * k[:, np.newaxis] + c[np.newaxis] * h[:, np.newaxis])
+    )
     return np.matmul(exp, x).reshape((nk, nl, nt))

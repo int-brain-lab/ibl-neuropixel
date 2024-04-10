@@ -7,8 +7,16 @@ from .fourier import channel_shift
 from .voltage import _get_destripe_parameters, interpolate_bad_channels, kfilt
 
 
-def destripe_array(data, fs=30000, fshigh=300., taper_size=64, sample_shifts=None, channel_labels=None,
-                   channel_xcoords=None, channel_ycoords=None):
+def destripe_array(
+    data,
+    fs=30000,
+    fshigh=300.0,
+    taper_size=64,
+    sample_shifts=None,
+    channel_labels=None,
+    channel_xcoords=None,
+    channel_ycoords=None,
+):
     """
     Applies de-striping to a cupy array
     :param data: float32 cupy array, shape (n_channels, n_times)
@@ -39,7 +47,7 @@ def destripe_array(data, fs=30000, fshigh=300., taper_size=64, sample_shifts=Non
 
     # align channels if the time shifts are provided
     if sample_shifts is not None:
-        sample_shifts = cp.array(sample_shifts, dtype='float32')
+        sample_shifts = cp.array(sample_shifts, dtype="float32")
         data = channel_shift(data, sample_shifts)
 
     # apply spatial filter
@@ -47,9 +55,13 @@ def destripe_array(data, fs=30000, fshigh=300., taper_size=64, sample_shifts=Non
     kfilt_kwargs = _get_destripe_parameters(fs, None, None, True)[1]
 
     if channel_labels is not None:
-        data = interpolate_bad_channels(data, channel_labels, channel_xcoords, channel_ycoords, gpu=True)
+        data = interpolate_bad_channels(
+            data, channel_labels, channel_xcoords, channel_ycoords, gpu=True
+        )
         inside_brain = cp.where(channel_labels != 3)[0]
-        data[inside_brain, :] = kfilt(data[inside_brain, :], gpu=True, **kfilt_kwargs)  # apply the k-filter / CAR
+        data[inside_brain, :] = kfilt(
+            data[inside_brain, :], gpu=True, **kfilt_kwargs
+        )  # apply the k-filter / CAR
     else:
         data = kfilt(data, gpu=True, **kfilt_kwargs)  # apply the k-filter / CAR
 
@@ -65,6 +77,6 @@ def get_sos(fs, fshigh, fslow=None):
     :return: sos, second-order sections
     """
     if fslow and fslow < fs / 2:
-        return butter(3, (2 * fshigh / fs, 2 * fslow / fs), 'bandpass', output='sos')
+        return butter(3, (2 * fshigh / fs, 2 * fslow / fs), "bandpass", output="sos")
     else:
-        return butter(3, 2 * fshigh / fs, 'high', output='sos')
+        return butter(3, 2 * fshigh / fs, "high", output="sos")

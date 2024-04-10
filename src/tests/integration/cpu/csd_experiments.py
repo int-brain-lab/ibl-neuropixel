@@ -17,22 +17,24 @@ br = BrainRegions()
 h = trace_header(version=1)
 LFP_RESAMPLE_FACTOR = 10  # 250 Hz data
 
-one = ONE(base_url='https://alyx.internationalbrainlab.org')
-pid = 'ce397420-3cd2-4a55-8fd1-5e28321981f4'
+one = ONE(base_url="https://alyx.internationalbrainlab.org")
+pid = "ce397420-3cd2-4a55-8fd1-5e28321981f4"
 s0, sample_duration = (546, 30)
-sr = Streamer(pid=pid, one=one, remove_cached=False, typ='lf')
+sr = Streamer(pid=pid, one=one, remove_cached=False, typ="lf")
 tsel = slice(int(s0), int(s0) + int(sample_duration * sr.fs))
-raw = sr[tsel, :-sr.nsync].T
-destripe = voltage.destripe_lfp(raw, fs=sr.fs, neuropixel_version=1, channel_labels=True)
-destripe = scipy.signal.decimate(destripe, LFP_RESAMPLE_FACTOR, axis=1, ftype='fir')
+raw = sr[tsel, : -sr.nsync].T
+destripe = voltage.destripe_lfp(
+    raw, fs=sr.fs, neuropixel_version=1, channel_labels=True
+)
+destripe = scipy.signal.decimate(destripe, LFP_RESAMPLE_FACTOR, axis=1, ftype="fir")
 fs_out = sr.fs / LFP_RESAMPLE_FACTOR
 channels = SpikeSortingLoader(pid=pid, one=one).load_channels()
 
-butter_kwargs = {'N': 3, 'Wn': 2 / sr.fs * 2, 'btype': 'highpass'}
-sos = scipy.signal.butter(**butter_kwargs, output='sos')
+butter_kwargs = {"N": 3, "Wn": 2 / sr.fs * 2, "btype": "highpass"}
+sos = scipy.signal.butter(**butter_kwargs, output="sos")
 butter = scipy.signal.sosfiltfilt(sos, raw)
-butter = fourier.fshift(butter, h['sample_shift'], axis=1)
-butter = scipy.signal.decimate(butter, LFP_RESAMPLE_FACTOR, axis=1, ftype='fir')
+butter = fourier.fshift(butter, h["sample_shift"], axis=1)
+butter = scipy.signal.decimate(butter, LFP_RESAMPLE_FACTOR, axis=1, ftype="fir")
 
 
 ## %%
@@ -40,14 +42,26 @@ eqcs = {}
 
 
 csd = voltage.current_source_density(destripe, h)
-eqcs['butter'] = viewephys(butter, fs=250, title='butter', channels=channels, br=br)
-eqcs['destripe'] = viewephys(destripe, fs=250, title='destripe', channels=channels, br=br)
-eqcs['csd_butter'] = viewephys(voltage.current_source_density(butter, h) * 40 ** 2,
-                               fs=250, title='csd_butter', channels=channels, br=br)
-eqcs['csd_destripe'] = viewephys(voltage.current_source_density(destripe, h) * 40 ** 2,
-                                 fs=250, title='csd_destripe', channels=channels, br=br)
+eqcs["butter"] = viewephys(butter, fs=250, title="butter", channels=channels, br=br)
+eqcs["destripe"] = viewephys(
+    destripe, fs=250, title="destripe", channels=channels, br=br
+)
+eqcs["csd_butter"] = viewephys(
+    voltage.current_source_density(butter, h) * 40**2,
+    fs=250,
+    title="csd_butter",
+    channels=channels,
+    br=br,
+)
+eqcs["csd_destripe"] = viewephys(
+    voltage.current_source_density(destripe, h) * 40**2,
+    fs=250,
+    title="csd_destripe",
+    channels=channels,
+    br=br,
+)
 
-today = datetime.date.today().strftime('%Y-%m-%d')
+today = datetime.date.today().strftime("%Y-%m-%d")
 out_path = Path("/home/ibladmin/Pictures")
 for name, eqc in eqcs.items():
     eqc.viewBox_seismic.setXRange(8000, 10000)
