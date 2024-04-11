@@ -1,15 +1,19 @@
+import logging
+from pathlib import Path
+
 import scipy
 import pandas as pd
 import numpy as np
 from numpy.lib.format import open_memmap
-import neuropixel
-import spikeglx
-
 from joblib import Parallel, delayed, cpu_count
 
+import neuropixel
+import spikeglx
 from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car
 from ibldsp.fourier import fshift
 from ibldsp.utils import make_channel_index
+
+logger = logging.getLogger(__name__)
 
 
 def extract_wfs_array(
@@ -83,7 +87,9 @@ def _get_channel_labels(sr, num_snippets=20, verbose=True):
     if verbose:
         from tqdm import trange
 
-    start = (np.linspace(100, int(sr.rl) - 100, num_snippets) * sr.fs).astype(int)
+    # for most of recordings we take 100 secs left and right but account for recordings smaller
+    buffer_left_right = np.minimum(100, sr.rl * .03)
+    start = (np.linspace(buffer_left_right, int(sr.rl) - buffer_left_right, num_snippets) * sr.fs).astype(int)
     end = start + int(sr.fs)
 
     _channel_labels = np.zeros((384, num_snippets), int)
@@ -230,7 +236,7 @@ def extract_wfs_cbin(
     spike_channels,
     h=None,
     wf_extract_params=None,
-    nprocesses=None,
+    n_jobs=None,
 ):
     """
     Given a cbin file and locations of spikes, extract waveforms for each unit, compute
@@ -275,15 +281,15 @@ def extract_wfs_cbin(
         sr, spike_times, spike_clusters, spike_channels, **wf_extract_params
     )
     num_chunks = s0_arr.shape[0]
-    print(f"Chunk size: {chunksize_t}")
-    print(f"Num chunks: {num_chunks}")
+    logger.info(f"Chunk size: {chunksize_t}")
+    logger.info(f"Num chunks: {num_chunks}")
 
-    print("Running channel detection")
+    logger.info("Running channel detection")
     channel_labels = _get_channel_labels(sr)
 
     nwf = wf_flat["samples"].shape[0]
     nu = unit_ids.shape[0]
-    print(f"Extracting {nwf} waveforms from {nu} units")
+    logger.info(f"Extracting {nwf} waveforms from {nu} units")
 
     #  get channel geometry
     geom = np.c_[h["x"], h["y"]]
@@ -302,8 +308,8 @@ def extract_wfs_cbin(
         for i in range(num_chunks)
     ]
 
-    nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
-    _ = Parallel(n_jobs=nprocesses)(
+    n_jobs = n_jobs or int(cpu_count() - cpu_count() / 4)
+    _ = Parallel(n_jobs=n_jobs)(
         delayed(write_wfs_chunk)(
             i,
             cbin_file,
@@ -329,7 +335,7 @@ def extract_wfs_cbin(
         (nu, max_wf, nc, spike_length_samples), np.nan, dtype=np.float16
     )
     wfs_medians = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
-    print("Computing templates")
+    logger.info("Computing templates")
     for i, u in enumerate(unit_ids):
         _wfs_unit = wfs[wf_flat["clusters"] == u]
         nwf_u = _wfs_unit.shape[0]
