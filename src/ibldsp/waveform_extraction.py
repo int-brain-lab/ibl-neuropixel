@@ -104,7 +104,6 @@ def _make_wfs_table(
     spike_times,
     spike_clusters,
     spike_channels,
-    chunksize_t=10,
     max_wf=256,
     trough_offset=42,
     spike_length_samples=128,
@@ -148,10 +147,10 @@ def _make_wfs_table(
 
     wf_flat = pd.DataFrame(
         {
-            "indices": np.arange(wf_idx.shape[0]),
-            "samples": spike_times[wf_idx].astype(int),
-            "clusters": spike_clusters[wf_idx].astype(int),
-            "channels": spike_channels[wf_idx].astype(int),
+            "index": np.arange(wf_idx.shape[0]),
+            "sample": spike_times[wf_idx].astype(int),
+            "cluster": spike_clusters[wf_idx].astype(int),
+            "peak_channel": spike_channels[wf_idx].astype(int),
         }
     )
 
@@ -176,6 +175,9 @@ def write_wfs_chunk(
     Parallel job to extract waveforms from chunk `i_chunk` of a recording `sr` and
     write them to the correct spot in the output .npy file `wfs_fn`.
     """
+    if len(wf_flat) == 0:
+        return
+
     my_sr = spikeglx.Reader(cbin)
     s0, s1 = sr_sl
 
@@ -197,8 +199,8 @@ def write_wfs_chunk(
     else:
         offset = trough_offset
 
-    sample = wf_flat["samples"].astype(int) + offset - i_chunk * chunksize_samples
-    peak_channel = wf_flat["channels"]
+    sample = wf_flat["sample"].astype(int) + offset - i_chunk * chunksize_samples
+    peak_channel = wf_flat["peak_channel"]
 
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
@@ -216,7 +218,7 @@ def write_wfs_chunk(
     # car
     snip1 = np.full((my_sr.nc, snip0.shape[1]), np.nan)
     snip1[:-1, :] = car_func(snip0)
-    wfs_mmap[wf_flat["indices"], :, :] = extract_wfs_array(
+    wfs_mmap[wf_flat["index"], :, :] = extract_wfs_array(
         snip1.T, df, channel_neighbors
     )[0]
     wfs_mmap.flush()
@@ -224,64 +226,68 @@ def write_wfs_chunk(
 
 def extract_wfs_cbin(
     cbin_file,
-    output_file,
+    output_dir,
     spike_times,
     spike_clusters,
     spike_channels,
     h=None,
-    wf_extract_params=None,
+    max_wf=256,
+    trough_offset=42,
+    spike_length_samples=128,
+    chunksize_t=0.1,
     nprocesses=None,
 ):
     """
     Given a cbin file and locations of spikes, extract waveforms for each unit, compute
-    the templates, and save to `output_file`.
+    the templates, and save the results in `output_path`. The waveforms come from chunks
+    of raw data which are phase-corrected to account for the ADC, high-pass filtered in 
+    time with an order 3 Butterworth filter with a 300Hz cutoff, and a common-average 
+    reference procedure is applied in the spatial dimension.
 
-    If `output_file=Path("/path/to/example_clusters.npy")`, this array will be of shape
-    `(num_units, max_wf, nc, spike_length_samples)` where by default `max_wf=256, nc=40,
-    spike_length_samples=128`.
+    The following files will be generated:
+    - waveforms.traces.npy: `(num_units, max_wf, nc, spike_length_samples)`
+        This file contains the lightly processed waveforms indexed by cluster in the first
+        dimension. By default `max_wf=256, nc=40, spike_length_samples=128`.
 
-    The file "path/to/example_clusters_templates.npy" will also be generated, of shape
-    `(num_units, nc, spike_length_samples)`, where the median across waveforms is taken
-    for each unit.
+    - waveforms.templates.npy: `(num_units, nc, spike_length_samples)`
+        This file contains the median across individual waveforms for each unit.
 
-    The parquet file "path/to/example_clusters.pqt" contains the samples and max channels
-    of each waveform, indexed by unit.
+    - waveforms.channels.npz: `(num_units * max_wf, nc)` 
+        The i'th row contains the ordered indices of the `nc`-channel neighborhood used
+        to extract the i'th waveform. A NaN means the waveform is missing because the
+        unit it was supposed to come from has less than `max_wf` spikes total in the
+        recording.
+    
+    - waveforms.table.pqt: `num_units * max_wf` rows
+        For each waveform, gives the absolute sample number from the recording (i.e. 
+        where to find it in `spikes.samples`), peak channel, cluster, and linear index.
+        A row of NaN's implies that the waveform is missing because the unit is was supposed
+        to come from has less than `max_wf` spikes total.
     """
     if h is None:
         h = neuropixel.trace_header()
 
-    if wf_extract_params is None:
-        wf_extract_params = {
-            "max_wf": 256,
-            "trough_offset": 42,
-            "spike_length_samples": 128,
-            "chunksize_t": 10,
-        }
-
-    output_path = output_file.parent
-
-    max_wf = wf_extract_params["max_wf"]
-    trough_offset = wf_extract_params["trough_offset"]
-    spike_length_samples = wf_extract_params["spike_length_samples"]
-    chunksize_t = wf_extract_params["chunksize_t"]
+    nprocesses = nprocesses or int(cpu_count() / 2)
 
     sr = spikeglx.Reader(cbin_file)
-    chunksize_samples = chunksize_t * 30_000
+
+    chunksize_samples = int(chunksize_t * 30_000)
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
     s1_arr[-1] = sr.ns
 
     wf_flat, unit_ids = _make_wfs_table(
-        sr, spike_times, spike_clusters, spike_channels, **wf_extract_params
+        sr, spike_times, spike_clusters, spike_channels, max_wf, trough_offset, spike_length_samples
     )
     num_chunks = s0_arr.shape[0]
-    print(f"Chunk size: {chunksize_t}")
+    print(f"Chunk size: {chunksize_samples}")
     print(f"Num chunks: {num_chunks}")
 
-    print("Running channel detection")
-    channel_labels = _get_channel_labels(sr)
+    # print("Running channel detection")
+    # channel_labels = _get_channel_labels(sr)
+    channel_labels = np.zeros(384)
 
-    nwf = wf_flat["samples"].shape[0]
+    nwf = len(wf_flat)
     nu = unit_ids.shape[0]
     print(f"Extracting {nwf} waveforms from {nu} units")
 
@@ -290,24 +296,23 @@ def extract_wfs_cbin(
     channel_neighbors = make_channel_index(geom)
     nc = channel_neighbors.shape[1]
 
-    fn = output_path.joinpath("_wf_extract_intermediate.npy")
+    int_fn = output_dir.joinpath("_wf_extract_intermediate.npy")
     wfs = open_memmap(
-        fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
+        int_fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
     )
 
     slices = [
         slice(
-            *(np.searchsorted(wf_flat["samples"], [s0_arr[i], s1_arr[i]]).astype(int))
+            *(np.searchsorted(wf_flat["sample"], [s0_arr[i], s1_arr[i]]).astype(int))
         )
         for i in range(num_chunks)
     ]
 
-    nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
     _ = Parallel(n_jobs=nprocesses)(
         delayed(write_wfs_chunk)(
             i,
             cbin_file,
-            fn,
+            int_fn,
             wfs.shape,
             h,
             channel_labels,
@@ -321,34 +326,37 @@ def extract_wfs_cbin(
         for i in range(num_chunks)
     )
 
-    wfs = open_memmap(
-        fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
-    )
-    # bookkeeping
-    wfs_by_unit = np.full(
-        (nu, max_wf, nc, spike_length_samples), np.nan, dtype=np.float16
-    )
-    wfs_medians = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
+    traces_fn = output_dir.joinpath("waveforms.traces.npy")
+    templates_fn = output_dir.joinpath("waveforms.templates.npy")
+    table_fn = output_dir.joinpath("waveforms.table.pqt")
+    channels_fn = output_dir.joinpath("waveforms.channels.npz")
+
+    # rearrange and save traces by unit
+    wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
     print("Computing templates")
     for i, u in enumerate(unit_ids):
-        _wfs_unit = wfs[wf_flat["clusters"] == u]
-        nwf_u = _wfs_unit.shape[0]
-        wfs_by_unit[i, : min(max_wf, nwf_u), :, :] = _wfs_unit.astype(np.float16)
-        wfs_medians[i, :, :] = np.nanmedian(_wfs_unit, axis=0)
+        idx = np.where(wf_flat["cluster"] == u)[0]
+        nwf_u = idx.shape[0]
+        wfs = open_memmap(
+            int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
+        )
+        traces_by_unit = open_memmap(
+            traces_fn, mode="w+", shape=(nu, max_wf, nc, spike_length_samples), dtype=np.float16
+        )
+        traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(np.float16)
+        traces_by_unit.flush()
+        wfs_templates[i, :, :] = np.nanmedian(wfs[idx], axis=0)
 
-    df = pd.DataFrame(
-        {
-            "sample": wf_flat["samples"],
-            "peak_channel": wf_flat["channels"],
-            "cluster": wf_flat["clusters"],
-        }
-    )
-    df = df.sort_values(["cluster", "sample"]).set_index(["cluster", "sample"])
+    # cleanup intermediate file
+    int_fn.unlink()
 
-    np.save(output_file, wfs_by_unit)
-    # medians
-    avg_file = output_file.parent.joinpath(output_file.stem + "_templates.npy")
-    np.save(avg_file, wfs_medians)
-    df.to_parquet(output_file.with_suffix(".pqt"))
+    # save waveforms and templates
+    np.save(templates_fn, wfs_templates)  # waveforms.templates.npy
 
-    fn.unlink()
+    # save dataframe
+    wf_flat.to_parquet(table_fn)
+
+    # save channel map for each waveform
+    peak_channels = wf_flat["peak_channel"].to_numpy()
+    chan_map = channel_neighbors[peak_channels, :]
+    np.savez(channels_fn, chan_map)
