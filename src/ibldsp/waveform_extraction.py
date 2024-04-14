@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 import scipy
 import pandas as pd
@@ -88,8 +87,11 @@ def _get_channel_labels(sr, num_snippets=20, verbose=True):
         from tqdm import trange
 
     # for most of recordings we take 100 secs left and right but account for recordings smaller
-    buffer_left_right = np.minimum(100, sr.rl * .03)
-    start = (np.linspace(buffer_left_right, int(sr.rl) - buffer_left_right, num_snippets) * sr.fs).astype(int)
+    buffer_left_right = np.minimum(100, sr.rl * 0.03)
+    start = (
+        np.linspace(buffer_left_right, int(sr.rl) - buffer_left_right, num_snippets)
+        * sr.fs
+    ).astype(int)
     end = start + int(sr.fs)
 
     _channel_labels = np.zeros((384, num_snippets), int)
@@ -246,8 +248,8 @@ def extract_wfs_cbin(
     """
     Given a cbin file and locations of spikes, extract waveforms for each unit, compute
     the templates, and save the results in `output_path`. The waveforms come from chunks
-    of raw data which are phase-corrected to account for the ADC, high-pass filtered in 
-    time with an order 3 Butterworth filter with a 300Hz cutoff, and a common-average 
+    of raw data which are phase-corrected to account for the ADC, high-pass filtered in
+    time with an order 3 Butterworth filter with a 300Hz cutoff, and a common-average
     reference procedure is applied in the spatial dimension.
 
     The following files will be generated:
@@ -258,14 +260,14 @@ def extract_wfs_cbin(
     - waveforms.templates.npy: `(num_units, nc, spike_length_samples)`
         This file contains the median across individual waveforms for each unit.
 
-    - waveforms.channels.npz: `(num_units * max_wf, nc)` 
+    - waveforms.channels.npz: `(num_units * max_wf, nc)`
         The i'th row contains the ordered indices of the `nc`-channel neighborhood used
         to extract the i'th waveform. A NaN means the waveform is missing because the
         unit it was supposed to come from has less than `max_wf` spikes total in the
         recording.
-    
+
     - waveforms.table.pqt: `num_units * max_wf` rows
-        For each waveform, gives the absolute sample number from the recording (i.e. 
+        For each waveform, gives the absolute sample number from the recording (i.e.
         where to find it in `spikes.samples`), peak channel, cluster, and linear index.
         A row of NaN's implies that the waveform is missing because the unit is was supposed
         to come from has less than `max_wf` spikes total.
@@ -283,7 +285,13 @@ def extract_wfs_cbin(
     s1_arr[-1] = sr.ns
 
     wf_flat, unit_ids = _make_wfs_table(
-        sr, spike_times, spike_clusters, spike_channels, max_wf, trough_offset, spike_length_samples
+        sr,
+        spike_times,
+        spike_clusters,
+        spike_channels,
+        max_wf,
+        trough_offset,
+        spike_length_samples,
     )
     num_chunks = s0_arr.shape[0]
 
@@ -308,9 +316,7 @@ def extract_wfs_cbin(
     )
 
     slices = [
-        slice(
-            *(np.searchsorted(wf_flat["sample"], [s0_arr[i], s1_arr[i]]).astype(int))
-        )
+        slice(*(np.searchsorted(wf_flat["sample"], [s0_arr[i], s1_arr[i]]).astype(int)))
         for i in range(num_chunks)
     ]
 
@@ -347,7 +353,10 @@ def extract_wfs_cbin(
             int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
         )
         traces_by_unit = open_memmap(
-            traces_fn, mode="w+", shape=(nu, max_wf, nc, spike_length_samples), dtype=np.float16
+            traces_fn,
+            mode="w+",
+            shape=(nu, max_wf, nc, spike_length_samples),
+            dtype=np.float16,
         )
         traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(np.float16)
         traces_by_unit.flush()
