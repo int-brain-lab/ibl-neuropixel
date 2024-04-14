@@ -1,15 +1,19 @@
+import logging
+from pathlib import Path
+
 import scipy
 import pandas as pd
 import numpy as np
 from numpy.lib.format import open_memmap
-import neuropixel
-import spikeglx
-
 from joblib import Parallel, delayed, cpu_count
 
+import neuropixel
+import spikeglx
 from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car
 from ibldsp.fourier import fshift
 from ibldsp.utils import make_channel_index
+
+logger = logging.getLogger(__name__)
 
 
 def extract_wfs_array(
@@ -83,7 +87,9 @@ def _get_channel_labels(sr, num_snippets=20, verbose=True):
     if verbose:
         from tqdm import trange
 
-    start = (np.linspace(100, int(sr.rl) - 100, num_snippets) * sr.fs).astype(int)
+    # for most of recordings we take 100 secs left and right but account for recordings smaller
+    buffer_left_right = np.minimum(100, sr.rl * .03)
+    start = (np.linspace(buffer_left_right, int(sr.rl) - buffer_left_right, num_snippets) * sr.fs).astype(int)
     end = start + int(sr.fs)
 
     _channel_labels = np.zeros((384, num_snippets), int)
@@ -280,16 +286,16 @@ def extract_wfs_cbin(
         sr, spike_times, spike_clusters, spike_channels, max_wf, trough_offset, spike_length_samples
     )
     num_chunks = s0_arr.shape[0]
-    print(f"Chunk size: {chunksize_samples}")
-    print(f"Num chunks: {num_chunks}")
 
-    # print("Running channel detection")
-    # channel_labels = _get_channel_labels(sr)
-    channel_labels = np.zeros(384)
+    logger.info(f"Chunk size: {chunksize_t}")
+    logger.info(f"Num chunks: {num_chunks}")
+
+    logger.info("Running channel detection")
+    channel_labels = _get_channel_labels(sr)
 
     nwf = len(wf_flat)
     nu = unit_ids.shape[0]
-    print(f"Extracting {nwf} waveforms from {nu} units")
+    logger.info(f"Extracting {nwf} waveforms from {nu} units")
 
     #  get channel geometry
     geom = np.c_[h["x"], h["y"]]
