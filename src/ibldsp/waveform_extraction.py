@@ -152,7 +152,6 @@ def _make_wfs_table(
     wf_idx = wf_idx[np.nonzero(wf_idx)[0][0]:]
 
     # get sample times, clusters, channels
-
     wf_flat = pd.DataFrame(
         {
             "index": np.arange(wf_idx.shape[0]),
@@ -213,7 +212,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset : s1 + spike_length_samples - trough_offset,: -my_sr.nsync
+        s0 - offset:s1 + spike_length_samples - trough_offset: -my_sr.nsync
     ]
     snip0 = interpolate_bad_channels(
         fshift(
@@ -269,7 +268,7 @@ def extract_wfs_cbin(
     - waveforms.table.pqt: `num_units * max_wf` rows
         For each waveform, gives the absolute sample number from the recording (i.e.
         where to find it in `spikes.samples`), peak channel, cluster, and linear index.
-        A row of NaN's implies that the waveform is missing because the unit is was supposed
+        A row of -1s implies that the waveform is missing because the unit is was supposed
         to come from has less than `max_wf` spikes total.
     """
     if h is None:
@@ -284,6 +283,7 @@ def extract_wfs_cbin(
     s1_arr = s0_arr + chunksize_samples
     s1_arr[-1] = sr.ns
 
+    # selects spikes from throughout the recording for each unit
     wf_flat, unit_ids = _make_wfs_table(
         sr,
         spike_times,
@@ -310,6 +310,9 @@ def extract_wfs_cbin(
     channel_neighbors = make_channel_index(geom)
     nc = channel_neighbors.shape[1]
 
+    # this intermediate memmap is written to in parallel
+    # the waveforms are ordered only by their chronological position
+    # in the recording, as we are reading them in time chunks
     int_fn = output_dir.joinpath("_wf_extract_intermediate.npy")
     wfs = open_memmap(
         int_fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
@@ -338,24 +341,30 @@ def extract_wfs_cbin(
         for i in range(num_chunks)
     )
 
+    # output files
     traces_fn = output_dir.joinpath("waveforms.traces.npy")
     templates_fn = output_dir.joinpath("waveforms.templates.npy")
     table_fn = output_dir.joinpath("waveforms.table.pqt")
     channels_fn = output_dir.joinpath("waveforms.channels.npz")
 
-    # rearrange and save traces by unit
+    ## rearrange and save traces by unit
+    # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
-    # create final output file
+    # create waveform output file (~2-3 GB)
     traces_by_unit = open_memmap(
         traces_fn,
         mode="w+",
         shape=(nu, max_wf, nc, spike_length_samples),
         dtype=np.float16,
     )
-    print("Computing templates")
+    logger.info("Writing to output files")
+
     for i, u in enumerate(unit_ids):
         idx = np.where(wf_flat["cluster"] == u)[0]
         nwf_u = idx.shape[0]
+        # reopening these memmaps on each iteration
+        # forces Python to clean up each large array it loads
+        # and prevent a memory leak
         wfs = open_memmap(
             int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
         )
@@ -365,15 +374,17 @@ def extract_wfs_cbin(
             shape=(nu, max_wf, nc, spike_length_samples),
             dtype=np.float16,
         )
+        # write up to 256 waveforms and leave the rest of dimensions 1-3 as NaNs
         traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(np.float16)
         traces_by_unit.flush()
+        # populate this array in memory as it's 256x smaller
         wfs_templates[i, :, :] = np.nanmedian(wfs[idx], axis=0)
 
     # cleanup intermediate file
     int_fn.unlink()
 
-    # save waveforms and templates
-    np.save(templates_fn, wfs_templates)  # waveforms.templates.npy
+    # save templates
+    np.save(templates_fn, wfs_templates)
 
     # add in dummy rows and order by unit, and then sample
     unit_counts = wf_flat.groupby("cluster")["sample"].count().reset_index(name="count")
@@ -392,14 +403,19 @@ def extract_wfs_cbin(
         }
     )
     save_df = pd.concat([wf_flat, extra_rows])
+    # now the waveforms are arranged by cluster, and then in time
+    # these match dimensions 0 and 1 of waveforms.traces.npy
     save_df.sort_values(["cluster", "sample"], inplace=True)
     save_df.to_parquet(table_fn)
 
     # save channel map for each waveform
+    # these values are now reordered so that they match the pqt
+    # and the traces file
     peak_channel = np.nan_to_num(save_df["peak_channel"].to_numpy(), nan=-1).astype(
         np.int16
     )
     dummy_idx = np.where(peak_channel >= 0)[0]
+    # leave "missing" waveforms as -1 since we can't have NaN with int dtype
     chan_map = np.ones((max_wf * nu, nc), np.int16) * -1
     chan_map[dummy_idx] = channel_neighbors[peak_channel[dummy_idx].astype(int)]
     np.savez(channels_fn, channels=chan_map)
