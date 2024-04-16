@@ -143,7 +143,7 @@ def _make_wfs_table(
         nspikes = u_spikeidx.shape[0]
         unit_nspikes[i] = nspikes
         # uniformly select up to 500 spikes
-        u_wf_idx = rng.choice(u_spikeidx, min(max_wf, nspikes))
+        u_wf_idx = rng.choice(u_spikeidx, min(max_wf, nspikes), replace=False)
         unit_wf_idx[u, : min(max_wf, nspikes)] = u_wf_idx
 
     # all wf indices in order
@@ -213,7 +213,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset: s1 + spike_length_samples - trough_offset, : -my_sr.nsync
+        s0 - offset : s1 + spike_length_samples - trough_offset,: -my_sr.nsync
     ]
     snip0 = interpolate_bad_channels(
         fshift(
@@ -345,6 +345,13 @@ def extract_wfs_cbin(
 
     # rearrange and save traces by unit
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
+    # create final output file
+    traces_by_unit = open_memmap(
+        traces_fn,
+        mode="w+",
+        shape=(nu, max_wf, nc, spike_length_samples),
+        dtype=np.float16,
+    )
     print("Computing templates")
     for i, u in enumerate(unit_ids):
         idx = np.where(wf_flat["cluster"] == u)[0]
@@ -354,7 +361,7 @@ def extract_wfs_cbin(
         )
         traces_by_unit = open_memmap(
             traces_fn,
-            mode="w+",
+            mode="r+",
             shape=(nu, max_wf, nc, spike_length_samples),
             dtype=np.float16,
         )
@@ -368,10 +375,31 @@ def extract_wfs_cbin(
     # save waveforms and templates
     np.save(templates_fn, wfs_templates)  # waveforms.templates.npy
 
-    # save dataframe
-    wf_flat.to_parquet(table_fn)
+    # add in dummy rows and order by unit, and then sample
+    unit_counts = wf_flat.groupby("cluster")["sample"].count().reset_index(name="count")
+    unit_counts["missing"] = 256 - unit_counts["count"]
+    missing_wf = unit_counts[unit_counts["missing"] > 0]
+    total_missing = sum(missing_wf.missing)
+    extra_rows = pd.DataFrame(
+        {
+            "sample": [np.nan] * total_missing,
+            "peak_channel": [np.nan] * total_missing,
+            "index": [np.nan] * total_missing,
+            "cluster": sum(
+                [[row["cluster"]] * row["missing"] for _, row in missing_wf.iterrows()],
+                [],
+            ),
+        }
+    )
+    save_df = pd.concat([wf_flat, extra_rows])
+    save_df.sort_values(["cluster", "sample"], inplace=True)
+    save_df.to_parquet(table_fn)
 
     # save channel map for each waveform
-    peak_channels = wf_flat["peak_channel"].to_numpy()
-    chan_map = channel_neighbors[peak_channels, :]
-    np.savez(channels_fn, chan_map)
+    peak_channel = np.nan_to_num(save_df["peak_channel"].to_numpy(), nan=-1).astype(
+        np.int16
+    )
+    dummy_idx = np.where(peak_channel >= 0)[0]
+    chan_map = np.ones((max_wf * nu, nc), np.int16) * -1
+    chan_map[dummy_idx] = channel_neighbors[peak_channel[dummy_idx].astype(int)]
+    np.savez(channels_fn, channels=chan_map)
