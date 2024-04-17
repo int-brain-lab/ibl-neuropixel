@@ -212,7 +212,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset:s1 + spike_length_samples - trough_offset: -my_sr.nsync
+        s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
     ]
     snip0 = interpolate_bad_channels(
         fshift(
