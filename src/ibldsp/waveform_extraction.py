@@ -238,6 +238,7 @@ def extract_wfs_cbin(
     spike_clusters,
     spike_channels,
     h=None,
+    channel_labels=None,
     max_wf=256,
     trough_offset=42,
     spike_length_samples=128,
@@ -297,7 +298,8 @@ def extract_wfs_cbin(
     logger.info(f"Num chunks: {num_chunks}")
 
     logger.info("Running channel detection")
-    channel_labels = _get_channel_labels(sr)
+    if channel_labels is None:
+        channel_labels = _get_channel_labels(sr)
 
     nwf = len(wf_flat)
     nu = unit_ids.shape[0]
