@@ -109,7 +109,7 @@ def _get_channel_labels(sr, num_snippets=20, verbose=True):
 
 def _make_wfs_table(
     sr,
-    spike_times,
+    spike_samples,
     spike_clusters,
     spike_channels,
     max_wf=256,
@@ -125,8 +125,8 @@ def _make_wfs_table(
     """
     # exclude spikes without a buffer on either end
     # of recording
-    allowed_idx = (spike_times > trough_offset) & (
-        spike_times < sr.ns - (spike_length_samples - trough_offset)
+    allowed_idx = (spike_samples > trough_offset) & (
+            spike_samples < sr.ns - (spike_length_samples - trough_offset)
     )
 
     rng = np.random.default_rng(seed=2024)  # numpy 1.23.5
@@ -155,7 +155,7 @@ def _make_wfs_table(
     wf_flat = pd.DataFrame(
         {
             "index": np.arange(wf_idx.shape[0]),
-            "sample": spike_times[wf_idx].astype(int),
+            "sample": spike_samples[wf_idx].astype(int),
             "cluster": spike_clusters[wf_idx].astype(int),
             "peak_channel": spike_channels[wf_idx].astype(int),
         }
@@ -234,15 +234,15 @@ def write_wfs_chunk(
 def extract_wfs_cbin(
     cbin_file,
     output_dir,
-    spike_times,
+    spike_samples,
     spike_clusters,
     spike_channels,
     h=None,
     max_wf=256,
     trough_offset=42,
     spike_length_samples=128,
-    chunksize_t=0.1,
-    nprocesses=None,
+    chunksize_samples=int(3000),
+    n_jobs=None,
 ):
     """
     Given a cbin file and locations of spikes, extract waveforms for each unit, compute
@@ -274,11 +274,9 @@ def extract_wfs_cbin(
     if h is None:
         h = neuropixel.trace_header()
 
-    nprocesses = nprocesses or int(cpu_count() / 2)
+    n_jobs = n_jobs or int(cpu_count() / 2)
 
     sr = spikeglx.Reader(cbin_file)
-
-    chunksize_samples = int(chunksize_t * 30_000)
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
     s1_arr[-1] = sr.ns
@@ -286,7 +284,7 @@ def extract_wfs_cbin(
     # selects spikes from throughout the recording for each unit
     wf_flat, unit_ids = _make_wfs_table(
         sr,
-        spike_times,
+        spike_samples,
         spike_clusters,
         spike_channels,
         max_wf,
@@ -295,7 +293,7 @@ def extract_wfs_cbin(
     )
     num_chunks = s0_arr.shape[0]
 
-    logger.info(f"Chunk size: {chunksize_t}")
+    logger.info(f"Chunk size samples: {chunksize_samples}")
     logger.info(f"Num chunks: {num_chunks}")
 
     logger.info("Running channel detection")
@@ -323,7 +321,7 @@ def extract_wfs_cbin(
         for i in range(num_chunks)
     ]
 
-    _ = Parallel(n_jobs=nprocesses)(
+    _ = Parallel(n_jobs=n_jobs)(
         delayed(write_wfs_chunk)(
             i,
             cbin_file,
