@@ -1,4 +1,6 @@
 # 0.10.0
+## 0.10.3 2024-04-18
+-  Patch fixing memory leaks for `waveform_extraction` module.
 ## 0.10.2 2024-04-10
 -  Add `waveform_extraction` module to `ibldsp`. This includes the `extract_wfs_array` and `extract_wfs_cbin` methods. 
 -  Add code for performing subsample shifts of waveforms.
