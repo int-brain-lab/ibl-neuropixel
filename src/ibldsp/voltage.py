@@ -462,6 +462,7 @@ def decompress_destripe_cbin(
     if compute_rms:
         ap_rms_file = output_file.parent.joinpath("ap_rms.bin")
         ap_time_file = output_file.parent.joinpath("ap_time.bin")
+        file_saturation = output_file.parent.joinpath("saturation.npy")
         rms_nbytes = np.float32(1).nbytes
 
         if append:
@@ -472,12 +473,14 @@ def decompress_destripe_cbin(
             time_data = np.frombuffer(t, dtype=np.float32)
             t0 = time_data[-1]
         else:
+            # we do not support the saturation in append mode
             rms_offset = 0
             time_offset = 0
             t0 = 0
             open(ap_rms_file, "wb").close()
             open(ap_time_file, "wb").close()
-
+            np.save(file_saturation, np.zeros(sr.fs, dtype=bool))
+            saturation = np.load(file_saturation, mmap_mode="r+")
     if append:
         # need to find the end of the file and the offset
         offset = Path(output_file).stat().st_size
@@ -526,6 +529,8 @@ def decompress_destripe_cbin(
             last_s = np.minimum(NBATCH + first_s, _sr.ns)
             # Apply tapers
             chunk = _sr[first_s:last_s, :ncv].T
+            saturation[first_s:last_s] = sr.detect_saturation(chunk, )
+
             chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
             chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
             # Apply filters
