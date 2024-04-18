@@ -126,7 +126,7 @@ def _make_wfs_table(
     # exclude spikes without a buffer on either end
     # of recording
     allowed_idx = (spike_samples > trough_offset) & (
-            spike_samples < sr.ns - (spike_length_samples - trough_offset)
+        spike_samples < sr.ns - (spike_length_samples - trough_offset)
     )
 
     rng = np.random.default_rng(seed=2024)  # numpy 1.23.5
