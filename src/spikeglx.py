@@ -252,6 +252,10 @@ class Reader:
 
     @property
     def range_volts(self):
+        """
+        Returns the maximum voltage that can be recorded before saturation
+        :return: [nc, ] array of float32 (V)
+        """
         if not self.meta:
             return self.sample2volts * np.NaN
         maxint = _get_max_int_from_meta(self.meta)

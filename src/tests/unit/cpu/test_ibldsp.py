@@ -448,6 +448,9 @@ class TestVoltage(unittest.TestCase):
         # b = viewseis(fkk, .002, title='output')
         # c = viewseis(data_v1 - fkk, .002, title='test')
 
+    def test_saturation(self):
+        pass
+
 
 class TestCadzow(unittest.TestCase):
     def test_trajectory_matrixes(self):

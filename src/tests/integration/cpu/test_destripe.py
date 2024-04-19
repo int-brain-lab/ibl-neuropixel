@@ -5,18 +5,19 @@ import shutil
 import unittest
 from pathlib import Path
 
-from neuropixel import trace_header
+import neuropixel
 import spikeglx
 from ibldsp import voltage, utils
+from iblutil.io import params
 
 _logger = logging.getLogger(__name__)
-
-DATA_PATH = Path("/datadisk/Data/tests-ibl-neuropixel")
+pars = params.read('ibl_ci', {'data_root': './'})
+DATA_PATH = Path(pars.data_root)  # "/datadisk/Data/IntegrationTests"
 
 
 class TestEphysSpikeSortingPreProc(unittest.TestCase):
     def test_pre_proc(self):
-        cbin_file = DATA_PATH.joinpath("adc", "adc_test.ap.cbin")
+        cbin_file = DATA_PATH.joinpath("ephys", "ephys_spike_sorting", "adc_test.ap.cbin")
         sr = spikeglx.Reader(cbin_file, open=True)
         bin_file = cbin_file.with_suffix(".bin")
 
@@ -29,7 +30,7 @@ class TestEphysSpikeSortingPreProc(unittest.TestCase):
         assert sr.shape == sr_out.shape
 
         sel_comp = slice(int(65536 * 0.4), int(65536 * 1.6))
-        h = trace_header(version=1)
+        h = neuropixel.trace_header(version=1)
         # create the FFT stencils
         ncv = h["x"].size  # number of channels
         expected = voltage.destripe(
@@ -52,7 +53,7 @@ class TestEphysSpikeSortingPreProc(unittest.TestCase):
 
 class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
     def setUp(self) -> None:
-        file_path = DATA_PATH.joinpath("np2", "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
+        file_path = DATA_PATH.joinpath("ephys", "ephys_np2", "raw_ephys_data", "probe00", "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
         self.file_path = file_path.parent.parent.joinpath(
             "probe00_temp", file_path.name
         )
