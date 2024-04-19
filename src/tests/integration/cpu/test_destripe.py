@@ -53,7 +53,8 @@ class TestEphysSpikeSortingPreProc(unittest.TestCase):
 
 class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
     def setUp(self) -> None:
-        file_path = DATA_PATH.joinpath("ephys", "ephys_np2", "raw_ephys_data", "probe00", "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
+        file_path = DATA_PATH.joinpath(
+            "ephys", "ephys_np2", "raw_ephys_data", "probe00", "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
         self.file_path = file_path.parent.parent.joinpath(
             "probe00_temp", file_path.name
         )
@@ -75,15 +76,27 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         if self.file_path.parent.exists():
             shutil.rmtree(self.file_path.parent)
 
+    def _assert_qc(self):
+        sr = spikeglx.Reader(self.file_path)
+        saturated = np.load(self.file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy"))
+        self.assertEqual(sr.ns, saturated.size)
+        self.assertTrue(self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.rms.npy").exists())
+        self.assertTrue(self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy").exists())
+        for fil in self.file_path.parent.glob("_iblqc_*"):
+            fil.unlink()
+
     def test_parallel_computation(self):
+        # tests single process
         out_file = self.file_path.parent.joinpath("one_process.bin")
         shutil.copy(self.meta_file, out_file.with_suffix(".meta"))
         voltage.decompress_destripe_cbin(
             self.file_path, out_file, nprocesses=1, nbatch=6556
         )
+        self._assert_qc()
         sr_one = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_one)
 
+        # tests multiprocessing - should be equal to single process
         out_file = self.file_path.parent.joinpath("four_process.bin")
         shutil.copy(self.meta_file, out_file.with_suffix(".meta"))
         voltage.decompress_destripe_cbin(
@@ -92,6 +105,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         sr_four = spikeglx.Reader(out_file)
         self.sglx_instances.append(sr_four)
         assert np.array_equal(sr_one[:, :], sr_four[:, :])
+        self._assert_qc()
 
         # Now test the extra samples at the end
         out_file = self.file_path.parent.joinpath("four_process_extra.bin")

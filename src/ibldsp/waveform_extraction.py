@@ -128,7 +128,6 @@ def _make_wfs_table(
     allowed_idx = (spike_samples > trough_offset) & (
         spike_samples < sr.ns - (spike_length_samples - trough_offset)
     )
-
     rng = np.random.default_rng(seed=2024)  # numpy 1.23.5
 
     unit_ids = np.unique(spike_clusters)

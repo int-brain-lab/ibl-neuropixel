@@ -449,7 +449,18 @@ class TestVoltage(unittest.TestCase):
         # c = viewseis(data_v1 - fkk, .002, title='test')
 
     def test_saturation(self):
-        pass
+        np.random.seed(7654)
+        data = (np.random.randn(384, 30_000).astype(np.float32) + 20) * 1e-6
+        saturated, mute = voltage.saturation(data, max_voltage=1200)
+        np.testing.assert_array_equal(saturated, 0)
+        np.testing.assert_array_equal(mute, 1.0)
+        # now we stick a big waveform in the middle of the recorder and expect some saturation
+        w = scipy.signal.ricker(100, 4)
+        w = np.minimum(1200, w / w.max() * 1400)
+        data[:, 13_600:13700] = data[0, 13_600:13700] + w * 1e-6
+        saturated, mute = voltage.saturation(data, max_voltage=np.ones(384,) * 1200 * 1e-6)
+        self.assertGreater(np.sum(saturated), 5)
+        self.assertGreater(np.sum(mute == 0), np.sum(saturated))
 
 
 class TestCadzow(unittest.TestCase):
