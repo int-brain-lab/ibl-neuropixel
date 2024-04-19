@@ -307,6 +307,17 @@ class Reader:
         else:
             return self.read(nsel=_slice, csel=csel, sync=False)
 
+    def saturated_samples(self, data):
+        """
+        Detects saturated samples in a neuropixel recording, we assume that the probe
+        saturates if more than 20% of the samples are above 90% of the dynamic
+        range before DC removal
+        :param data: neuropixel recording data
+        :return: boolean array of shape (n_samples)
+        """
+        saturated_samples = np.mean(np.abs(data) > (self.sample2volts[:-self.nsync, np.newaxis] * 512 * .9), axis=0) > .2
+        return saturated_samples
+
     def read_sync(self, _slice=slice(0, 10000), threshold=1.2, floor_percentile=10):
         """
         Reads all sync trace. Convert analog to digital with selected threshold and append to array
