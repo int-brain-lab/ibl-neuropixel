@@ -250,6 +250,13 @@ class Reader:
             return self._ns
         return int(np.round(self.meta.get("fileTimeSecs") * self.fs))
 
+    @property
+    def range_volts(self):
+        if not self.meta:
+            return self.sample2volts * np.NaN
+        maxint = _get_max_int_from_meta(self.meta)
+        return self.sample2volts * maxint
+
     def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
         """
         Read from slices or indexes
@@ -306,17 +313,6 @@ class Reader:
             return
         else:
             return self.read(nsel=_slice, csel=csel, sync=False)
-
-    def saturated_samples(self, data):
-        """
-        Detects saturated samples in a neuropixel recording, we assume that the probe
-        saturates if more than 20% of the samples are above 90% of the dynamic
-        range before DC removal
-        :param data: neuropixel recording data
-        :return: boolean array of shape (n_samples)
-        """
-        saturated_samples = np.mean(np.abs(data) > (self.sample2volts[:-self.nsync, np.newaxis] * 512 * .9), axis=0) > .2
-        return saturated_samples
 
     def read_sync(self, _slice=slice(0, 10000), threshold=1.2, floor_percentile=10):
         """
@@ -513,6 +509,24 @@ def _get_neuropixel_major_version_from_meta(md):
         return MAJOR_VERSION[version]
 
 
+def _get_max_int_from_meta(md, neuropixel_version=None):
+    """
+    Gets the int value corresponding to the maximum voltage (range max)
+    :param md:
+    :param neuropixel_version:
+    :return:
+    """
+    # if this is an imec probe, this is electrophysiology and we assert the imMaxInt presence in NP2
+    if md.get("typeThis", None) == "imec":
+        neuropixel_version = neuropixel_version or _get_neuropixel_version_from_meta(md)
+        if "NP2" in neuropixel_version:
+            return int(md["imMaxInt"])  # usually 8192 but could be different
+        else:  # in case of NP1 it may not be in the header, but it has always been 512
+            return int(md.get("imMaxInt", 512))
+    else:  # this is a nidq device
+        return int(md.get("imMaxInt", 32768))
+
+
 def _get_neuropixel_version_from_meta(md):
     """
     Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
@@ -687,13 +701,11 @@ def _conversion_sample2v_from_meta(meta_data):
 
     def int2volts(md):
         """:return: Conversion scalar to Volts. Needs to be combined with channel gains"""
+        maxint = _get_max_int_from_meta(md)
         if md.get("typeThis", None) == "imec":
-            if "imMaxInt" in md:
-                return md.get("imAiRangeMax") / int(md["imMaxInt"])
-            else:
-                return md.get("imAiRangeMax") / 512
+            return md.get("imAiRangeMax") / maxint
         else:
-            return md.get("niAiRangeMax") / 32768
+            return md.get("niAiRangeMax") / maxint
 
     int2volt = int2volts(meta_data)
     version = _get_neuropixel_version_from_meta(meta_data)
@@ -701,7 +713,6 @@ def _conversion_sample2v_from_meta(meta_data):
     if "imroTbl" in meta_data.keys():  # binary from the probes: ap or lf
         sy_gain = np.ones(int(meta_data["snsApLfSy"][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
-        # TODO need to look at snsSaveChanMap and index channels to get correct gain
         n_chn = _get_nchannels_from_meta(meta_data) - len(
             _get_sync_trace_indices_from_meta(meta_data)
         )
@@ -765,8 +776,7 @@ def _conversion_sample2v_from_meta(meta_data):
             np.ones(
                 int(
                     np.sum(meta_data["snsMnMaXaDw"][3]),
-                )
-            ),
+                )),
         ]  # no unit for digital sync
         out = {"nidq": gain}
 
