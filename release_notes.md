@@ -1,3 +1,10 @@
+# 1.0.0
+## 1.0.0 2024-04-22
+- Functionalities to check and mitigate saturation in neuropixel recordings
+  - `spikeglx.Reader` has a `range_volts` method to get the saturating voltage value for a given type of probe
+  - `ibldsp.voltage.saturation()` is a function that returns a boolean array indicating which samples are saturated, and a mute function
+  - `ibldsp.voltage.decompress_destripe_cbin` saves a `_iblqc_ephysSaturation.samples.npy` and applies the mute function post-destriping
+
 # 0.10.0
 ## 0.10.3 2024-04-18
 -  Patch fixing memory leaks for `waveform_extraction` module.
