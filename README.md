@@ -25,7 +25,7 @@ decompress_destripe_cbin(sr_file=sr_file, output_file=out_file, nprocesses=8)
 The best way to look at the results is to use [viewephys](https://github.com/oliche/viewephys),
 open an ephys viewer on the raw data.
 
-- tick the destipe box.
+- tick the destripe box.
 - move to a desired location in the file
 - ctr+P will make the gain and axis the same on both windows
 
