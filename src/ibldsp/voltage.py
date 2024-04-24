@@ -246,6 +246,33 @@ def kfilt(
     return xf * gain
 
 
+def saturation(data, max_voltage, v_per_sec=1e-8, fs=30_000, proportion=0.2, mute_window_samples=7):
+    """
+    Computes
+    :param data: [nc, ns]: voltage traces array
+    :param max_voltage: maximum value of the voltage: scalar or array of size nc (same units as data)
+    :param v_per_sec: maximum derivative of the voltage in V/s (or units/s)
+    :param fs: sampling frequency Hz (defaults to 30kHz)
+    :param proportion: 0 < proportion <1  of channels above threshold to consider the sample as saturated (0.2)
+    :param mute_window_samples=7: number of samples for the cosine taper applied to the saturation
+    :return:
+        saturation [ns]: boolean array indicating the saturated samples
+        mute [ns]: float array indicating the mute function to apply to the data [0-1]
+    """
+    # first computes the saturated samples
+    max_voltage = np.atleast_1d(max_voltage)[:, np.newaxis]
+    saturation = np.mean(np.abs(data) > max_voltage * 0.98, axis=0)
+    # then compute the derivative of the voltage saturation
+    n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
+    n_diff_saturated = np.r_[n_diff_saturated, 0]
+    # if either of those reaches more than the proportion of channels labels the sample as saturated
+    saturation = np.logical_or(saturation > proportion, n_diff_saturated > proportion)
+    # apply a cosine taper to the saturation to create a mute function
+    win = scipy.signal.windows.cosine(mute_window_samples)
+    mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode='same'))
+    return saturation, mute
+
+
 def interpolate_bad_channels(
     data, channel_labels=None, x=None, y=None, p=1.3, kriging_distance_um=20, gpu=False
 ):
@@ -458,12 +485,15 @@ def decompress_destripe_cbin(
         1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
     )
 
-    # if we want to compute the rms ap across the session
+    # if we want to compute the rms ap across the session as well as the saturation
     if compute_rms:
+        # creates a saturation memmap, this is a nsamples vector of booleans
+        file_saturation = output_file.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+        np.save(file_saturation, np.zeros(sr.ns, dtype=bool))
+        # creates the place holders for the rms
         ap_rms_file = output_file.parent.joinpath("ap_rms.bin")
         ap_time_file = output_file.parent.joinpath("ap_time.bin")
         rms_nbytes = np.float32(1).nbytes
-
         if append:
             rms_offset = Path(ap_rms_file).stat().st_size
             time_offset = Path(ap_time_file).stat().st_size
@@ -477,7 +507,6 @@ def decompress_destripe_cbin(
             t0 = 0
             open(ap_rms_file, "wb").close()
             open(ap_time_file, "wb").close()
-
     if append:
         # need to find the end of the file and the offset
         offset = Path(output_file).stat().st_size
@@ -490,7 +519,7 @@ def decompress_destripe_cbin(
 
     def my_function(i_chunk, n_chunk):
         _sr = spikeglx.Reader(sr_file, **reader_kwargs)
-
+        _saturation = np.load(file_saturation, mmap_mode="r+")
         n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
         first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
 
@@ -526,6 +555,9 @@ def decompress_destripe_cbin(
             last_s = np.minimum(NBATCH + first_s, _sr.ns)
             # Apply tapers
             chunk = _sr[first_s:last_s, :ncv].T
+            saturated_samples, mute_saturation = saturation(
+                data=chunk, max_voltage=_sr.range_volts[:ncv], fs=_sr.fs)
+            _saturation[first_s:last_s] = saturated_samples
             chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
             chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
             # Apply filters
@@ -547,14 +579,14 @@ def decompress_destripe_cbin(
             if reject_channels:
                 chunk = interpolate_bad_channels(chunk, channel_labels, h["x"], h["y"])
                 inside_brain = np.where(channel_labels != 3)[0]
-                chunk[inside_brain, :] = spatial_fcn(
-                    chunk[inside_brain, :]
-                )  # apply the k-filter / CAR
+                # this applies either the k-filter or CAR
+                chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])
             else:
                 chunk = spatial_fcn(chunk)  # apply the k-filter / CAR
 
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
+            chunk = chunk * mute_saturation[:, np.newaxis]
 
             # Compute rms - we get it before applying the whitening
             if compute_rms:

@@ -425,6 +425,8 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test the data reading with gain
             self.assertTrue(np.all(np.isclose(dexpected, d)))
             # test the sync reading, one front per channel
+            np.testing.assert_array_equal(
+                sr.range_volts, sr.channel_conversion_sample2v[sr.type] * spikeglx._get_max_int_from_meta(sr.meta))
             self.assertTrue(np.sum(sync) == tglx["sync_depth"])
             for m in np.arange(tglx["sync_depth"]):
                 self.assertTrue(sync[m + 1, m] == 1)
@@ -527,11 +529,15 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 md = spikeglx.read_meta_data(meta_data_file)
                 cg = spikeglx._conversion_sample2v_from_meta(md)
                 if "NP2" in spikeglx._get_neuropixel_version_from_meta(md):
-                    i2v = md.get("imAiRangeMax") / int(md.get("imMaxInt"))
+                    maxint = spikeglx._get_max_int_from_meta(md)
+                    self.assertEqual(int(md.get("imMaxInt")), maxint)
+                    i2v = md.get("imAiRangeMax") / maxint
                     self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 80))
                     self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 80))
                 else:
-                    i2v = md.get("imAiRangeMax") / 512
+                    maxint = spikeglx._get_max_int_from_meta(md)
+                    self.assertEqual(512, maxint)
+                    i2v = md.get("imAiRangeMax") / maxint
                     self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 250))
                     self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 500))
                 # also test consistent dimension with nchannels
@@ -558,6 +564,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             nc = spikeglx._get_nchannels_from_meta(md)
             cg = spikeglx._conversion_sample2v_from_meta(md)
             i2v = md.get("niAiRangeMax") / 32768
+
             self.assertTrue(
                 np.all(cg["nidq"][slice(0, int(np.sum(md.acqMnMaXaDw[:3])))] == i2v)
             )
@@ -586,7 +593,6 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             tmp_meta = self.tmpdir.joinpath(meta_data_file.name)
             spikeglx.write_meta_data(md, tmp_meta)
             md_new = spikeglx.read_meta_data(tmp_meta)
-
             self.assertEqual(md, md_new)
 
     def testSaveSubset(self):
