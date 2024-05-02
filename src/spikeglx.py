@@ -17,6 +17,16 @@ DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger("ibllib")
 
 
+def _get_companion_file(sglx_file, pattern='.meta'):
+    # on SDSC there is a possibility that there is an UUID string in the filename
+    sglx_file = Path(sglx_file)
+    companion_file = sglx_file.with_suffix(pattern)
+    if not companion_file.exists():
+        search_pattern = f"{one.alf.files.remove_uuid_string(sglx_file).stem}*{pattern}"
+        companion_file = next(sglx_file.parent.glob(search_pattern), companion_file)
+    return companion_file
+
+
 class Reader:
     """
     Class for SpikeGLX reading purposes
@@ -60,7 +70,7 @@ class Reader:
         """
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
-        meta_file = meta_file or sglx_file.with_suffix(".meta")
+        meta_file = meta_file or  _get_companion_file(sglx_file, '.meta')
         # only used if MTSCOMP compressed
         self.ch_file = ch_file
 
@@ -80,11 +90,6 @@ class Reader:
             self.file_bin = sglx_file
         self.nbytes = self.file_bin.stat().st_size if self.file_bin else None
         self.dtype = np.dtype(dtype)
-
-        # on SDSC there is a possibility that there is an UUID string in the filename
-        if not meta_file.exists():
-            meta_file = next(sglx_file.parent.glob(
-                f"{one.alf.files.remove_uuid_string(sglx_file).stem}.*.meta"), meta_file)
 
         if not meta_file.exists():
             # if no meta-data file is provided, try to get critical info from the binary file
@@ -126,7 +131,7 @@ class Reader:
         sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
-            ch_file = self.ch_file or self.file_bin.with_suffix(".ch")
+            ch_file = self.ch_file or _get_companion_file(sglx_file, '.ch')
             self._raw.open(self.file_bin, ch_file)
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
