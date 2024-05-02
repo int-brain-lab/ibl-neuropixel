@@ -8,6 +8,7 @@ import numpy as np
 import mtscomp
 from iblutil.io import hashfile
 from iblutil.util import Bunch
+import one.alf.files
 
 import neuropixel
 
@@ -79,6 +80,11 @@ class Reader:
             self.file_bin = sglx_file
         self.nbytes = self.file_bin.stat().st_size if self.file_bin else None
         self.dtype = np.dtype(dtype)
+
+        # on SDSC there is a possibility that there is an UUID string in the filename
+        if not meta_file.exists():
+            meta_file = next(sglx_file.parent.glob(
+                f"{one.alf.files.remove_uuid_string(sglx_file).stem}.*.meta"), meta_file)
 
         if not meta_file.exists():
             # if no meta-data file is provided, try to get critical info from the binary file
