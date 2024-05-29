@@ -271,12 +271,12 @@ def extract_wfs_cbin(
         A row of -1s implies that the waveform is missing because the unit is was supposed
         to come from has less than `max_wf` spikes total.
     """
-    if h is None:
-        h = neuropixel.trace_header()
-
     n_jobs = n_jobs or int(cpu_count() / 2)
 
     sr = spikeglx.Reader(cbin_file)
+    if h is None:
+        h = sr.geometry
+
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
     s1_arr[-1] = sr.ns

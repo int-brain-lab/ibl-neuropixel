@@ -214,7 +214,7 @@ def rms(x, axis=-1):
     return np.sqrt(np.mean(x**2, axis=axis))
 
 
-def make_channel_index(geom, radius=200.0, pad_val=384):
+def make_channel_index(geom, radius=200.0, pad_val=None):
     """
     Given a neuropixels geometry dict `geom`, returns an array with nc rows
     where the i'th row contains the channel ids that fall within `radius` um
@@ -222,7 +222,8 @@ def make_channel_index(geom, radius=200.0, pad_val=384):
     channel can have and will depend on the geometry and the radius chosen.
 
     For channels at the edges of the probe which have less than the maximum possible
-    number of neighbors, the remaining indices in the row are filled with `pad_val`.
+    number of neighbors, the remaining indices in the row are filled with `pad_val`,
+    which defaults to the number of channels (ie. last index + 1).
     """
     neighbors = (
         scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) <= radius
