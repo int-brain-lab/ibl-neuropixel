@@ -629,13 +629,12 @@ class TestsBasicReader(unittest.TestCase):
             self.assertEqual(meta_file, spikeglx._get_companion_file(sglx_file, '.meta'))
 
         with tempfile.TemporaryDirectory() as td:
-            sglx_file = Path(td) / f"sample3A_g0_t0.imec.ap.bin"
-            meta_file_ok = Path(td) / f"sample3A_g0_t0.imec.ap.meta"
+            sglx_file = Path(td) / "sample3A_g0_t0.imec.ap.bin"
+            meta_file_ok = Path(td) / "sample3A_g0_t0.imec.ap.meta"
             meta_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.meta"
             meta_file.touch()
             meta_file_ok.touch()
             self.assertEqual(meta_file_ok, spikeglx._get_companion_file(sglx_file, '.meta'))
-
 
     def test_read_flat_binary_float32(self):
         # here we expect no scaling to V applied and no sync trace as the format is float32

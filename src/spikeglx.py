@@ -70,7 +70,7 @@ class Reader:
         """
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
-        meta_file = meta_file or  _get_companion_file(sglx_file, '.meta')
+        meta_file = meta_file or _get_companion_file(sglx_file, '.meta')
         # only used if MTSCOMP compressed
         self.ch_file = ch_file
 

@@ -1,4 +1,7 @@
 # 1.0.0
+## 1.0.1 2024-05-29: support for waveform extraction on non-standard electrode layouts
+  - bugfix waveform extraction: the probe channel layout is inferred from the spikeglx metadata by default
+  - bugfix waveform extraction: the channel neighnourhood fill value is the last channel index + 1 by default instead of 384
 ## 1.0.0 2024-04-22
 - Functionalities to check and mitigate saturation in neuropixel recordings
   - `spikeglx.Reader` has a `range_volts` method to get the saturating voltage value for a given type of probe

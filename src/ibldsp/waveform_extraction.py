@@ -6,7 +6,6 @@ import numpy as np
 from numpy.lib.format import open_memmap
 from joblib import Parallel, delayed, cpu_count
 
-import neuropixel
 import spikeglx
 from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car
 from ibldsp.fourier import fshift

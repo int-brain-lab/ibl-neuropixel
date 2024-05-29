@@ -40,13 +40,13 @@ https://doi.org/10.6084/m9.figshare.19705522
 ## Contribution
 
 Pypi Release checklist:
-Edit the version number in `setup.py`, and add release notes in `release_notes.md`
+- Edit the version number in `setup.py`, and add release notes in `release_notes.md`
 
 ```shell
 flake8
-tag=vX.Y.Z
+tag=X.Y.Z
 git tag -a $tag 
 git push origin %tag
 ```
 
-Create new release with tag vX.Y.Z (will automatically publish to PyPI)
+Create new release with tag X.Y.Z (will automatically publish to PyPI)
