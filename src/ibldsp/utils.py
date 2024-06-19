@@ -267,7 +267,39 @@ class WindowGenerator(object):
         self.iw = None
 
     @property
-    def firstlast(self):
+    def firstlast_splicing(self):
+        """
+        Generator that yields the indices as well as an amplitude function that can be used
+        to splice the windows together.
+        In the overlap, the amplitude function gradually transitions the amplitude from one window
+        to the next. The amplitudes always sum to one (ie. windows are symmetrical)
+
+        :return: tuple of (first_index, last_index, amplitude_vector]
+        """
+        w = scipy.signal.windows.hann((self.overlap + 1) * 2 + 1, sym=True)[1:self.overlap + 1]
+        assert np.all(np.isclose(w + np.flipud(w), 1))
+
+        for first, last in self.firstlast:
+            amp = np.ones(last - first)
+            amp[:self.overlap] = 1 if first == 0 else w
+            amp[-self.overlap:] = 1 if last == self.ns else np.flipud(w)
+            yield (first, last, amp)
+
+    @property
+    def firstlast_valid(self):
+        """
+        Generator that yields a tuple of first, last, first_valid, last_valid index of windows
+        The valid indices span up to half of the overlap
+        :return:
+        """
+        assert self.overlap % 2 == 0, "Overlap must be even"
+        for first, last in self.firstlast:
+            first_valid = 0 if first == 0 else first + self.overlap // 2
+            last_valid = last if last == self.ns else last - self.overlap // 2
+            yield (first, last, first_valid, last_valid)
+
+    @property
+    def firstlast(self, return_valid=False):
         """
         Generator that yields first and last index of windows
 
