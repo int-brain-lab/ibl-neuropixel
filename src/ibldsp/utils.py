@@ -5,13 +5,14 @@ import numpy as np
 import scipy
 
 
-def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
+def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
     """
     Sync two arrays of time stamps
     :param tsa: vector of timestamps
     :param tsb: vector of timestamps
     :param tbin: time bin length
     :param return_indices (bool), if True returns 2 sets of indices for tsa and tsb with
+    :param linear: (bool) if True, restricts the fit to linear
     identified matches
     :return:
      function: interpolation function such as fnc(tsa) = tsb
@@ -20,14 +21,16 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
      numpy array: of indices ib
     """
 
-    def _interp_fcn(tsa, tsb, ib):
+    def _interp_fcn(tsa, tsb, ib, linear=linear):
         # now compute the bpod/fpga drift and precise time shift
-        drift_ppm = (
-            np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)[0] * 1e6
-        )
-        fcn_a2b = scipy.interpolate.interp1d(
-            tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
-        )
+        ab = np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)
+        drift_ppm = ab[0] * 1e6
+        if linear:
+            fcn_a2b = lambda x: x * ab[0] + ab[1]  # noqa
+        else:
+            fcn_a2b = scipy.interpolate.interp1d(
+                tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
+            )
         return fcn_a2b, drift_ppm
 
     # assert sorted inputs
@@ -68,7 +71,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False):
         ib[iamiss[_a]] = ibmiss[_b]
         dt[:, _a] = np.nan
         dt[_b, :] = np.nan
-    fcn_a2b, drift_ppm = _interp_fcn(tsa, tsb, ib)
+    fcn_a2b, drift_ppm = _interp_fcn(tsa, tsb, ib, linear=linear)
 
     if return_indices:
         return fcn_a2b, drift_ppm, np.where(ib >= 0)[0], ib[ib >= 0]
