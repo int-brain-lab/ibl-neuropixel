@@ -26,7 +26,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
         ab = np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)
         drift_ppm = ab[0] * 1e6
         if linear:
-            fcn_a2b = lambda x: x * ab[0] + ab[1]  # noqa
+            fcn_a2b = lambda x: x * (1 + ab[0]) + ab[1]  # noqa
         else:
             fcn_a2b = scipy.interpolate.interp1d(
                 tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"

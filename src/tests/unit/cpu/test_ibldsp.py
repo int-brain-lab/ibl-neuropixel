@@ -18,7 +18,15 @@ import shutil
 
 
 class TestSyncTimestamps(unittest.TestCase):
-    def test_timestamps_lin(self):
+
+    def test_sync_timestamps_linear(self):
+        ta = np.cumsum(np.abs(np.random.randn(100))) * 10
+        tb = ta * 1.0001 + 100
+        fcn, drif, ia, ib = utils.sync_timestamps(ta, tb, return_indices=True, linear=True)
+        np.testing.assert_almost_equal(drif, 100)
+        np.testing.assert_almost_equal(tb, fcn(ta))
+
+    def test_timestamps(self):
         np.random.seed(4132)
         n = 50
         drift = 17.14
