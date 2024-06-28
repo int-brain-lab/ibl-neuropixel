@@ -628,6 +628,7 @@ def decompress_destripe_cbin(
             time_data = tid.read()
         time_data = np.frombuffer(time_data, dtype=np.float32)
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
+        saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
         output_qc_path = output_qc_path or output_file.parent
@@ -635,6 +636,7 @@ def decompress_destripe_cbin(
         np.save(
             output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
         )
+        np.save(output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"), saturation_data)
 
 
 def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
