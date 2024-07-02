@@ -247,7 +247,9 @@ class TestWaveformExtractorArray(unittest.TestCase):
         for sample_shift in sample_shifts:
             for sig_len in sig_lens:
                 spike = scipy.signal.morlet2(sig_len, 8.0, 2.0)
-                spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+                spike = -np.fft.irfft(np.fft.rfft(np.real(spike)) * np.exp(1j * 45 / 180 * np.pi))
+                import pdb
+                pdb.set_trace
 
                 spike2 = fshift(spike, sample_shift)
                 spike3, shift_computed = waveforms.wave_shift_corrmax(spike, spike2)
@@ -259,7 +261,7 @@ class TestWaveformExtractorArray(unittest.TestCase):
         # Resynch in time spike2 onto spike
         sample_shift_original = 0.323
         spike = scipy.signal.morlet2(100, 8.5, 2.0)
-        spike = -np.fft.irfft(np.fft.rfft(spike) * np.exp(1j * 45 / 180 * np.pi))
+        spike = -np.fft.irfft(np.fft.rfft(np.real(spike)) * np.exp(1j * 45 / 180 * np.pi))
         spike = np.append(spike, np.zeros((1, 25)))
         spike2 = fshift(spike, sample_shift_original)
         # Resynch
@@ -270,7 +272,7 @@ class TestWaveformExtractorArray(unittest.TestCase):
         sample_shift_original = 15.32
         # Create peak channel spike
         spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
-        spike_peak = -np.fft.irfft(np.fft.rfft(spike_peak) * np.exp(1j * 45 / 180 * np.pi))
+        spike_peak = -np.fft.irfft(np.fft.rfft(np.real(spike_peak)) * np.exp(1j * 45 / 180 * np.pi))
         # Create other channel spikes
         spike_oth = spike_peak * 0.3
         # Create shifted spike

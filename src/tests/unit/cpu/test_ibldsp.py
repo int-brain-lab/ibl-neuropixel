@@ -62,12 +62,12 @@ class TestSyncTimestamps(unittest.TestCase):
 
 class TestParabolicMax(unittest.TestCase):
     # expected values
-    maxi = np.array([np.NaN, 0, 3.04166667, 3.04166667, 5, 5])
-    ipeak = np.array([np.NaN, 0, 5.166667, 2.166667, 0, 7])
+    maxi = np.array([np.nan, 0, 3.04166667, 3.04166667, 5, 5])
+    ipeak = np.array([np.nan, 0, 5.166667, 2.166667, 0, 7])
     # input
     x = np.array(
         [
-            [0, 0, 0, 0, 0, np.NaN, 0, 0],  # some NaNs
+            [0, 0, 0, 0, 0, np.nan, 0, 0],  # some nans
             [0, 0, 0, 0, 0, 0, 0, 0],  # all flat
             [0, 0, 0, 0, 1, 3, 2, 0],
             [0, 1, 3, 2, 0, 0, 0, 0],
