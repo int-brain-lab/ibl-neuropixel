@@ -371,6 +371,17 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             )
             self.assert_read_glx(bin_3b)
 
+    def test_read_NP20_prototype(self):
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
+            bin_3b = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath("sampleNP2.1_prototype.ap.bin"),
+                self.workdir / "sampleNP2.1_prototype.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
+            self.assert_read_glx(bin_3b)
+
     def test_read_NP21(self):
         with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(

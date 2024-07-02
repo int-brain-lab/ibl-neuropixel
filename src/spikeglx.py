@@ -545,6 +545,8 @@ def _get_max_int_from_meta(md, neuropixel_version=None):
 def _get_neuropixel_version_from_meta(md):
     """
     Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
+    A useful resource is the following link:
+    https://billkarsh.github.io/SpikeGLX/help/parsing/
     """
     if "typeEnabled" in md.keys():
         return "3A"
@@ -556,7 +558,7 @@ def _get_neuropixel_version_from_meta(md):
         else:
             return "3B1"
     # Neuropixel 2.0 single shank
-    elif prb_type == 21:
+    elif prb_type == 21 or prb_type == 1030:
         return "NP2.1"
     # Neuropixel 2.0 four shank
     elif prb_type == 24 or prb_type == 2013:

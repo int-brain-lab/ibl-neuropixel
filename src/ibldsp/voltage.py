@@ -740,7 +740,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
         )
     )[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
-    ioutside = np.where(xfeats["xcor_lf"] < -0.75)[0]
+    ioutside = np.where(xfeats["xcor_lf"] < -0.75)[0]  # fixme: hardcoded threshold
     if ioutside.size > 0 and ioutside[-1] == (nc - 1):
         a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
         ioutside = ioutside[a == np.max(a)]
