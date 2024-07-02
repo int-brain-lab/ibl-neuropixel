@@ -354,7 +354,8 @@ class TestWaveformExtractorBin(unittest.TestCase):
             self.spike_channels,
             reader_kwargs={"ns": self.ns, "nc": self.nc, "nsync": 1, "dtype": "float32"},
             max_wf=self.max_wf,
-            h=trace_header()
+            h=trace_header(),
+            preprocess_steps=[],
         )
         templates = np.load(self.tmpdir.joinpath("waveforms.templates.npy"))
         waveforms = np.load(self.tmpdir.joinpath("waveforms.traces.npy"))
