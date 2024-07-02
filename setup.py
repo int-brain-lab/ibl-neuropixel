@@ -8,11 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="ibl-neuropixel",
-<<<<<<< Updated upstream
-    version="1.1.0a02",
-=======
     version="1.1.1",
->>>>>>> Stashed changes
     author="The International Brain Laboratory",
     description="Collection of tools for Neuropixel 1.0 and 2.0 probes data",
     long_description=long_description,
