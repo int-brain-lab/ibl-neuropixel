@@ -2,6 +2,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import tempfile
+import shutil
 
 import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
@@ -12,6 +14,8 @@ from ibldsp.fourier import fshift
 import scipy
 
 import unittest
+
+TEST_PATH = Path(__file__).parent.joinpath("fixtures")
 
 
 def make_array_peak_through_tip():
@@ -166,7 +170,7 @@ def test_generate_waveforms():
     assert wav.shape == (40, 121)
 
 
-class TestWaveformExtractor(unittest.TestCase):
+class TestWaveformExtractorArray(unittest.TestCase):
     # create sample array with 10 point wfs at different
     # channel locations
     trough_offset = 42
@@ -189,7 +193,7 @@ class TestWaveformExtractor(unittest.TestCase):
     # radius = 200um, 38 chans
     num_channels = 40
 
-    def test_extract_waveforms(self):
+    def test_extract_waveforms_array(self):
         wfs, _, _ = waveform_extraction.extract_wfs_array(
             self.arr, self.df, self.channel_neighbors
         )
@@ -295,3 +299,68 @@ class TestWaveformExtractor(unittest.TestCase):
         # Test last waveform shift applied is minus the original shift, and the rest 511 waveforms are 0
         np.testing.assert_equal(-sample_shift_original, np.around(shift_applied[-1], decimals=2))
         np.testing.assert_equal(np.zeros(n_wav), np.abs(np.around(shift_applied[0:-1], decimals=2)))
+
+
+class TestWaveformExtractorBin(unittest.TestCase):
+    ns = 38502
+    nc = 385
+    n_clusters = 2
+    ns_extract = 128
+    max_wf = 25
+
+    # 2 clusters
+    spike_samples = np.repeat(np.arange(0, ns, 1600), 2)  # 50 spikes
+    spike_channels = np.tile(np.array([100, 368]), 25)
+    spike_clusters = np.tile(np.array([1, 2]), 25)
+
+    def setUp(self):
+        self.workdir = TEST_PATH
+        self.tmpdir = Path(tempfile.gettempdir()) / "test_wfs"
+        self.tmpdir.mkdir(exist_ok=True)
+        self.bin_file = self.tmpdir.joinpath("wfs_test.bin")
+        data = np.tile(np.arange(0, 385), (1, self.ns)).astype(np.float32)
+        data.tofile(self.bin_file)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def _ground_truth_values(self):
+        h = trace_header()
+        geom = np.c_[h["x"], h["y"]]
+        chan_map = utils.make_channel_index(geom)
+        nc_extract = chan_map.shape[1]
+        gt_templates = np.ones((self.n_clusters, nc_extract, self.ns_extract), np.float32) * np.nan
+        gt_waveforms = np.ones((self.n_clusters, self.max_wf, nc_extract, self.ns_extract), np.float32) * np.nan
+
+        c0_chans = chan_map[100].astype(np.float32)
+        gt_templates[0, :, :] = np.tile(c0_chans, (self.ns_extract, 1)).T
+        gt_waveforms[0, :self.max_wf - 1, :, :] = np.tile(c0_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
+
+        c1_chans = chan_map[368].astype(np.float32)
+        c1_chans[c1_chans == 384] = np.nan
+        gt_templates[1, :, :] = np.tile(c1_chans, (self.ns_extract, 1)).T
+        gt_waveforms[1, :self.max_wf - 1, :, :] = np.tile(c1_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
+
+        return gt_templates, gt_waveforms
+
+    def test_extract_waveforms_bin(self):
+        waveform_extraction.extract_waveforms_cbin(
+            self.bin_file,
+            self.tmpdir,
+            self.spike_samples,
+            self.spike_clusters,
+            self.spike_channels,
+            reader_kwargs={"ns": self.ns, "nc": self.nc, "nsync": 1, "dtype": "float32"},
+            max_wf=self.max_wf,
+            h=trace_header()
+        )
+        templates = np.load(self.tmpdir.joinpath("waveforms.templates.npy"))
+        waveforms = np.load(self.tmpdir.joinpath("waveforms.traces.npy"))
+
+        for u in [0, 1]:
+            assert np.allclose(np.nan_to_num(templates[u]), np.nanmedian(waveforms[u], axis=0))
+
+        gt_templates, gt_waveforms = self._ground_truth_values()
+
+        assert np.allclose(np.nan_to_num(gt_templates), np.nan_to_num(templates))
+        assert np.allclose(np.nan_to_num(gt_waveforms), np.nan_to_num(waveforms))
