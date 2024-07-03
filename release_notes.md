@@ -2,6 +2,9 @@
 ## 1.1.1 2024-06-07
 -  Add support for NP2.0 prototype probe with probetype 1030
 
+## 1.1.2 2024-07-03
+-  bugfix waveform extraction: reverting refactoring of the function to maintain compatibility with current ibllib 
+
 # 1.0.0
 ## 1.0.1 2024-05-29: support for waveform extraction on non-standard electrode layouts
   - bugfix waveform extraction: the probe channel layout is inferred from the spikeglx metadata by default

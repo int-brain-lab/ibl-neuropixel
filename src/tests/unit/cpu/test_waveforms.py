@@ -346,7 +346,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
         return gt_templates, gt_waveforms
 
     def test_extract_waveforms_bin(self):
-        waveform_extraction.extract_waveforms_cbin(
+        waveform_extraction.extract_wfs_cbin(
             self.bin_file,
             self.tmpdir,
             self.spike_samples,

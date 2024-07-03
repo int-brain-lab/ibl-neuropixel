@@ -237,7 +237,7 @@ def write_wfs_chunk(
     wfs_mmap.flush()
 
 
-def extract_waveforms_cbin(
+def extract_wfs_cbin(
     bin_file,
     output_dir,
     spike_samples,
