@@ -298,7 +298,8 @@ def extract_wfs_cbin(
     :param reader_kwargs: Kwargs to pass to spikeglx.Reader()
     :param n_jobs: Number of parallel jobs to run. By default it will use 3/4 of available CPUs.
     :param wfs_dtype: Data type of raw waveforms saved (default np.float32)
-    :param preprocess: Whether to preprocess the data
+    :param preprocess: Preprocessing options to apply, list which must be a subset of
+        ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "k_filt"]
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
 
@@ -311,6 +312,9 @@ def extract_wfs_cbin(
             "k_filt"
         }
     )
+
+    if "k_filt" in preprocess_steps:
+        raise NotImplementedError
 
     sr = spikeglx.Reader(bin_file, **reader_kwargs)
     if h is None:
