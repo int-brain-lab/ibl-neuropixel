@@ -7,7 +7,7 @@ from numpy.lib.format import open_memmap
 from joblib import Parallel, delayed, cpu_count
 
 import spikeglx
-from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car
+from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car, kfilt
 from ibldsp.fourier import fshift
 from ibldsp.utils import make_channel_index
 
@@ -93,7 +93,7 @@ def _get_channel_labels(sr, num_snippets=20, verbose=True):
     ).astype(int)
     end = start + int(sr.fs)
 
-    _channel_labels = np.zeros((384, num_snippets), int)
+    _channel_labels = np.zeros((sr.nc - sr.nsync, num_snippets), int)
 
     for i in trange(num_snippets):
         s0 = start[i]
@@ -220,15 +220,21 @@ def write_wfs_chunk(
             geom_dict["y"],
         )
 
+
+    k_kwargs = {
+        "ntr_pad": 60,
+        "ntr_tap": 0,
+        "lagc": int(my_sr.fs / 10),
+        "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
+    }
     if "car" in preprocess_steps:
-        k_kwargs = {
-            "ntr_pad": 60,
-            "ntr_tap": 0,
-            "lagc": int(my_sr.fs / 10),
-            "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
-        }
         car_func = lambda dat: car(dat, **k_kwargs)  # noqa: E731
         snip = car_func(snip)
+
+    if "kfilt" in preprocess_steps:
+        kfilt_func = lambda dat: kfilt(dat, **k_kwargs) # noqa: E731
+        snip = kfilt_func(snip)
+
 
     wfs_mmap[wf_flat["index"], :, :] = extract_wfs_array(
         snip, df, channel_neighbors, add_nan_trace=True
@@ -299,7 +305,7 @@ def extract_wfs_cbin(
     :param n_jobs: Number of parallel jobs to run. By default it will use 3/4 of available CPUs.
     :param wfs_dtype: Data type of raw waveforms saved (default np.float32)
     :param preprocess: Preprocessing options to apply, list which must be a subset of
-        ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "k_filt"]
+        ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "kfilt"]
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
 
@@ -309,12 +315,12 @@ def extract_wfs_cbin(
             "bad_channel_interpolation",
             "butterworth",
             "car",
-            "k_filt"
+            "kfilt"
         }
     )
 
-    if "k_filt" in preprocess_steps:
-        raise NotImplementedError
+    if "car" in preprocess_steps and "kfilt" in preprocess_steps:
+        raise ValueError("Must choose car or kfilt spatial filter")
 
     sr = spikeglx.Reader(bin_file, **reader_kwargs)
     if h is None:
@@ -339,9 +345,11 @@ def extract_wfs_cbin(
     logger.info(f"Chunk size samples: {chunksize_samples}")
     logger.info(f"Num chunks: {num_chunks}")
 
-    logger.info("Running channel detection")
-    if channel_labels is None:
+    if channel_labels is None and "bad_channel_interpolation" in preprocess_steps:
+        logger.info("Running channel detection")
         channel_labels = _get_channel_labels(sr)
+    else:
+        channel_labels = channel_labels or np.zeros(sr.nc-sr.nsync)
 
     nwf = len(wf_flat)
     nu = unit_ids.shape[0]
