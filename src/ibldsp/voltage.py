@@ -142,40 +142,29 @@ def fk(
     return xf * gain
 
 
-def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
+def car(x, collection=None, operator='median', **kwargs):
     """
     Applies common average referencing with optional automatic gain control
-    :param x: the input array to be filtered. dimension, the filtering is considering
+    :param x: np.array(nc, ns) the input array to be de-referenced. dimension, the filtering is considering
     axis=0: spatial dimension, axis=1 temporal dimension. (ntraces, ns)
-    :param collection:
-    :param lagc: window size for time domain automatic gain control (no agc otherwise)
-    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :param collection: vector length ntraces. Each unique value set of traces is a collection and will be handled
+    separately. Useful for shanks.
+    :param operator: 'median' or 'average'
     :return:
     """
-    if butter_kwargs is None:
-        butter_kwargs = {"N": 3, "Wn": 0.1, "btype": "highpass"}
     if collection is not None:
         xout = np.zeros_like(x)
         for c in np.unique(collection):
             sel = collection == c
-            xout[sel, :] = kfilt(
-                x=x[sel, :],
-                ntr_pad=0,
-                ntr_tap=None,
-                collection=None,
-                butter_kwargs=butter_kwargs,
-            )
+            xout[sel, :] = car(x=x[sel, :], collection=None, **kwargs)
         return xout
 
-    # apply agc and keep the gain in handy
-    if not lagc:
-        xf = np.copy(x)
-        gain = 1
-    else:
-        xf, gain = agc(x, wl=lagc, si=1.0)
-    # apply CAR and then un-apply the gain
-    xf = xf - np.median(xf, axis=0)
-    return xf * gain
+    match operator:
+        case 'median':
+            x = x - np.median(x, axis=0)
+        case 'average':
+            x = x - np.mean(x, axis=0)
+    return x
 
 
 def kfilt(
@@ -390,21 +379,18 @@ def destripe(
     return x
 
 
-def destripe_lfp(x, fs, channel_labels=None, **kwargs):
+def destripe_lfp(x, fs, channel_labels=None,  butter_kwargs=None, k_filter=False):
     """
-    Wrapper around the destipe function with some default parameters to destripe the LFP band
+    Wrapper around the destripe function with some default parameters to destripe the LFP band
     See help destripe function for documentation
-    :param x:
-    :param fs:
-    :return:
+    :param x: demultiplexed array (nc, ns)
+    :param fs: sampling frequency
+    :param channel_labels: see destripe
     """
-    kwargs["butter_kwargs"] = {"N": 3, "Wn": 2 / fs * 2, "btype": "highpass"}
-    kwargs["k_filter"] = False
+    butter_kwargs = {"N": 3, "Wn": [0.5, 250], "btype": "highpass", "fs": fs} if butter_kwargs is None else butter_kwargs
     if channel_labels is True:
-        kwargs["channel_labels"], _ = detect_bad_channels(
-            x, fs=fs, psd_hf_threshold=1.4
-        )
-    return destripe(x, fs, **kwargs)
+        channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    return destripe(x, fs, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
 
 
 def decompress_destripe_cbin(
