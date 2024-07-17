@@ -378,7 +378,7 @@ def destripe(
     return x
 
 
-def destripe_lfp(x, fs, channel_labels=None,  butter_kwargs=None, k_filter=False):
+def destripe_lfp(x, fs, channel_labels=None, butter_kwargs=None, k_filter=False):
     """
     Wrapper around the destripe function with some default parameters to destripe the LFP band
     See help destripe function for documentation
