@@ -387,7 +387,7 @@ def destripe_lfp(x, fs, channel_labels=None, butter_kwargs=None, k_filter=False)
     :param fs: sampling frequency
     :param channel_labels: see destripe
     """
-    butter_kwargs = {"N": 3, "Wn": [0.5, 250], "btype": "highpass", "fs": fs} if butter_kwargs is None else butter_kwargs
+    butter_kwargs = {"N": 3, "Wn": [0.5, 300], "btype": "bandpass", "fs": fs} if butter_kwargs is None else butter_kwargs
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
     return destripe(x, fs, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
