@@ -356,6 +356,22 @@ class TestWindowGenerator(unittest.TestCase):
             my_rms_[wg.iw] = utils.rms(my_sig[sl])
         self.assertTrue(np.all(my_rms_ == my_rms))
 
+    def test_firstlast_splicing(self):
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
+        for first, last, amp in wg.firstlast_splicing:
+            sig_out[first:last] = sig_out[first:last] + amp * sig_in[first:last]
+        np.testing.assert_allclose(sig_out, sig_in)
+
+    def test_firstlast_valid(self):
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
+        for first, last, first_valid, last_valid in wg.firstlast_valid:
+            sig_out[first_valid:last_valid] = sig_in[first_valid:last_valid]
+        np.testing.assert_array_equal(sig_out, sig_in)
+
     def test_tscale(self):
         wg = utils.WindowGenerator(ns=500, nswin=100, overlap=50)
         ts = wg.tscale(fs=1000)

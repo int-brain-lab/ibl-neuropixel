@@ -350,7 +350,7 @@ def extract_wfs_cbin(
         logger.info("Running channel detection")
         channel_labels = _get_channel_labels(sr)
     else:
-        channel_labels = channel_labels or np.zeros(sr.nc - sr.nsync)
+        channel_labels = np.zeros(sr.nc - sr.nsync) if channel_labels is None else channel_labels
 
     nwf = len(wf_flat)
     nu = unit_ids.shape[0]
@@ -410,7 +410,7 @@ def extract_wfs_cbin(
         shape=(nu, max_wf, nc, spike_length_samples),
         dtype=wfs_dtype,
     )
-    logger.info("Writing to output files")
+    logger.info("Looping over clusters to output waveforms")
 
     for i, u in enumerate(unit_ids):
         idx = np.where(wf_flat["cluster"] == u)[0]
@@ -436,6 +436,7 @@ def extract_wfs_cbin(
     # cleanup intermediate file
     int_fn.unlink()
 
+    logger.info("Saving templates and waveform table")
     # save templates
     np.save(templates_fn, wfs_templates)
 
@@ -461,6 +462,7 @@ def extract_wfs_cbin(
     save_df.sort_values(["cluster", "sample"], inplace=True)
     save_df.to_parquet(table_fn)
 
+    logger.info("Saving channel maps")
     # save channel map for each waveform
     # these values are now reordered so that they match the pqt
     # and the traces file
