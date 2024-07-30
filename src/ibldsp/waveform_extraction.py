@@ -532,15 +532,19 @@ class WaveformsLoader:
         if indices is None:
             indices = np.arange(self.max_wf)
 
-        wfs = self.traces[np.array(labels)][:, indices, :, :]
+        wfs = self.traces[np.array(labels)][:, indices, :, :].astype(np.float32)
 
         if flatten:
-            wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples).astype(np.float32)
+            wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
 
+        info = self.table[self.table["cluster"].isin(labels)].copy()
+        info = info[info["wf_number"].isin(indices)].reset_index(drop=True)
+        channels = self.channels[info["linear_index"].to_numpy()].astype(int)
+
+        n_nan = sum(info["sample"].isna())
+        logger.warn(f"{n_nan} NaN waveforms included in result. Use return_info=True",
+                    " and check the table for details.")
         if return_info:
-            _table = self.table[self.table["cluster"].isin(labels)].copy()
-            _table = _table[_table["wf_number"].isin(indices)].reset_index(drop=True)
-            channels = self.channels[_table["linear_index"].to_numpy()].astype(int)
             return wfs, _table, channels
 
         return wfs
@@ -564,6 +568,12 @@ class WaveformsLoader:
                 labels = rg.choice(self.labels, num_random_labels)
         else:
             assert num_random_labels is None, "labels and num_random_labels cannot both be set"
+        if num_random_waveforms is None:
+            num_random_waveforms = 10
+
+        # now select random non-NaN indices for each label
+        for label in labels:
+            pass
         
         wfs = self.traces[np.array(labels)][:, :, :, :]
 
