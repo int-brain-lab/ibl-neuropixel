@@ -1,3 +1,6 @@
+# 1.2.0 2024-08-01
+- Adds `ibldsp.waveform_extraction.WaveformsLoader`, an interface for waveforms extracted by `extract_wfs_cbin`.
+
 # 1.1.0
 
 ## 1.1.3 2024-07-11
