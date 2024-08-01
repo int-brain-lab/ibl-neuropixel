@@ -474,18 +474,19 @@ def extract_wfs_cbin(
     chan_map[dummy_idx] = channel_neighbors[peak_channel[dummy_idx].astype(int)]
     np.savez(channels_fn, channels=chan_map)
 
+
 class WaveformsLoader:
 
     def __init__(
-            self, 
-            data_dir,
-            max_wf=256,
-            trough_offset=42,
-            spike_length_samples=128,
-            num_channels=40,
-            wfs_dtype=np.float32
-        ):
-    
+        self,
+        data_dir,
+        max_wf=256,
+        trough_offset=42,
+        spike_length_samples=128,
+        num_channels=40,
+        wfs_dtype=np.float32
+    ):
+
         self.data_dir = Path(data_dir)
         self.max_wf = max_wf
         self.trough_offset = trough_offset
@@ -505,6 +506,8 @@ class WaveformsLoader:
 
         # ingest parquet table
         self.table = pd.read_parquet(self.table_fp).reset_index(drop=True).drop(columns=["index"])
+        self.table["sample"] = self.table["sample"].astype("Int64")
+        self.table["peak_channel"] = self.table["peak_channel"].astype("Int64")
         self.num_labels = self.table["cluster"].nunique()
         self.labels = np.array(self.table["cluster"].unique())
         self.total_wfs = sum(~self.table["peak_channel"].isna())
@@ -525,7 +528,7 @@ class WaveformsLoader:
 
         return s1 + s2 + s3
 
-    def load_waveforms(self, labels=None, indices=None, return_info=True, flatten=True):
+    def load_waveforms(self, labels=None, indices=None, return_info=True, flatten=False):
 
         if labels is None:
             labels = self.labels
@@ -533,27 +536,38 @@ class WaveformsLoader:
             indices = np.arange(self.max_wf)
 
         labels = np.array(labels)
+        label_idx = np.array([np.where(labels == label)[0][0] for label in labels])
         indices = np.array(indices)
 
-        wfs = self.traces[labels][indices, :, :].astype(np.float32)
+        num_labels = labels.shape[0]
+
+        if indices.ndim == 1:
+            indices = np.tile(indices, (num_labels, 1))
+
+        wfs = self.traces[label_idx[:, None], indices].astype(np.float32)
 
         if flatten:
             wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
 
         info = self.table[self.table["cluster"].isin(labels)].copy()
-        info = info[info["wf_number"].isin(indices)].reset_index(drop=True)
+        dfs = []
+        for i, l in enumerate(labels):
+            _idx = indices[i]
+            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == l)])
+        info = pd.concat(dfs).reset_index(drop=True)
+
         channels = self.channels[info["linear_index"].to_numpy()].astype(int)
 
         n_nan = sum(info["sample"].isna())
         if n_nan > 0:
-            logger.warn(f"{n_nan} NaN waveforms included in result.")
+            logger.warning(f"{n_nan} NaN waveforms included in result.")
         if return_info:
             return wfs, info, channels
-        
+
         logger.info("Use return_info=True and check the table for details.")
 
         return wfs
-    
+
     def random_waveforms(
         self,
         labels=None,
@@ -561,9 +575,9 @@ class WaveformsLoader:
         num_random_waveforms=None,
         return_info=True,
         seed=None,
-        flatten=True        
+        flatten=False
     ):
-        
+
         rg = np.random.default_rng(seed=seed)
 
         if labels is None:
@@ -575,6 +589,7 @@ class WaveformsLoader:
             assert num_random_labels is None, "labels and num_random_labels cannot both be set"
 
         labels = np.array(labels)
+        label_idx = np.array([np.where(labels == label)[0][0] for label in labels])
 
         num_labels = labels.shape[0]
 
@@ -584,29 +599,29 @@ class WaveformsLoader:
         # now select random non-NaN indices for each label
         indices = np.zeros((num_labels, num_random_waveforms), int)
         for u, label in enumerate(labels):
-            _t = self.table[self.table["cluster"]==label]
+            _t = self.table[self.table["cluster"] == label]
             nanidx = _t["sample"].isna()
             valid = _t[~nanidx]
-            
+
             num_valid_waveforms = len(valid)
             if num_valid_waveforms >= num_random_waveforms:
                 indices[u, :] = rg.choice(
-                    valid.wf_number.to_numpy(), 
-                    num_random_waveforms, 
+                    valid.wf_number.to_numpy(),
+                    num_random_waveforms,
                     replace=False
                 )
                 continue
 
             num_nan_waveforms = num_random_waveforms - num_valid_waveforms
             indices[u, :num_valid_waveforms] = rg.choice(
-                valid.wf_number.to_numpy(), 
-                num_valid_waveforms, 
+                valid.wf_number.to_numpy(),
+                num_valid_waveforms,
                 replace=False
             )
 
             indices[u, num_valid_waveforms:] = np.arange(num_valid_waveforms, num_valid_waveforms + num_nan_waveforms)
 
-        wfs = self.traces[labels[:, None], indices].astype(np.float32)
+        wfs = self.traces[label_idx[:, None], indices].astype(np.float32)
 
         if flatten:
             wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
@@ -615,33 +630,17 @@ class WaveformsLoader:
         dfs = []
         for i, l in enumerate(labels):
             _idx = indices[i]
-            dfs.append(info[(info["wf_number"].isin(_idx))&(info["cluster"]==l)])
-        info = pd.concat(dfs)
-        
+            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == l)])
+        info = pd.concat(dfs).reset_index(drop=True)
+
         channels = self.channels[info["linear_index"].to_numpy()].astype(int)
 
         n_nan = sum(info["sample"].isna())
         if n_nan > 0:
-            logger.warn(f"{n_nan} NaN waveforms included in result.")
+            logger.warning(f"{n_nan} NaN waveforms included in result.")
         if return_info:
             return wfs, info, channels
-        
+
         logger.info("Use return_info=True and check the table for details.")
 
         return wfs
-
-        
-
-        
-
-
-
-        
-
-
-
-
-
-
-
-        

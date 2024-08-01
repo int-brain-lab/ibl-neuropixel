@@ -323,22 +323,24 @@ class TestWaveformExtractorBin(unittest.TestCase):
         data = np.tile(np.arange(0, 385), (1, self.ns)).astype(np.float32)
         data.tofile(self.bin_file)
 
+        h = trace_header()
+        self.geom = np.c_[h["x"], h["y"]]
+        self.chan_map = utils.make_channel_index(self.geom)
+
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
 
     def _ground_truth_values(self):
-        h = trace_header()
-        geom = np.c_[h["x"], h["y"]]
-        chan_map = utils.make_channel_index(geom)
-        nc_extract = chan_map.shape[1]
+
+        nc_extract = self.chan_map.shape[1]
         gt_templates = np.ones((self.n_clusters, nc_extract, self.ns_extract), np.float32) * np.nan
         gt_waveforms = np.ones((self.n_clusters, self.max_wf, nc_extract, self.ns_extract), np.float32) * np.nan
 
-        c0_chans = chan_map[100].astype(np.float32)
+        c0_chans = self.chan_map[100].astype(np.float32)
         gt_templates[0, :, :] = np.tile(c0_chans, (self.ns_extract, 1)).T
         gt_waveforms[0, :self.max_wf - 1, :, :] = np.tile(c0_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
 
-        c1_chans = chan_map[368].astype(np.float32)
+        c1_chans = self.chan_map[368].astype(np.float32)
         c1_chans[c1_chans == 384] = np.nan
         gt_templates[1, :, :] = np.tile(c1_chans, (self.ns_extract, 1)).T
         gt_waveforms[1, :self.max_wf - 1, :, :] = np.tile(c1_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
@@ -367,3 +369,25 @@ class TestWaveformExtractorBin(unittest.TestCase):
 
         assert np.allclose(np.nan_to_num(gt_templates), np.nan_to_num(templates))
         assert np.allclose(np.nan_to_num(gt_waveforms), np.nan_to_num(waveforms))
+
+        wfl = waveform_extraction.WaveformsLoader(self.tmpdir, max_wf=self.max_wf)
+
+        wfs = wfl.load_waveforms(return_info=False)
+        assert np.allclose(np.nan_to_num(waveforms), np.nan_to_num(wfs))
+
+        labels = np.array([1, 2])
+        indices = np.arange(10)
+
+        wfs, info, channels = wfl.load_waveforms(labels=labels, indices=indices)
+        # right waveforms
+        assert np.allclose(np.nan_to_num(waveforms[:, :10]), np.nan_to_num(wfs))
+        # right channels
+        assert np.all(channels == self.chan_map[info.peak_channel.astype(int).to_numpy()])
+
+        wfs, info, channels = wfl.load_waveforms(labels=labels, indices=np.array([[1, 2, 3], [5, 6, 7]]))
+
+        # right waveforms
+        assert np.allclose(np.nan_to_num(waveforms[0, [1, 2, 3]]), np.nan_to_num(wfs[0]))
+        assert np.allclose(np.nan_to_num(waveforms[1, [5, 6, 7]]), np.nan_to_num(wfs[1]))
+        # right channels
+        assert np.all(channels == self.chan_map[info.peak_channel.astype(int).to_numpy()])
