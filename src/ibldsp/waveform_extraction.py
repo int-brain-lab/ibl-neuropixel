@@ -514,8 +514,8 @@ class WaveformsLoader:
         traces_shape = (self.num_labels, max_wf, num_channels, spike_length_samples)
         templates_shape = (self.num_labels, num_channels, spike_length_samples)
 
-        self.traces = np.memmap(self.traces_fp, dtype=wfs_dtype, shape=traces_shape)
-        self.templates = np.memmap(self.templates_fp, dtype=np.float32, shape=templates_shape)
+        self.traces = np.lib.format.open_memmap(self.traces_fp, dtype=wfs_dtype, shape=traces_shape)
+        self.templates = np.lib.format.open_memmap(self.templates_fp, dtype=np.float32, shape=templates_shape)
         self.channels = np.load(self.channels_fp, allow_pickle="True")["channels"]
 
     def __repr__(self):
@@ -532,7 +532,10 @@ class WaveformsLoader:
         if indices is None:
             indices = np.arange(self.max_wf)
 
-        wfs = self.traces[np.array(labels)][:, indices, :, :].astype(np.float32)
+        labels = np.array(labels)
+        indices = np.array(indices)
+
+        wfs = self.traces[labels][indices, :, :].astype(np.float32)
 
         if flatten:
             wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
@@ -542,10 +545,12 @@ class WaveformsLoader:
         channels = self.channels[info["linear_index"].to_numpy()].astype(int)
 
         n_nan = sum(info["sample"].isna())
-        logger.warn(f"{n_nan} NaN waveforms included in result. Use return_info=True",
-                    " and check the table for details.")
+        if n_nan > 0:
+            logger.warn(f"{n_nan} NaN waveforms included in result.")
         if return_info:
-            return wfs, _table, channels
+            return wfs, info, channels
+        
+        logger.info("Use return_info=True and check the table for details.")
 
         return wfs
     
@@ -565,18 +570,69 @@ class WaveformsLoader:
             if num_random_labels is None:
                 labels = rg.choice(self.labels, 10)
             else:
-                labels = rg.choice(self.labels, num_random_labels)
+                labels = rg.choice(self.labels, num_random_labels, replace=False)
         else:
             assert num_random_labels is None, "labels and num_random_labels cannot both be set"
+
+        labels = np.array(labels)
+
+        num_labels = labels.shape[0]
+
         if num_random_waveforms is None:
             num_random_waveforms = 10
 
         # now select random non-NaN indices for each label
-        for label in labels:
-            pass
-        
-        wfs = self.traces[np.array(labels)][:, :, :, :]
+        indices = np.zeros((num_labels, num_random_waveforms), int)
+        for u, label in enumerate(labels):
+            _t = self.table[self.table["cluster"]==label]
+            nanidx = _t["sample"].isna()
+            valid = _t[~nanidx]
+            
+            num_valid_waveforms = len(valid)
+            if num_valid_waveforms >= num_random_waveforms:
+                indices[u, :] = rg.choice(
+                    valid.wf_number.to_numpy(), 
+                    num_random_waveforms, 
+                    replace=False
+                )
+                continue
 
+            num_nan_waveforms = num_random_waveforms - num_valid_waveforms
+            indices[u, :num_valid_waveforms] = rg.choice(
+                valid.wf_number.to_numpy(), 
+                num_valid_waveforms, 
+                replace=False
+            )
+
+            indices[u, num_valid_waveforms:] = np.arange(num_valid_waveforms, num_valid_waveforms + num_nan_waveforms)
+
+        wfs = self.traces[labels[:, None], indices].astype(np.float32)
+
+        if flatten:
+            wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
+
+        info = self.table[self.table["cluster"].isin(labels)].copy()
+        dfs = []
+        for i, l in enumerate(labels):
+            _idx = indices[i]
+            dfs.append(info[(info["wf_number"].isin(_idx))&(info["cluster"]==l)])
+        info = pd.concat(dfs)
+        
+        channels = self.channels[info["linear_index"].to_numpy()].astype(int)
+
+        n_nan = sum(info["sample"].isna())
+        if n_nan > 0:
+            logger.warn(f"{n_nan} NaN waveforms included in result.")
+        if return_info:
+            return wfs, info, channels
+        
+        logger.info("Use return_info=True and check the table for details.")
+
+        return wfs
+
+        
+
+        
 
 
 
