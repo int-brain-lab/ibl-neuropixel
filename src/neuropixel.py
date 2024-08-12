@@ -4,6 +4,7 @@ import logging
 from typing import Any
 import warnings
 import traceback
+import numbers
 
 import scipy.signal
 import numpy as np
@@ -60,7 +61,11 @@ TIP_SIZE_UM = 200
 NC = 384
 SITES_COORDINATES: np.array
 # channel layouts for neuropixel probes as a function of the major version (1 or 2)
-CHANNEL_GRID = {1: dict(DX=16, X0=11, DY=20, Y0=20), 2: dict(DX=32, X0=27, DY=15, Y0=20)}
+CHANNEL_GRID = {
+    1: dict(DX=16, X0=11, DY=20, Y0=20),
+    2: dict(DX=32, X0=27, DY=15, Y0=20),
+    "uhd": dict(DX=6, X0=0, DY=6, Y0=0)
+}
 
 
 def _deprecated_sites_coordinates() -> np.array:
@@ -97,7 +102,8 @@ def xy2rc(x, y, version=1):
     :param version: neuropixel major version 1 or 2
     :return: dictionary with keys x and y
     """
-    grid = CHANNEL_GRID[np.floor(version)]
+    version = np.floor(version) if isinstance(version, numbers.Number) else version
+    grid = CHANNEL_GRID[version]
     col = (x - grid['X0']) / grid['DX']
     row = (y - grid['Y0']) / grid['DY']
     return {"col": col, "row": row}
@@ -111,7 +117,8 @@ def rc2xy(row, col, version=1):
     :param version: neuropixel major version 1 or 2
     :return: dictionary with keys x and y
     """
-    grid = CHANNEL_GRID[np.floor(version)]
+    version = np.floor(version) if isinstance(version, numbers.Number) else version
+    grid = CHANNEL_GRID[version]
     x = col * grid['DX'] + grid['X0']
     y = row * grid['DY'] + grid['Y0']
     return {"x": x, "y": y}
@@ -131,6 +138,9 @@ def dense_layout(version=1, nshank=1):
 
     if version == 1:  # version 1 has a dense layout, checkerboard pattern
         ch.update({"col": np.tile(np.array([2, 0, 3, 1]), int(NC / 4))})
+    elif version == "uhd":  # UHD has 8 columns with square grid spacing
+        ch.update({"row": np.floor(np.arange(NC) / 8)})
+        ch.update({"col": np.tile(np.arange(8), int(NC / 8))})
     elif (
         np.floor(version) == 2 and nshank == 1
     ):  # single shank NP1 has 2 columns in a dense patter
