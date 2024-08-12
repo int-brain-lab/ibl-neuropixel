@@ -199,7 +199,7 @@ def adc_shifts(version=1, nc=NC):
     :param version: neuropixel major version 1 or 2
     :param nc: number of channels
     """
-    if version == 1:
+    if version == 1 or version == "uhd":
         adc_channels = 12
         n_cycles = 13
         # version 1 uses 32 ADC that sample 12 channels each
