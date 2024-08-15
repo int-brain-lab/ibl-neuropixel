@@ -563,6 +563,8 @@ def _get_neuropixel_version_from_meta(md):
     # Neuropixel 2.0 four shank
     elif prb_type == 24 or prb_type == 2013:
         return "NP2.4"
+    elif prb_type == 1100:
+        return "NPultra"
 
 
 def _get_sync_trace_indices_from_meta(md):
