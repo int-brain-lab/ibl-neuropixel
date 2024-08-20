@@ -1,5 +1,8 @@
 # 1.2
 
+## 1.2.1 2024-08-20
+- bugfix waveform extraction: fix logic when channel labels is not None
+
 ## 1.2.0 2024-08-01
 - Adds `ibldsp.waveform_extraction.WaveformsLoader`, an interface for waveforms extracted by `extract_wfs_cbin`.
 
