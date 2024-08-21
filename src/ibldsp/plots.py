@@ -11,9 +11,10 @@ def show_channels_labels(raw, fs, channel_labels, xfeats):
     """
     nc, ns = raw.shape
     ns_plot = np.minimum(ns, 3000)
+    vaxis_uv = 75
     sos_hp = scipy.signal.butter(**{"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}, output="sos")
     butt = scipy.signal.sosfiltfilt(sos_hp, raw)
-    fig, ax = plt.subplots(1, 5, figsize=(14, 6), gridspec_kw={'width_ratios': [1, 1, 1, 4, .2]})
+    fig, ax = plt.subplots(1, 5, figsize=(18, 6), gridspec_kw={'width_ratios': [1, 1, 1, 8, .2]})
     ax[0].plot(xfeats['xcor_hf'], np.arange(nc))
     ax[0].plot(xfeats['xcor_hf'][iko := channel_labels == 1], np.arange(nc)[iko], 'r*')
     ax[0].plot([- .5, -.5], [0, nc], 'r--')
@@ -29,8 +30,8 @@ def show_channels_labels(raw, fs, channel_labels, xfeats):
     ax[2].plot([-.75, -.75], [0, nc], 'r--')
     ax[2].set(yticklabels=[], xlabel='low coherence', ylim=[0, nc], title='c) outside')
     ax[2].sharey(ax[0])
-    imkwargs = dict(origin='lower', cmap='PuOr', aspect='auto', vmin=-20, vmax=20, extent=[0, ns_plot / fs * 1e3, 0, nc])
-    im = ax[3].imshow(butt[:, :ns_plot] * 1e6, **imkwargs)
+    im = ax[3].imshow(butt[:, :ns_plot] * 1e6, origin='lower', cmap='PuOr', aspect='auto',
+                      vmin=-vaxis_uv, vmax=vaxis_uv, extent=[0, ns_plot / fs * 1e3, 0, nc])
     ax[3].set(yticklabels=[], title='d) Raw data', xlabel='time (ms)', ylim=[0, nc])
     ax[3].grid(False)
     ax[3].sharey(ax[0])
