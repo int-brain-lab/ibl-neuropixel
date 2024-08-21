@@ -15,6 +15,7 @@ import neuropixel
 
 import ibldsp.fourier as fourier
 import ibldsp.utils as utils
+import ibldsp.plots
 
 
 def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
@@ -639,7 +640,7 @@ def decompress_destripe_cbin(
         np.save(output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"), saturation_data)
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
+def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None, display=False):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -651,6 +652,7 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     :param fs: sampling frequency
     :param similarity_threshold:
     :param psd_hf_threshold:
+    :param display: optinal (False) will show a plot of features alongside a raw data snippet
     :return: labels (numpy vector [nc]), xfeats: dictionary of features [nc]
     """
 
@@ -751,6 +753,8 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     ichannels[inoisy] = 2
     # from ibllib.plots.figures import ephys_bad_channels
     # ephys_bad_channels(x, 30000, ichannels, xfeats)
+    if display:
+        ibldsp.plots.show_channels_labels(raw, fs, ichannels, xfeats)
     return ichannels, xfeats
 
 
@@ -783,7 +787,6 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     if display:
         raw = sr[sl, :nc].TO
         from ibllib.plots.figures import ephys_bad_channels
-
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
 
