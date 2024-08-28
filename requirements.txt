@@ -1,10 +1,9 @@
 iblutil >= 1.7.0
-packaging >= 22.0
 joblib
 matplotlib
 mtscomp
-numpy < 1.25
+numpy >= 1.21.6
 one-api
 pandas
-scipy
+scipy >= 1.11
 pyfftw
