@@ -350,8 +350,8 @@ def extract_wfs_cbin(
     if channel_labels is None and "bad_channel_interpolation" in preprocess_steps:
         logger.info("Running channel detection")
         channel_labels = _get_channel_labels(sr)
-    else:
-        channel_labels = channel_labels or np.zeros(sr.nc - sr.nsync)
+    elif channel_labels is None:
+        channel_labels = np.zeros(sr.nc - sr.nsync)
 
     nwf = len(wf_flat)
     nu = unit_ids.shape[0]
