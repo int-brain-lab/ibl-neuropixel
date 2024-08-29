@@ -518,7 +518,7 @@ def _get_serial_number_from_meta(md):
 
 
 def _get_neuropixel_major_version_from_meta(md):
-    MAJOR_VERSION = {"3A": 1, "3B2": 1, "3B1": 1, "NP2.1": 2, "NP2.4": 2.4}
+    MAJOR_VERSION = {"3A": 1, "3B2": 1, "3B1": 1, "NP2.1": 2, "NP2.4": 2.4, "NPultra": "NPultra"}
     version = _get_neuropixel_version_from_meta(md)
     if version is not None:
         return MAJOR_VERSION[version]

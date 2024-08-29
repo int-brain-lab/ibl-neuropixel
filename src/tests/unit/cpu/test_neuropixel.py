@@ -16,7 +16,7 @@ def test_adc_shifts():
     np.testing.assert_equal(h24["sample_shift"], h21["sample_shift"])
     np.testing.assert_equal(np.unique(h21["sample_shift"] * 16), np.arange(16))
     # test ADC shifts uhd
-    hUHD = neuropixel.trace_header(version="uhd")
+    hUHD = neuropixel.trace_header(version="NPultra")
     np.testing.assert_equal(hUHD["sample_shift"], h1["sample_shift"])
 
 
@@ -82,6 +82,6 @@ def test_geom_npultra():
         y=np.repeat(np.arange(0, 288, 6), 8)
     )
 
-    h = neuropixel.trace_header("uhd")
+    h = neuropixel.trace_header("NPultra")
     for k, v in gt.items():
         np.testing.assert_equal(v, h[k])
