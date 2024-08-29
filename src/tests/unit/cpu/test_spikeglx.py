@@ -404,6 +404,17 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             )
             self.assert_read_glx(bin_3b)
 
+    def test_read_NPultra(self):
+        with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
+            bin_3b = spikeglx._mock_spikeglx_file(
+                Path(tdir).joinpath("sampleNPultra_g0_t0.imec0.ap.bin"),
+                self.workdir / "sampleNPultra_g0_t0.imec0.ap.meta",
+                ns=32,
+                nc=385,
+                sync_depth=16,
+            )
+            self.assert_read_glx(bin_3b)
+
     def test_check_ephys_file(self):
         self.tdir = tempfile.TemporaryDirectory(prefix="glx_test")
         self.addCleanup(self.tdir.cleanup)
@@ -517,6 +528,12 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 self.assertTrue(len(md.keys()) >= 37)
 
                 if meta_data_file.name.split(".")[-2] in ["lf", "ap"]:
+                    # NPultra: non-numerical
+                    if "NPultra" in meta_data_file.name:
+                        self.assertEqual("NPultra", spikeglx._get_neuropixel_version_from_meta(md))
+                        self.assertEqual("NPultra", spikeglx._get_neuropixel_major_version_from_meta(md))
+                        continue
+
                     # for ap and lf look for version number
                     # test getting revision
                     revision = meta_data_file.name[6:8]
