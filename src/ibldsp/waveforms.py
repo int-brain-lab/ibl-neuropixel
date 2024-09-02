@@ -231,16 +231,24 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
+def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=10, fill_sign=-1, plot_kwargs=None, fill_kwargs=None):
     """
     Displays a multi-trace waveform in a wiggle traces with negative
     amplitudes filled
     :param wav: (nchannels, nsamples)
-    :param axkwargs: keyword arguments to feed to ax.set()
+    :param fs: sampling rate
+    :param ax: axis to plot on
+    :param scalar: scale factor for the traces
+    :param clip: maximum value for the traces
+    :param fill_sign: -1 for negative (default for spikes), 1 for positive
+    :param plot_kwargs: kwargs for the line plot
+    :param fill_kwargs: kwargs for the fill
     :return:
     """
     if ax is None:
         fig, ax = plt.subplots()
+    plot_kwargs = {'color': 'k', 'linewidth': 0.5} | (plot_kwargs or {})
+    fill_kwargs = {'color': 'k', 'aa': True} | (fill_kwargs or {})
     nc, ns = wav.shape
     vals = np.c_[wav, wav[:, :1] * np.nan].ravel()  # flat view of the 2d array.
     vect = np.arange(vals.size).astype(
@@ -262,11 +270,15 @@ def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     order = np.argsort(y)
     # shift from amplitudes to plotting coordinates
     x_shift, y = y[order].__divmod__(ns + 1)
-    ax.plot(y / fs, x[order] + x_shift + 1, 'k', linewidth=.5)
-    x[x > 0] = np.nan
+    print(plot_kwargs)
+    ax.plot(y / fs, x[order] + x_shift + 1, **plot_kwargs)
+    if fill_sign < 0:
+        x[x > 0] = np.nan
+    else:
+        x[x < 0] = np.nan
     x = x[order] + x_shift + 1
-    ax.fill(y / fs, x, 'k', aa=True)
-    ax.set(xlim=[0, ns / fs], ylim=[0, nc], xlabel='sample', ylabel='trace')
+    ax.fill(y / fs, x, **fill_kwargs)
+    ax.set(xlim=[0, ns / fs], ylim=[0, nc])
     plt.tight_layout()
     return ax
 
