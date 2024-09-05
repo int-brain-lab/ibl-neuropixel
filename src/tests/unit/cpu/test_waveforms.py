@@ -99,11 +99,7 @@ def test_peak_through_tip_3d():
 
 def test_halfpeak_slopes():
     # Load fixtures
-    folder_save = (
-        Path(waveforms.__file__)
-        .parents[1]
-        .joinpath("tests", "unit", "cpu", "fixtures", "waveform_sample")
-    )
+    folder_save = Path(__file__).parent.joinpath("fixtures", "waveform_sample")
     arr_in = np.load(folder_save.joinpath("test_arr_in.npy"))
     test_arr_peak = np.load(folder_save.joinpath("test_arr_peak.npy"))
     test_df = pd.read_csv(folder_save.joinpath("test_df.csv"))
