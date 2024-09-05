@@ -1,3 +1,10 @@
+# 1.3
+
+## 1.3.0 2024-09-05
+
+- Add support for NPultra high-density probes
+- NumPy and SciPy version floors
+
 # 1.2
 
 ## 1.2.1 2024-08-20
