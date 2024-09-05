@@ -632,7 +632,7 @@ class TestNameDeprecationDate(unittest.TestCase):
     def test_neurodsp_import(self):
         # Check that the old import still works and gives the same package.
         # (ibldsp.voltage is imported at the top of this file.)
-        with self.assertWarnsRegex(FutureWarning, "01-Sep-2024"):
+        with self.assertWarnsRegex(FutureWarning, "01-Oct-2024"):
             import neurodsp
         self.assertEqual(neurodsp.voltage, voltage)
 
@@ -643,7 +643,7 @@ class TestNameDeprecationDate(unittest.TestCase):
         # repository
         import datetime
 
-        if datetime.datetime.now() > datetime.datetime(2024, 9, 1):
+        if datetime.datetime.now() > datetime.datetime(2024, 10, 1):
             raise NotImplementedError(
                 "neurodsp will not longer be supported. "
                 "Change all references to ibldsp."
