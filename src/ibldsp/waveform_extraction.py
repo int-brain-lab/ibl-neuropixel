@@ -41,15 +41,15 @@ def extract_wfs_array(
     """
     # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
     if add_nan_trace:
-        newcol = np.empty((arr.shape[0], 1))
+        newcol = np.empty((1, arr.shape[1]))
         newcol[:] = np.nan
-        arr = np.hstack([arr, newcol])
+        arr = np.vstack([arr, newcol])
 
     # check that the spike window is included in the recording:
     last_idx = df["sample"].iloc[-1]
     assert (
-        last_idx + (spike_length_samples - trough_offset) < arr.shape[0]
-    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[0]} samples)."
+        last_idx + (spike_length_samples - trough_offset) < arr.shape[1]
+    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
 
     nwf = len(df)
 
@@ -62,7 +62,7 @@ def extract_wfs_array(
     )
     nchan = cind.shape[1]
 
-    wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
+    wfs = np.zeros((nwf, nchan, spike_length_samples), arr.dtype)
     fun = range
     if verbose:
         try:
@@ -72,9 +72,9 @@ def extract_wfs_array(
         except ImportError:
             pass
     for i in fun(nwf):
-        wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
+        wfs[i, :, :] = arr[:, sind[i]][cind[i], :]
 
-    return wfs.swapaxes(1, 2), cind, trough_offset
+    return wfs, cind, trough_offset
 
 
 def _get_channel_labels(sr, num_snippets=20, verbose=True):
@@ -204,15 +204,15 @@ def write_wfs_chunk(
 
     snip = my_sr[
         s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
-    ]
+    ].T
 
     if "butterworth" in preprocess_steps:
         butter_kwargs = {"N": 3, "Wn": 300 / my_sr.fs * 2, "btype": "highpass"}
         sos = scipy.signal.butter(**butter_kwargs, output="sos")
-        snip = scipy.signal.sosfiltfilt(sos, snip.T).T
+        snip = scipy.signal.sosfiltfilt(sos, snip)
 
     if "phase_shift" in preprocess_steps:
-        snip = fshift(snip, geom_dict["sample_shift"], axis=0)
+        snip = fshift(snip, geom_dict["sample_shift"], axis=-1)
 
     if "bad_channel_interpolation" in preprocess_steps:
         snip = interpolate_bad_channels(
