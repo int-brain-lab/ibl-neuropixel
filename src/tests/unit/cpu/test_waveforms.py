@@ -1,9 +1,12 @@
 from pathlib import Path
+import shutil
+import tempfile
+import unittest
 
 import numpy as np
 import pandas as pd
-import tempfile
-import shutil
+import matplotlib.pyplot as plt
+import scipy
 
 import ibldsp.utils as utils
 import ibldsp.waveforms as waveforms
@@ -11,9 +14,7 @@ import ibldsp.waveform_extraction as waveform_extraction
 from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
 from ibldsp.fourier import fshift
-import scipy
 
-import unittest
 
 TEST_PATH = Path(__file__).parent.joinpath("fixtures")
 
@@ -388,3 +389,12 @@ class TestWaveformExtractorBin(unittest.TestCase):
         assert np.allclose(np.nan_to_num(waveforms[1, [5, 6, 7]]), np.nan_to_num(wfs[1]))
         # right channels
         assert np.all(channels == self.chan_map[info.peak_channel.astype(int).to_numpy()])
+
+
+def test_wiggle():
+    wav = generate_waveform()
+    wav = wav / np.max(np.abs(wav)) * 120 * 1e-6
+    fig, ax = plt.subplots(1, 2)
+    waveforms.plot_wiggle(wav, scale=40 * 1e-6, ax=ax[0])
+    waveforms.double_wiggle(wav, scale=40 * 1e-6, fs=30_000, ax=ax[1])
+    plt.close('all')
