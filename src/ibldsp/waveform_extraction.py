@@ -167,8 +167,7 @@ def _make_wfs_table(
 def write_wfs_chunk(
     i_chunk,
     cbin,
-    wfs_fn,
-    mmap_shape,
+    wfs_mmap,
     geom_dict,
     channel_labels,
     channel_neighbors,
@@ -189,8 +188,6 @@ def write_wfs_chunk(
 
     my_sr = spikeglx.Reader(cbin, **reader_kwargs)
     s0, s1 = sr_sl
-
-    wfs_mmap = open_memmap(wfs_fn, shape=mmap_shape, mode="r+", dtype=np.float32)
 
     if i_chunk == 0:
         offset = 0
@@ -255,10 +252,10 @@ def extract_wfs_cbin(
     trough_offset=42,
     spike_length_samples=128,
     chunksize_samples=int(3000),
-    reader_kwargs={},
+    reader_kwargs=None,
     n_jobs=None,
     wfs_dtype=np.float32,
-    preprocess_steps=[],
+    preprocess_steps=None,
     seed=None
 ):
     """
@@ -307,8 +304,11 @@ def extract_wfs_cbin(
     :param wfs_dtype: Data type of raw waveforms saved (default np.float32)
     :param preprocess: Preprocessing options to apply, list which must be a subset of
         ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "kfilt"]
+        By default a butterworth 300Hz high-pass and the rephasing of the channels is perfomed
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
+    preprocess_steps = ['butterworth', 'phase_shift'] if preprocess_steps is None else preprocess_steps
+    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
 
     assert set(preprocess_steps).issubset(
         {
@@ -329,7 +329,7 @@ def extract_wfs_cbin(
 
     if sr.is_mtscomp:
         logger.debug('File is compressed, decomporessing to a temporary file')
-        #TODO
+        # TODO
 
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
@@ -383,8 +383,7 @@ def extract_wfs_cbin(
         delayed(write_wfs_chunk)(
             i,
             bin_file,
-            int_fn,
-            wfs.shape,
+            wfs,
             h,
             channel_labels,
             channel_neighbors,
