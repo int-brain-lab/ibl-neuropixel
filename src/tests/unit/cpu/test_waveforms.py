@@ -188,6 +188,7 @@ class TestWaveformExtractorArray(unittest.TestCase):
     channel_neighbors = utils.make_channel_index(geom, radius=200.0)
     # radius = 200um, 38 chans
     num_channels = 40
+    arr = arr.T
 
     def test_extract_waveforms_array(self):
         wfs, _, _ = waveform_extraction.extract_wfs_array(

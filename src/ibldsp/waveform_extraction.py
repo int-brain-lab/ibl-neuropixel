@@ -327,6 +327,10 @@ def extract_wfs_cbin(
     if h is None:
         h = sr.geometry
 
+    if sr.is_mtscomp:
+        logger.debug('File is compressed, decomporessing to a temporary file')
+        #TODO
+
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
     s1_arr[-1] = sr.ns
