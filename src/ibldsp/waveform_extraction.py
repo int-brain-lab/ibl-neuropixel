@@ -222,7 +222,7 @@ def write_wfs_chunk(
     k_kwargs = {
         "ntr_pad": 60,
         "ntr_tap": 0,
-        "lagc": int(my_sr.fs / 10),
+        "lagc": 0,  # no agc for the median estimator of common reference channel
         "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
     }
     if "car" in preprocess_steps:
@@ -236,8 +236,6 @@ def write_wfs_chunk(
     wfs_mmap[wf_flat["index"], :, :] = extract_wfs_array(
         snip, df, channel_neighbors, add_nan_trace=True
     )[0]
-
-    wfs_mmap.flush()
 
 
 def extract_wfs_cbin(
