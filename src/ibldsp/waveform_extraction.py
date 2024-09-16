@@ -161,6 +161,20 @@ def _make_wfs_table(
         }
     )
 
+    # we pre-compute the final absolute indices of each waveform
+    unique_clusters, cluster_index, cluster_counts = np.unique(
+        wf_flat["cluster"], return_inverse=True, return_counts=True)
+    index_order_clusters = np.argsort(cluster_index, kind='stable')
+    sorted_clusters = cluster_index[index_order_clusters]
+    index_in_cluster = np.zeros(len(wf_flat), int)
+    index_in_cluster[np.where(np.diff(sorted_clusters, prepend=0))[0]] = - cluster_counts[:-1]
+    index_in_cluster = np.cumsum(index_in_cluster) + np.arange(wf_flat.shape[0])
+    wf_flat['cluster_index'] = 0
+    wf_flat.loc[index_order_clusters, 'cluster_index'] = sorted_clusters
+    wf_flat['index_within_cluster'] = 0
+    wf_flat.loc[index_order_clusters, 'index_within_cluster'] = index_in_cluster
+    wf_flat['waveform_index'] = wf_flat['index_within_cluster'] + wf_flat['cluster_index'] * max_wf
+
     return wf_flat, unit_ids
 
 
@@ -232,8 +246,10 @@ def write_wfs_chunk(
     if "kfilt" in preprocess_steps:
         kfilt_func = lambda dat: kfilt(dat, **k_kwargs)  # noqa: E731
         snip = kfilt_func(snip)
-
-    wfs_mmap[wf_flat["index"], :, :] = extract_wfs_array(
+    # todo: this is pretty random disk access, but it could be a little more linear
+    # if we did sort the waveforms by cluster and then by time, would it matter ?
+    ic, iw = (wf_flat['cluster_index'].values, wf_flat["index_within_cluster"].values)
+    wfs_mmap[ic, iw, :, :] = extract_wfs_array(
         snip, df, channel_neighbors, add_nan_trace=True
     )[0]
 
@@ -326,7 +342,7 @@ def extract_wfs_cbin(
         h = sr.geometry
 
     if sr.is_mtscomp:
-        logger.debug('File is compressed, decomporessing to a temporary file')
+        logger.debug('File is compressed, decompressing to a temporary file')
         # TODO
 
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
@@ -355,7 +371,7 @@ def extract_wfs_cbin(
     elif channel_labels is None:
         channel_labels = np.zeros(sr.nc - sr.nsync)
 
-    nwf = len(wf_flat)
+    nwf = wf_flat.shape[0]
     nu = unit_ids.shape[0]
     logger.info(f"Extracting {nwf} waveforms from {nu} units")
 
@@ -367,9 +383,9 @@ def extract_wfs_cbin(
     # this intermediate memmap is written to in parallel
     # the waveforms are ordered only by their chronological position
     # in the recording, as we are reading them in time chunks
-    int_fn = output_dir.joinpath("_wf_extract_intermediate.npy")
+    traces_fn = output_dir.joinpath("waveforms.traces.npy")
     wfs = open_memmap(
-        int_fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
+        traces_fn, mode="w+", shape=(nu, max_wf, nc, spike_length_samples), dtype=np.float32
     )
 
     slices = [
@@ -397,7 +413,6 @@ def extract_wfs_cbin(
     )
 
     # output files
-    traces_fn = output_dir.joinpath("waveforms.traces.npy")
     templates_fn = output_dir.joinpath("waveforms.templates.npy")
     table_fn = output_dir.joinpath("waveforms.table.pqt")
     channels_fn = output_dir.joinpath("waveforms.channels.npz")
@@ -405,39 +420,12 @@ def extract_wfs_cbin(
     ## rearrange and save traces by unit
     # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
-    # create waveform output file (~2-3 GB)
-    traces_by_unit = open_memmap(
-        traces_fn,
-        mode="w+",
-        shape=(nu, max_wf, nc, spike_length_samples),
-        dtype=wfs_dtype,
-    )
     logger.info("Writing to output files")
+    wfs = open_memmap(traces_fn)
 
-    for i, u in enumerate(unit_ids):
-        idx = np.where(wf_flat["cluster"] == u)[0]
-        nwf_u = idx.shape[0]
-        # reopening these memmaps on each iteration
-        # forces Python to clean up each large array it loads
-        # and prevent a memory leak
-        wfs = open_memmap(
-            int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
-        )
-        traces_by_unit = open_memmap(
-            traces_fn,
-            mode="r+",
-            shape=(nu, max_wf, nc, spike_length_samples),
-            dtype=wfs_dtype,
-        )
-        # write up to 256 waveforms and leave the rest of dimensions 1-3 as NaNs
-        traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(wfs_dtype)
-        traces_by_unit.flush()
-        # populate this array in memory as it's 256x smaller
-        wfs_templates[i, :, :] = np.nanmedian(wfs[idx], axis=0)
-
-    # cleanup intermediate file
-    int_fn.unlink()
-
+    cluster_counts = wf_flat['cluster_index'].value_counts().sort_index()
+    for i, c in cluster_counts.items():
+        wfs_templates[i, :, :] = np.nanmedian(wfs[i, :c], axis=0)
     # save templates
     np.save(templates_fn, wfs_templates)
 
