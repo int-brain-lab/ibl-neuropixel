@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path
+import shutil
+import time
 
 import scipy
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from numpy.lib.format import open_memmap
 from joblib import Parallel, delayed, cpu_count
 
@@ -270,7 +272,8 @@ def extract_wfs_cbin(
     n_jobs=None,
     wfs_dtype=np.float32,
     preprocess_steps=None,
-    seed=None
+    seed=None,
+    scratch_dir=None,
 ):
     """
     Given a bin file and locations of spikes, extract waveforms for each unit, compute
@@ -280,7 +283,7 @@ def extract_wfs_cbin(
     reference procedure is applied in the spatial dimension.
 
     The following files will be generated:
-    - waveforms.traces.npy: `(num_units, max_wf, nc, spike_length_samples)`
+    - waveforms.traces.npy: `(total_waveforms, nc, spike_length_samples)`
         This file contains the lightly processed waveforms indexed by cluster in the first
         dimension. By default `max_wf=256, nc=40, spike_length_samples=128`.
 
@@ -342,8 +345,9 @@ def extract_wfs_cbin(
         h = sr.geometry
 
     if sr.is_mtscomp:
-        logger.debug('File is compressed, decompressing to a temporary file')
-        # TODO
+        bin_file = sr.decompress_to_scratch(scratch_dir=scratch_dir)
+        sr = spikeglx.Reader(bin_file, **reader_kwargs)
+        # TODO remove file
 
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples

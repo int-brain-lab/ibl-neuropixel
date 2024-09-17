@@ -632,11 +632,9 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        output_qc_path = output_qc_path or output_file.parent
+        output_qc_path = output_file.parent if output_qc_path is None else output_qc_path
         np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.rms.npy"), rms_data)
-        np.save(
-            output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
-        )
+        np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data)
         np.save(output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"), saturation_data)
 
 
