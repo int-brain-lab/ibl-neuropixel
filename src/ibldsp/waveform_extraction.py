@@ -347,6 +347,9 @@ def extract_wfs_cbin(
     if sr.is_mtscomp:
         bin_file = sr.decompress_to_scratch(scratch_dir=scratch_dir)
         sr = spikeglx.Reader(bin_file, **reader_kwargs)
+        file_to_unlink = bin_file
+    else:
+        file_to_unlink = None
         # TODO remove file
 
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
@@ -466,6 +469,10 @@ def extract_wfs_cbin(
     chan_map = np.ones((max_wf * nu, nc), np.int16) * -1
     chan_map[dummy_idx] = channel_neighbors[peak_channel[dummy_idx].astype(int)]
     np.savez(channels_fn, channels=chan_map)
+
+    # clean up the cached bin file
+    if file_to_unlink is not None:
+        file_to_unlink.unlink()
 
 
 class WaveformsLoader:
