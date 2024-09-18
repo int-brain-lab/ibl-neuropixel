@@ -1,5 +1,9 @@
 # 1.3
 
+## 1.3.2 2024-09-18
+
+- Hotfix for WaveformsLoader label ids
+
 ## 1.3.1 2024-09-05
 
 - Hotfix for running tests with PyPI install
