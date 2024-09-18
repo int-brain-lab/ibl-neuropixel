@@ -390,7 +390,9 @@ class Reader:
         if not bin_file.exists():
             t0 = time.time()
             _logger.info('File is compressed, decompressing to a temporary file...')
-            self.decompress_file(keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True)
+            self.decompress_file(
+                keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True
+            )
             shutil.move(bin_file.with_suffix('.bin_temp'), bin_file)
             _logger.info(f"Decompression complete: {time.time() - t0:.2f}s")
         return bin_file

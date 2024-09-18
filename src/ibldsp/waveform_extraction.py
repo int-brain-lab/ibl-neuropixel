@@ -1,7 +1,5 @@
 import logging
 from pathlib import Path
-import shutil
-import time
 
 import scipy
 import pandas as pd
@@ -168,7 +166,7 @@ def _make_wfs_table(
     unique_clusters, cluster_index, cluster_counts = np.unique(
         wf_flat["cluster"], return_inverse=True, return_counts=True)
     index_order_clusters = np.argsort(cluster_index, kind='stable')
-    wf_flat.loc[index_order_clusters, 'waveform_index'] = np.arange(wf_flat.shape[0]) # 3d "flat" version
+    wf_flat.loc[index_order_clusters, 'waveform_index'] = np.arange(wf_flat.shape[0])  # 3d "flat" version
     return wf_flat, unit_ids
 
 
@@ -424,8 +422,8 @@ def extract_wfs_cbin(
     logger.info("Writing to output files")
     wfs = open_memmap(traces_fn)
 
-    for i, rec in df_clusters.iterrows():
-        wfs_templates[i] = np.nanmedian(wfs[rec['first_index']:rec['last_index'] + 1], axis=0)
+    for i, rec in enumerate(df_clusters.itertuples()):
+        wfs_templates[i] = np.nanmedian(wfs[rec.first_index:rec.last_index + 1], axis=0)
     # save templates
     np.save(templates_fn, wfs_templates)
     # save the waveform table
