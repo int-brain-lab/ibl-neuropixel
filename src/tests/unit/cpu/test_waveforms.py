@@ -355,13 +355,17 @@ class TestWaveformExtractorBin(unittest.TestCase):
             reader_kwargs={"ns": self.ns, "nc": self.nc, "nsync": 1, "dtype": "float32"},
             max_wf=self.max_wf,
             h=trace_header(),
-            preprocess_steps=[],
+            preprocess_steps=None,
         )
         templates = np.load(self.tmpdir.joinpath("waveforms.templates.npy"))
         waveforms = np.load(self.tmpdir.joinpath("waveforms.traces.npy"))
+        table = pd.read_parquet(self.tmpdir.joinpath("waveforms.table.pqt"))
 
-        for u in [0, 1]:
-            assert np.allclose(np.nan_to_num(templates[u]), np.nanmedian(waveforms[u], axis=0))
+        cluster_ids = table.cluster.unique()
+
+        for i, u in enumerate(cluster_ids):
+            inds = table[table.cluster == u].waveform_index.to_numpy()
+            assert np.allclose(templates[i], np.nanmedian(waveforms[inds], axis=0), equal_nan=True)
 
         gt_templates, gt_waveforms = self._ground_truth_values()
 
