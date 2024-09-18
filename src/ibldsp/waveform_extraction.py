@@ -584,7 +584,7 @@ class WaveformsLoader:
             indices = np.arange(self.max_wf)
 
         labels = np.array(labels)
-        label_idx = np.array([np.where(labels == label)[0][0] for label in labels])
+        label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
         indices = np.array(indices)
 
         num_labels = labels.shape[0]
@@ -650,7 +650,7 @@ class WaveformsLoader:
             assert num_random_labels is None, "labels and num_random_labels cannot both be set"
 
         labels = np.array(labels)
-        label_idx = np.array([np.where(labels == label)[0][0] for label in labels])
+        label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
 
         num_labels = labels.shape[0]
 
