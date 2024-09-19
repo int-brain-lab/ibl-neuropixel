@@ -22,7 +22,7 @@ def aggregate_by_clusters(df_wavs):
     :param df_wavs:
     :return:
     """
-    df_clusters = df_wavs.loc[df_wavs['waveform_index'] >= 0, :].groupby('cluster').aggregate(
+    df_clusters = df_wavs.loc[df_wavs['sample'] >= 0, :].groupby('cluster').aggregate(
         count=pd.NamedAgg(column="cluster", aggfunc="count"),
         first_index=pd.NamedAgg(column="waveform_index", aggfunc="min"),
         last_index=pd.NamedAgg(column="waveform_index", aggfunc="max"),
@@ -506,15 +506,13 @@ class WaveformsLoader:
         assert self.table_fp.exists(), "waveforms.table.pqt file missing!"
         assert self.channels_fp.exists(), "waveforms.channels.npz file missing!"
 
-
         self.traces = np.lib.format.open_memmap(self.traces_fp)
         self.df_wav = pd.read_parquet(self.table_fp).reset_index(drop=True).drop(columns=["index"])
-
         if len(self.traces.shape) == 4:
             self.data_version = 1
             self.df_wav["sample"] = self.df_wav["sample"].astype('Int64')
             self.df_wav["peak_channel"] = self.df_wav["peak_channel"].astype('Int64')
-            self.df_wav['waveform_index'] = self.df_wav['waveform_index'].astype('Int64')
+            self.df_wav['waveform_index'] = np.arange(self.df_wav.shape[0], dtype=np.int64)
             self.df_wav['index_within_cluster'] = np.tile(np.arange(self.traces.shape[1]), self.traces.shape[0])
             self.total_wfs = sum(~self.df_wav["peak_channel"].isna())
         else:
