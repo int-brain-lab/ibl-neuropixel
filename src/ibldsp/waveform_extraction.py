@@ -22,7 +22,7 @@ def aggregate_by_clusters(df_wavs):
     :param df_wavs:
     :return:
     """
-    df_clusters = df_wavs.groupby('cluster').aggregate(
+    df_clusters = df_wavs.loc[df_wavs['waveform_index'] >= 0, :].groupby('cluster').aggregate(
         count=pd.NamedAgg(column="cluster", aggfunc="count"),
         first_index=pd.NamedAgg(column="waveform_index", aggfunc="min"),
         last_index=pd.NamedAgg(column="waveform_index", aggfunc="max"),
@@ -576,7 +576,7 @@ class WaveformsLoader:
         iw, _ = ismember(self.df_wav['cluster'], labels)
         if self.data_version == 1:
             indices = np.array(np.arange(self.max_wf) if indices is None else indices)
-            indices = np.tile(indices, (labels.size, 1)) if indices.ndim == 1 else indices
+            indices = np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
             assert indices.shape[
                        0] == labels.size, "If indices is a 2D-array, the second dimension must match the number of clusters."
             _, iu, _ = np.intersect1d(self.df_clusters.index, labels, return_indices=True)
@@ -586,7 +586,8 @@ class WaveformsLoader:
                 wfs = wfs.reshape(-1, self.nc, self.ns)
         elif self.data_version == 2:
             if indices is not None:
-                iw = iw[self.df_wav.loc[iw, 'index_within_clusters'].isin(indices)]
+                iw = np.where(iw)[0]
+                iw = iw[self.df_wav.loc[iw, 'index_within_clusters'].isin(np.atleast_1d(np.array(indices)))]
             wfs = self.traces[iw].astype(np.float32)
         info = self.df_wav.loc[iw, :].copy()
         channels = self.channels[iw].astype(int)
