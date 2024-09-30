@@ -752,7 +752,8 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     # from ibllib.plots.figures import ephys_bad_channels
     # ephys_bad_channels(x, 30000, ichannels, xfeats)
     if display:
-        ibldsp.plots.show_channels_labels(raw, fs, ichannels, xfeats)
+        ibldsp.plots.show_channels_labels(
+            raw, fs, ichannels, xfeats, similarity_threshold=similarity_threshold, psd_hf_threshold=psd_hf_threshold)
     return ichannels, xfeats
 
 
