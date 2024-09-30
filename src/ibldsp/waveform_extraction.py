@@ -430,7 +430,7 @@ def extract_wfs_cbin(
 
     # we want to store the index of the waveform within each cluster to facilitate loading later
     wf_flat['index_within_clusters'] = np.ones(wf_flat.shape[0])
-    inewc = np.diff(wf_flat['cluster'].values, prepend=0) != 0
+    inewc = np.diff(wf_flat['cluster'].values, prepend=wf_flat['cluster'].values[0]) != 0
     wf_flat.loc[inewc, 'index_within_clusters'] = - df_clusters['count'].values[:-1] + 1
     wf_flat['index_within_clusters'] = np.cumsum(wf_flat['index_within_clusters'].values).astype(int)
 
