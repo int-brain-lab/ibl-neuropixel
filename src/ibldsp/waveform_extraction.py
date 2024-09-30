@@ -432,7 +432,7 @@ def extract_wfs_cbin(
     wf_flat['index_within_clusters'] = np.ones(wf_flat.shape[0])
     inewc = np.diff(wf_flat['cluster'].values, prepend=wf_flat['cluster'].values[0]) != 0
     wf_flat.loc[inewc, 'index_within_clusters'] = - df_clusters['count'].values[:-1] + 1
-    wf_flat['index_within_clusters'] = np.cumsum(wf_flat['index_within_clusters'].values).astype(int)
+    wf_flat['index_within_clusters'] = np.cumsum(wf_flat['index_within_clusters'].values).astype(int) - 1
 
     # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
@@ -528,7 +528,7 @@ class WaveformsLoader:
         {self.nw:_} total waveforms {self.ns} samples, {self.nc} channels
         {self.nu:_} units, {self.max_wf:_} max waveforms per label
         dtype: {self.wfs_dtype}
-        data path: {self.data_dir} 
+        data path: {self.data_dir}
         """
 
     @property
@@ -555,16 +555,12 @@ class WaveformsLoader:
     def nw(self):
         return self.df_wav.shape[0]
 
-
     def load_waveforms(self, labels=None, indices=None, return_info=True, flatten=False):
         """
         Returns a specified subset of waveforms from the dataset.
 
         :param labels: (list, NumPy array) Label ids (usually clusters) from which to get waveforms.
-        :param indices: (list, NumPy array) Waveform indices to grab for each waveform.
-            Can be 1D in which case the same indices are returned for each waveform, or
-            2D with first dimension == len(labels) to return a specific set of indices for
-            each waveform.
+        :param indices: (list, NumPy array) Waveform indices to grab for each waveform 1D.
         :param return_info: If True, returns waveforms, table, channels, where table is a DF containing
             information about the waveforms returned, and channels is the channel map for each waveform.
         :param flatten: If True, returns all waveforms stacked along dimension zero, otherwise returns
@@ -575,8 +571,8 @@ class WaveformsLoader:
         if self.data_version == 1:
             indices = np.array(np.arange(self.max_wf) if indices is None else indices)
             indices = np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
-            assert indices.shape[
-                       0] == labels.size, "If indices is a 2D-array, the second dimension must match the number of clusters."
+            assert indices.shape[0] == labels.size, \
+                "If indices is a 2D-array, the second dimension must match the number of clusters."
             _, iu, _ = np.intersect1d(self.df_clusters.index, labels, return_indices=True)
             assert iu.size == labels.size, "Not all labels found in dataset."
             wfs = self.traces[iu[:, np.newaxis], indices].astype(np.float32)

@@ -309,7 +309,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
     max_wf = 25
 
     # 2 clusters
-    spike_samples = np.repeat(np.arange(0, ns, 1600), 2)  # 50 spikes
+    spike_samples = np.repeat(np.arange(0, ns, 1600), 2)  # 50 spikes, but 2 of them are on 0 sample
     spike_channels = np.tile(np.array([100, 368]), 25)
     spike_clusters = np.tile(np.array([1, 2]), 25)
 
@@ -329,19 +329,20 @@ class TestWaveformExtractorBin(unittest.TestCase):
         shutil.rmtree(self.tmpdir)
 
     def _ground_truth_values(self):
-
+        # here we have to hard-code 48 and 24 because the 2 first spikes are rejected since on sample 0
         nc_extract = self.chan_map.shape[1]
         gt_templates = np.ones((self.n_clusters, nc_extract, self.ns_extract), np.float32) * np.nan
-        gt_waveforms = np.ones((self.n_clusters, self.max_wf, nc_extract, self.ns_extract), np.float32) * np.nan
+        gt_waveforms = np.ones((48, nc_extract, self.ns_extract), np.float32) * np.nan
 
         c0_chans = self.chan_map[100].astype(np.float32)
         gt_templates[0, :, :] = np.tile(c0_chans, (self.ns_extract, 1)).T
-        gt_waveforms[0, :self.max_wf - 1, :, :] = np.tile(c0_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
+
+        gt_waveforms[:24, :, :] = gt_templates[0]
 
         c1_chans = self.chan_map[368].astype(np.float32)
         c1_chans[c1_chans == 384] = np.nan
         gt_templates[1, :, :] = np.tile(c1_chans, (self.ns_extract, 1)).T
-        gt_waveforms[1, :self.max_wf - 1, :, :] = np.tile(c1_chans, (self.max_wf - 1, self.ns_extract, 1)).swapaxes(1, 2)
+        gt_waveforms[24:, :, :] = gt_templates[1]
 
         return gt_templates, gt_waveforms
 
@@ -355,7 +356,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
             reader_kwargs={"ns": self.ns, "nc": self.nc, "nsync": 1, "dtype": "float32"},
             max_wf=self.max_wf,
             h=trace_header(),
-            preprocess_steps=None,
+            preprocess_steps=[],
         )
         templates = np.load(self.tmpdir.joinpath("waveforms.templates.npy"))
         waveforms = np.load(self.tmpdir.joinpath("waveforms.traces.npy"))
@@ -372,7 +373,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
         assert np.allclose(np.nan_to_num(gt_templates), np.nan_to_num(templates))
         assert np.allclose(np.nan_to_num(gt_waveforms), np.nan_to_num(waveforms))
 
-        wfl = waveform_extraction.WaveformsLoader(self.tmpdir, max_wf=self.max_wf)
+        wfl = waveform_extraction.WaveformsLoader(self.tmpdir)
 
         wfs = wfl.load_waveforms(return_info=False)
         assert np.allclose(np.nan_to_num(waveforms), np.nan_to_num(wfs))
@@ -380,17 +381,12 @@ class TestWaveformExtractorBin(unittest.TestCase):
         labels = np.array([1, 2])
         indices = np.arange(10)
 
+        # test the waveform loader
         wfs, info, channels = wfl.load_waveforms(labels=labels, indices=indices)
-        # right waveforms
-        assert np.allclose(np.nan_to_num(waveforms[:, :10]), np.nan_to_num(wfs))
-        # right channels
-        assert np.all(channels == self.chan_map[info.peak_channel.astype(int).to_numpy()])
-
-        wfs, info, channels = wfl.load_waveforms(labels=labels, indices=np.array([[1, 2, 3], [5, 6, 7]]))
 
         # right waveforms
-        assert np.allclose(np.nan_to_num(waveforms[0, [1, 2, 3]]), np.nan_to_num(wfs[0]))
-        assert np.allclose(np.nan_to_num(waveforms[1, [5, 6, 7]]), np.nan_to_num(wfs[1]))
+        assert np.allclose(np.nan_to_num(waveforms[:10, :]), np.nan_to_num(wfs[info['cluster'] == 1, :, :]))
+        assert np.allclose(np.nan_to_num(waveforms[25:35, :]), np.nan_to_num(wfs[info['cluster'] == 2, :, :]))
         # right channels
         assert np.all(channels == self.chan_map[info.peak_channel.astype(int).to_numpy()])
 
