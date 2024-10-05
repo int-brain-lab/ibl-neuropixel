@@ -1,3 +1,9 @@
+# 1.4
+
+## 1.4.0 2024-10-05
+- Optimization of the waveform extractor
+- Refactoring ot the waveform loader with back compability
+
 # 1.3
 
 ## 1.3.2 2024-09-18

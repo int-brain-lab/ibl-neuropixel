@@ -492,6 +492,7 @@ class WaveformsLoader:
         self,
         data_dir,
         trough_offset=42,
+        **kwargs,
     ):
 
         self.data_dir = Path(data_dir)
