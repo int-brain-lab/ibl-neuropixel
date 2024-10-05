@@ -626,25 +626,3 @@ class TestRawDataFeatures(unittest.TestCase):
         self.assertEqual(multi_index, list(df.index))
         self.assertEqual(["snippet_id", "channel_id"], list(df.index.names))
         self.assertEqual(num_snippets * (self.nc - 1), len(df))
-
-
-class TestNameDeprecationDate(unittest.TestCase):
-    def test_neurodsp_import(self):
-        # Check that the old import still works and gives the same package.
-        # (ibldsp.voltage is imported at the top of this file.)
-        with self.assertWarnsRegex(FutureWarning, "01-Oct-2024"):
-            import neurodsp
-        self.assertEqual(neurodsp.voltage, voltage)
-
-    def test_deprecation_countdown(self):
-        # Fail on 01-Sep-2024, when `neurodsp` will be retired.
-        # When this test fails, remove the entire dummy
-        # `neurodsp` package at the top level of the ibl-neuropixel
-        # repository
-        import datetime
-
-        if datetime.datetime.now() > datetime.datetime(2024, 10, 1):
-            raise NotImplementedError(
-                "neurodsp will not longer be supported. "
-                "Change all references to ibldsp."
-            )
