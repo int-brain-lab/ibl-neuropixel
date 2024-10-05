@@ -159,11 +159,10 @@ def car(x, collection=None, operator='median', **kwargs):
             xout[sel, :] = car(x=x[sel, :], collection=None, **kwargs)
         return xout
 
-    match operator:
-        case 'median':
-            x = x - np.median(x, axis=0)
-        case 'average':
-            x = x - np.mean(x, axis=0)
+    if operator == 'median':
+        x = x - np.median(x, axis=0)
+    elif operator == 'average':
+        x = x - np.mean(x, axis=0)
     return x
 
 
