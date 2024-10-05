@@ -713,15 +713,18 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
-    if psd_hf_threshold is None:
-        # the LFP band data is obviously much stronger so auto-adjust the default threshold
-        psd_hf_threshold = 1.4 if fs < 5000 else 0.02
-    sos_hp = scipy.signal.butter(
-        **{"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}, output="sos"
-    )
+    # auto-detection of the band with which we are working
+    band = 'ap' if fs > 2600 else 'lf'
+    # the LFP band data is obviously much stronger so auto-adjust the default threshold
+    if band == 'ap':
+        psd_hf_threshold = 0.02 if psd_hf_threshold is None else psd_hf_threshold
+        filter_kwargs = {"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}
+    elif band == 'lf':
+        psd_hf_threshold = 1.4 if psd_hf_threshold is None else psd_hf_threshold
+        filter_kwargs = {"N": 3, "Wn": 1 / fs * 2, "btype": "highpass"}
+    sos_hp = scipy.signal.butter(**filter_kwargs, output="sos")
     hf = scipy.signal.sosfiltfilt(sos_hp, raw)
     xcorf = channels_similarity(hf)
-
     xfeats = {
         "ind": np.arange(nc),
         "rms_raw": utils.rms(raw),  # very similar to the rms avfter butterworth filter
