@@ -436,46 +436,16 @@ def extract_wfs_cbin(
 
     # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
-    # create waveform output file (~2-3 GB)
-    traces_by_unit = open_memmap(
-        traces_fn,
-        mode="w+",
-        shape=(nu, max_wf, nc, spike_length_samples),
-        dtype=wfs_dtype,
-    )
     logger.info("Writing to output files")
-
-    for i, u in enumerate(unit_ids):
-        idx = np.where(wf_flat["cluster"] == u)[0]
-        nwf_u = idx.shape[0]
-        # reopening these memmaps on each iteration
-        # forces Python to clean up each large array it loads
-        # and prevent a memory leak
-        wfs = open_memmap(
-            int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
-        )
-        traces_by_unit = open_memmap(
-            traces_fn,
-            mode="r+",
-            shape=(nu, max_wf, nc, spike_length_samples),
-            dtype=wfs_dtype,
-        )
-        # write up to 256 waveforms and leave the rest of dimensions 1-3 as NaNs
-        traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(wfs_dtype)
-        traces_by_unit.flush()
-        # populate this array in memory as it's 256x smaller
-        wfs_templates[i, :, :] = np.nanmedian(wfs[idx], axis=0)
-
-    # cleanup intermediate file
-    int_fn.unlink()
-
+    wfs = open_memmap(traces_fn)
+    for i, rec in enumerate(df_clusters.itertuples()):
+        wfs_templates[i] = np.nanmedian(wfs[rec.first_index:rec.last_index + 1], axis=0)
     # save templates
     np.save(templates_fn, wfs_templates)
     # save the waveform table
 
     wf_flat.to_parquet(table_fn)
 
-    logger.info("Saving channel maps")
     # save channel map for each waveform
     # these values are now reordered so that they match the pqt
     # and the traces file
