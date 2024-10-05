@@ -356,6 +356,22 @@ class TestWindowGenerator(unittest.TestCase):
             my_rms_[wg.iw] = utils.rms(my_sig[sl])
         self.assertTrue(np.all(my_rms_ == my_rms))
 
+    def test_firstlast_splicing(self):
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
+        for first, last, amp in wg.firstlast_splicing:
+            sig_out[first:last] = sig_out[first:last] + amp * sig_in[first:last]
+        np.testing.assert_allclose(sig_out, sig_in)
+
+    def test_firstlast_valid(self):
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
+        for first, last, first_valid, last_valid in wg.firstlast_valid:
+            sig_out[first_valid:last_valid] = sig_in[first_valid:last_valid]
+        np.testing.assert_array_equal(sig_out, sig_in)
+
     def test_tscale(self):
         wg = utils.WindowGenerator(ns=500, nswin=100, overlap=50)
         ts = wg.tscale(fs=1000)
@@ -626,25 +642,3 @@ class TestRawDataFeatures(unittest.TestCase):
         self.assertEqual(multi_index, list(df.index))
         self.assertEqual(["snippet_id", "channel_id"], list(df.index.names))
         self.assertEqual(num_snippets * (self.nc - 1), len(df))
-
-
-class TestNameDeprecationDate(unittest.TestCase):
-    def test_neurodsp_import(self):
-        # Check that the old import still works and gives the same package.
-        # (ibldsp.voltage is imported at the top of this file.)
-        with self.assertWarnsRegex(FutureWarning, "01-Oct-2024"):
-            import neurodsp
-        self.assertEqual(neurodsp.voltage, voltage)
-
-    def test_deprecation_countdown(self):
-        # Fail on 01-Sep-2024, when `neurodsp` will be retired.
-        # When this test fails, remove the entire dummy
-        # `neurodsp` package at the top level of the ibl-neuropixel
-        # repository
-        import datetime
-
-        if datetime.datetime.now() > datetime.datetime(2024, 10, 1):
-            raise NotImplementedError(
-                "neurodsp will not longer be supported. "
-                "Change all references to ibldsp."
-            )

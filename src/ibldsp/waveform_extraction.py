@@ -1,9 +1,9 @@
 import logging
+from pathlib import Path
 
 import scipy
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from numpy.lib.format import open_memmap
 from joblib import Parallel, delayed, cpu_count
 
@@ -11,8 +11,23 @@ import spikeglx
 from ibldsp.voltage import detect_bad_channels, interpolate_bad_channels, car, kfilt
 from ibldsp.fourier import fshift
 from ibldsp.utils import make_channel_index
+from iblutil.numerical import ismember
 
 logger = logging.getLogger(__name__)
+
+
+def aggregate_by_clusters(df_wavs):
+    """
+    Group by the waveform dataframe by clusters
+    :param df_wavs:
+    :return:
+    """
+    df_clusters = df_wavs.loc[df_wavs['sample'] >= 0, :].groupby('cluster').aggregate(
+        count=pd.NamedAgg(column="cluster", aggfunc="count"),
+        first_index=pd.NamedAgg(column="waveform_index", aggfunc="min"),
+        last_index=pd.NamedAgg(column="waveform_index", aggfunc="max"),
+    )
+    return df_clusters
 
 
 def extract_wfs_array(
@@ -41,15 +56,15 @@ def extract_wfs_array(
     """
     # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
     if add_nan_trace:
-        newcol = np.empty((arr.shape[0], 1))
+        newcol = np.empty((1, arr.shape[1]))
         newcol[:] = np.nan
-        arr = np.hstack([arr, newcol])
+        arr = np.vstack([arr, newcol])
 
     # check that the spike window is included in the recording:
     last_idx = df["sample"].iloc[-1]
     assert (
-        last_idx + (spike_length_samples - trough_offset) < arr.shape[0]
-    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[0]} samples)."
+        last_idx + (spike_length_samples - trough_offset) < arr.shape[1]
+    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
 
     nwf = len(df)
 
@@ -62,7 +77,7 @@ def extract_wfs_array(
     )
     nchan = cind.shape[1]
 
-    wfs = np.zeros((nwf, spike_length_samples, nchan), arr.dtype)
+    wfs = np.zeros((nwf, nchan, spike_length_samples), arr.dtype)
     fun = range
     if verbose:
         try:
@@ -72,9 +87,9 @@ def extract_wfs_array(
         except ImportError:
             pass
     for i in fun(nwf):
-        wfs[i, :, :] = arr[sind[i], :][:, cind[i]]
+        wfs[i, :, :] = arr[:, sind[i]][cind[i], :]
 
-    return wfs.swapaxes(1, 2), cind, trough_offset
+    return wfs, cind, trough_offset
 
 
 def _get_channel_labels(sr, num_snippets=20, verbose=True):
@@ -155,20 +170,25 @@ def _make_wfs_table(
     wf_flat = pd.DataFrame(
         {
             "index": np.arange(wf_idx.shape[0]),
-            "sample": spike_samples[wf_idx].astype(int),
+            "sample": spike_samples[wf_idx].astype(np.int64),
             "cluster": spike_clusters[wf_idx].astype(int),
             "peak_channel": spike_channels[wf_idx].astype(int),
+            "waveform_index": np.zeros(wf_idx.shape[0], int),
         }
     )
 
+    # we pre-compute the final absolute indices of each waveform
+    unique_clusters, cluster_index, cluster_counts = np.unique(
+        wf_flat["cluster"], return_inverse=True, return_counts=True)
+    index_order_clusters = np.argsort(cluster_index, kind='stable')
+    wf_flat.loc[index_order_clusters, 'waveform_index'] = np.arange(wf_flat.shape[0])  # 3d "flat" version
     return wf_flat, unit_ids
 
 
 def write_wfs_chunk(
     i_chunk,
     cbin,
-    wfs_fn,
-    mmap_shape,
+    wfs_mmap,
     geom_dict,
     channel_labels,
     channel_neighbors,
@@ -190,8 +210,6 @@ def write_wfs_chunk(
     my_sr = spikeglx.Reader(cbin, **reader_kwargs)
     s0, s1 = sr_sl
 
-    wfs_mmap = open_memmap(wfs_fn, shape=mmap_shape, mode="r+", dtype=np.float32)
-
     if i_chunk == 0:
         offset = 0
     else:
@@ -204,15 +222,15 @@ def write_wfs_chunk(
 
     snip = my_sr[
         s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
-    ]
+    ].T
 
     if "butterworth" in preprocess_steps:
         butter_kwargs = {"N": 3, "Wn": 300 / my_sr.fs * 2, "btype": "highpass"}
         sos = scipy.signal.butter(**butter_kwargs, output="sos")
-        snip = scipy.signal.sosfiltfilt(sos, snip.T).T
+        snip = scipy.signal.sosfiltfilt(sos, snip)
 
     if "phase_shift" in preprocess_steps:
-        snip = fshift(snip, geom_dict["sample_shift"], axis=0)
+        snip = fshift(snip, geom_dict["sample_shift"], axis=-1)
 
     if "bad_channel_interpolation" in preprocess_steps:
         snip = interpolate_bad_channels(
@@ -225,7 +243,7 @@ def write_wfs_chunk(
     k_kwargs = {
         "ntr_pad": 60,
         "ntr_tap": 0,
-        "lagc": int(my_sr.fs / 10),
+        "lagc": 0,  # no agc for the median estimator of common reference channel
         "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
     }
     if "car" in preprocess_steps:
@@ -235,12 +253,8 @@ def write_wfs_chunk(
     if "kfilt" in preprocess_steps:
         kfilt_func = lambda dat: kfilt(dat, **k_kwargs)  # noqa: E731
         snip = kfilt_func(snip)
-
-    wfs_mmap[wf_flat["index"], :, :] = extract_wfs_array(
-        snip, df, channel_neighbors, add_nan_trace=True
-    )[0]
-
-    wfs_mmap.flush()
+    iw = wf_flat['waveform_index'].values
+    wfs_mmap[iw, :, :] = extract_wfs_array(snip, df, channel_neighbors, add_nan_trace=True)[0]
 
 
 def extract_wfs_cbin(
@@ -255,11 +269,12 @@ def extract_wfs_cbin(
     trough_offset=42,
     spike_length_samples=128,
     chunksize_samples=int(3000),
-    reader_kwargs={},
+    reader_kwargs=None,
     n_jobs=None,
     wfs_dtype=np.float32,
-    preprocess_steps=[],
-    seed=None
+    preprocess_steps=None,
+    seed=None,
+    scratch_dir=None,
 ):
     """
     Given a bin file and locations of spikes, extract waveforms for each unit, compute
@@ -269,7 +284,7 @@ def extract_wfs_cbin(
     reference procedure is applied in the spatial dimension.
 
     The following files will be generated:
-    - waveforms.traces.npy: `(num_units, max_wf, nc, spike_length_samples)`
+    - waveforms.traces.npy: `(total_waveforms, nc, spike_length_samples)`
         This file contains the lightly processed waveforms indexed by cluster in the first
         dimension. By default `max_wf=256, nc=40, spike_length_samples=128`.
 
@@ -307,8 +322,11 @@ def extract_wfs_cbin(
     :param wfs_dtype: Data type of raw waveforms saved (default np.float32)
     :param preprocess: Preprocessing options to apply, list which must be a subset of
         ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "kfilt"]
+        By default a butterworth 300Hz high-pass and the rephasing of the channels is perfomed
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
+    preprocess_steps = ['butterworth', 'phase_shift'] if preprocess_steps is None else preprocess_steps
+    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
 
     assert set(preprocess_steps).issubset(
         {
@@ -326,6 +344,13 @@ def extract_wfs_cbin(
     sr = spikeglx.Reader(bin_file, **reader_kwargs)
     if h is None:
         h = sr.geometry
+
+    if sr.is_mtscomp:
+        bin_file = sr.decompress_to_scratch(scratch_dir=scratch_dir)
+        sr = spikeglx.Reader(bin_file, **reader_kwargs)
+        file_to_unlink = bin_file
+    else:
+        file_to_unlink = None
 
     s0_arr = np.arange(0, sr.ns, chunksize_samples)
     s1_arr = s0_arr + chunksize_samples
@@ -353,7 +378,7 @@ def extract_wfs_cbin(
     elif channel_labels is None:
         channel_labels = np.zeros(sr.nc - sr.nsync)
 
-    nwf = len(wf_flat)
+    nwf = wf_flat.shape[0]
     nu = unit_ids.shape[0]
     logger.info(f"Extracting {nwf} waveforms from {nu} units")
 
@@ -365,9 +390,9 @@ def extract_wfs_cbin(
     # this intermediate memmap is written to in parallel
     # the waveforms are ordered only by their chronological position
     # in the recording, as we are reading them in time chunks
-    int_fn = output_dir.joinpath("_wf_extract_intermediate.npy")
+    traces_fn = output_dir.joinpath("waveforms.traces.npy")
     wfs = open_memmap(
-        int_fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
+        traces_fn, mode="w+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
     )
 
     slices = [
@@ -379,8 +404,7 @@ def extract_wfs_cbin(
         delayed(write_wfs_chunk)(
             i,
             bin_file,
-            int_fn,
-            wfs.shape,
+            wfs,
             h,
             channel_labels,
             channel_neighbors,
@@ -396,86 +420,46 @@ def extract_wfs_cbin(
     )
 
     # output files
-    traces_fn = output_dir.joinpath("waveforms.traces.npy")
     templates_fn = output_dir.joinpath("waveforms.templates.npy")
     table_fn = output_dir.joinpath("waveforms.table.pqt")
     channels_fn = output_dir.joinpath("waveforms.channels.npz")
 
-    ## rearrange and save traces by unit
+    ## rearrange dataframe: sort waveforms by cluster and aggregate by cluster
+    wf_flat.sort_values(by=["cluster", "sample"], inplace=True)
+    df_clusters = aggregate_by_clusters(wf_flat)
+
+    # we want to store the index of the waveform within each cluster to facilitate loading later
+    wf_flat['index_within_clusters'] = np.ones(wf_flat.shape[0])
+    inewc = np.diff(wf_flat['cluster'].values, prepend=wf_flat['cluster'].values[0]) != 0
+    wf_flat.loc[inewc, 'index_within_clusters'] = - df_clusters['count'].values[:-1] + 1
+    wf_flat['index_within_clusters'] = np.cumsum(wf_flat['index_within_clusters'].values).astype(int) - 1
+
     # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
-    # create waveform output file (~2-3 GB)
-    traces_by_unit = open_memmap(
-        traces_fn,
-        mode="w+",
-        shape=(nu, max_wf, nc, spike_length_samples),
-        dtype=wfs_dtype,
-    )
     logger.info("Writing to output files")
-
-    for i, u in enumerate(unit_ids):
-        idx = np.where(wf_flat["cluster"] == u)[0]
-        nwf_u = idx.shape[0]
-        # reopening these memmaps on each iteration
-        # forces Python to clean up each large array it loads
-        # and prevent a memory leak
-        wfs = open_memmap(
-            int_fn, mode="r+", shape=(nwf, nc, spike_length_samples), dtype=np.float32
-        )
-        traces_by_unit = open_memmap(
-            traces_fn,
-            mode="r+",
-            shape=(nu, max_wf, nc, spike_length_samples),
-            dtype=wfs_dtype,
-        )
-        # write up to 256 waveforms and leave the rest of dimensions 1-3 as NaNs
-        traces_by_unit[i, : min(max_wf, nwf_u), :, :] = wfs[idx].astype(wfs_dtype)
-        traces_by_unit.flush()
-        # populate this array in memory as it's 256x smaller
-        wfs_templates[i, :, :] = np.nanmedian(wfs[idx], axis=0)
-
-    # cleanup intermediate file
-    int_fn.unlink()
-
+    wfs = open_memmap(traces_fn)
+    for i, rec in enumerate(df_clusters.itertuples()):
+        wfs_templates[i] = np.nanmedian(wfs[rec.first_index:rec.last_index + 1], axis=0)
     # save templates
     np.save(templates_fn, wfs_templates)
+    # save the waveform table
 
-    # add in dummy rows and order by unit, and then sample
-    unit_counts = wf_flat.groupby("cluster")["sample"].count().reset_index(name="count")
-    unit_counts["missing"] = max_wf - unit_counts["count"]
-    missing_wf = unit_counts[unit_counts["missing"] > 0]
-    total_missing = sum(missing_wf.missing)
-    extra_rows = pd.DataFrame(
-        {
-            "sample": [np.nan] * total_missing,
-            "peak_channel": [np.nan] * total_missing,
-            "index": [np.nan] * total_missing,
-            "cluster": sum(
-                [[row["cluster"]] * row["missing"] for _, row in missing_wf.iterrows()],
-                [],
-            ),
-        }
-    )
-    save_df = pd.concat([wf_flat, extra_rows])
-    # now the waveforms are arranged by cluster, and then in time
-    # these match dimensions 0 and 1 of waveforms.traces.npy
-    save_df.sort_values(["cluster", "sample"], inplace=True)
-    save_df.to_parquet(table_fn)
+    wf_flat.to_parquet(table_fn)
 
     # save channel map for each waveform
     # these values are now reordered so that they match the pqt
     # and the traces file
-    peak_channel = np.nan_to_num(save_df["peak_channel"].to_numpy(), nan=-1).astype(
-        np.int16
-    )
-    dummy_idx = np.where(peak_channel >= 0)[0]
-    # leave "missing" waveforms as -1 since we can't have NaN with int dtype
-    chan_map = np.ones((max_wf * nu, nc), np.int16) * -1
-    chan_map[dummy_idx] = channel_neighbors[peak_channel[dummy_idx].astype(int)]
+    peak_channel = np.nan_to_num(wf_flat["peak_channel"].to_numpy(), nan=-1).astype(np.int16)
+    chan_map = channel_neighbors[peak_channel.astype(int)]
     np.savez(channels_fn, channels=chan_map)
+    # clean up the cached bin file
+    if file_to_unlink is not None:
+        file_to_unlink.with_suffix(".meta").unlink()
+        file_to_unlink.unlink()
 
 
 class WaveformsLoader:
+    data_version = None
 
     """
     Interface to the output of `extract_wfs_cbin`. Requires the following four files to
@@ -502,26 +486,17 @@ class WaveformsLoader:
 
     WaveformsLoader.load_waveforms() and random_waveforms() allow selection of a subset of
         waveforms.
-
     """
 
     def __init__(
         self,
         data_dir,
-        max_wf=256,
         trough_offset=42,
-        spike_length_samples=128,
-        num_channels=40,
-        wfs_dtype=np.float32
+        **kwargs,
     ):
 
         self.data_dir = Path(data_dir)
-        self.max_wf = max_wf
         self.trough_offset = trough_offset
-        self.spike_length_samples = spike_length_samples
-        self.num_channels = num_channels
-        self.wfs_dtype = wfs_dtype
-
         self.traces_fp = self.data_dir.joinpath("waveforms.traces.npy")
         self.templates_fp = self.data_dir.joinpath("waveforms.templates.npy")
         self.table_fp = self.data_dir.joinpath("waveforms.table.pqt")
@@ -532,89 +507,92 @@ class WaveformsLoader:
         assert self.table_fp.exists(), "waveforms.table.pqt file missing!"
         assert self.channels_fp.exists(), "waveforms.channels.npz file missing!"
 
-        # ingest parquet table
-        self.table = pd.read_parquet(self.table_fp).reset_index(drop=True).drop(columns=["index"])
-        self.table["sample"] = self.table["sample"].astype("Int64")
-        self.table["peak_channel"] = self.table["peak_channel"].astype("Int64")
-        self.num_labels = self.table["cluster"].nunique()
-        self.labels = np.array(self.table["cluster"].unique())
-        self.total_wfs = sum(~self.table["peak_channel"].isna())
-        self.table["wf_number"] = np.tile(np.arange(self.max_wf), self.num_labels)
-        self.table["linear_index"] = np.arange(len(self.table))
+        self.traces = np.lib.format.open_memmap(self.traces_fp)
+        self.df_wav = pd.read_parquet(self.table_fp).reset_index(drop=True).drop(columns=["index"])
+        if len(self.traces.shape) == 4:
+            self.data_version = 1
+            self.df_wav["sample"] = self.df_wav["sample"].astype('Int64')
+            self.df_wav["peak_channel"] = self.df_wav["peak_channel"].astype('Int64')
+            self.df_wav['waveform_index'] = np.arange(self.df_wav.shape[0], dtype=np.int64)
+            self.df_wav['index_within_cluster'] = np.tile(np.arange(self.traces.shape[1]), self.traces.shape[0])
+            self.total_wfs = sum(~self.df_wav["peak_channel"].isna())
+        else:
+            self.data_version = 2
 
-        traces_shape = (self.num_labels, max_wf, num_channels, spike_length_samples)
-        templates_shape = (self.num_labels, num_channels, spike_length_samples)
-
-        self.traces = np.lib.format.open_memmap(self.traces_fp, dtype=wfs_dtype, shape=traces_shape)
-        self.templates = np.lib.format.open_memmap(self.templates_fp, dtype=np.float32, shape=templates_shape)
-        self.channels = np.load(self.channels_fp, allow_pickle="True")["channels"]
+        self.df_clusters = aggregate_by_clusters(self.df_wav)
+        self.templates = np.lib.format.open_memmap(self.templates_fp, dtype=np.float32)
+        self.channels = np.load(self.channels_fp)["channels"]
 
     def __repr__(self):
-        s1 = f"WaveformsLoader with {self.total_wfs} waveforms in {self.wfs_dtype} from {self.num_labels} labels.\n"
-        s2 = f"Data path: {self.data_dir}\n"
-        s3 = f"{self.spike_length_samples} samples, {self.num_channels} channels, {self.max_wf} max waveforms per label\n"
-
-        return s1 + s2 + s3
+        return f"""
+        WaveformsLoader data version {self.data_version}
+        {self.nw:_} total waveforms {self.ns} samples, {self.nc} channels
+        {self.nu:_} units, {self.max_wf:_} max waveforms per label
+        dtype: {self.wfs_dtype}
+        data path: {self.data_dir}
+        """
 
     @property
-    def wf_counts(self):
-        """
-        pandas Series containing number of (non-NaN) waveforms for each label.
-        """
-        return self.table.groupby("cluster").count()["sample"].rename("num_wfs")
+    def max_wf(self):
+        return self.df_clusters['count'].max()
+
+    @property
+    def wfs_dtype(self):
+        return self.traces.dtype
+
+    @property
+    def nu(self):
+        return self.df_clusters.shape[0]
+
+    @property
+    def ns(self):
+        return self.traces.shape[-1]
+
+    @property
+    def nc(self):
+        return self.traces.shape[-2]
+
+    @property
+    def nw(self):
+        return self.df_wav.shape[0]
 
     def load_waveforms(self, labels=None, indices=None, return_info=True, flatten=False):
         """
         Returns a specified subset of waveforms from the dataset.
 
         :param labels: (list, NumPy array) Label ids (usually clusters) from which to get waveforms.
-        :param indices: (list, NumPy array) Waveform indices to grab for each waveform.
-            Can be 1D in which case the same indices are returned for each waveform, or
-            2D with first dimension == len(labels) to return a specific set of indices for
-            each waveform.
+        :param indices: (list, NumPy array) Waveform indices to grab for each waveform 1D.
         :param return_info: If True, returns waveforms, table, channels, where table is a DF containing
             information about the waveforms returned, and channels is the channel map for each waveform.
         :param flatten: If True, returns all waveforms stacked along dimension zero, otherwise returns
             array of shape (num_labels, num_indices_per_label, num_channels, spike_length_samples)
-
         """
-        if labels is None:
-            labels = self.labels
-        if indices is None:
-            indices = np.arange(self.max_wf)
-
-        labels = np.array(labels)
-        label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
-        indices = np.array(indices)
-
-        num_labels = labels.shape[0]
-
-        if indices.ndim == 1:
-            indices = np.tile(indices, (num_labels, 1))
-
-        wfs = self.traces[label_idx[:, None], indices].astype(np.float32)
-
-        if flatten:
-            wfs = wfs.reshape(-1, self.num_channels, self.spike_length_samples)
-
-        info = self.table[self.table["cluster"].isin(labels)].copy()
-        dfs = []
-        for i, l in enumerate(labels):
-            _idx = indices[i]
-            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == l)])
-        info = pd.concat(dfs).reset_index(drop=True)
-
-        channels = self.channels[info["linear_index"].to_numpy()].astype(int)
-
+        labels = np.array(self.df_clusters.index if labels is None else labels)
+        iw, _ = ismember(self.df_wav['cluster'], labels)
+        if self.data_version == 1:
+            indices = np.array(np.arange(self.max_wf) if indices is None else indices)
+            indices = np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
+            assert indices.shape[0] == labels.size, \
+                "If indices is a 2D-array, the second dimension must match the number of clusters."
+            _, iu, _ = np.intersect1d(self.df_clusters.index, labels, return_indices=True)
+            assert iu.size == labels.size, "Not all labels found in dataset."
+            wfs = self.traces[iu[:, np.newaxis], indices].astype(np.float32)
+            if flatten:
+                wfs = wfs.reshape(-1, self.nc, self.ns)
+        elif self.data_version == 2:
+            if indices is not None:
+                iw = np.where(iw)[0]
+                iw = iw[self.df_wav.loc[iw, 'index_within_clusters'].isin(np.atleast_1d(np.array(indices)))]
+            wfs = self.traces[iw].astype(np.float32)
+        info = self.df_wav.loc[iw, :].copy()
+        channels = self.channels[iw].astype(int)
         n_nan = sum(info["sample"].isna())
         if n_nan > 0:
-            logger.warning(f"{n_nan} NaN waveforms included in result.")
+            logger.info(f"{n_nan} NaN waveforms included in result.")
         if return_info:
             return wfs, info, channels
-
-        logger.info("Use return_info=True and check the table for details.")
-
-        return wfs
+        else:
+            return wfs
 
     def random_waveforms(
         self,

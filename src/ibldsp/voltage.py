@@ -142,40 +142,28 @@ def fk(
     return xf * gain
 
 
-def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
+def car(x, collection=None, operator='median', **kwargs):
     """
     Applies common average referencing with optional automatic gain control
-    :param x: the input array to be filtered. dimension, the filtering is considering
+    :param x: np.array(nc, ns) the input array to be de-referenced. dimension, the filtering is considering
     axis=0: spatial dimension, axis=1 temporal dimension. (ntraces, ns)
-    :param collection:
-    :param lagc: window size for time domain automatic gain control (no agc otherwise)
-    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :param collection: vector length ntraces. Each unique value set of traces is a collection and will be handled
+    separately. Useful for shanks.
+    :param operator: 'median' or 'average'
     :return:
     """
-    if butter_kwargs is None:
-        butter_kwargs = {"N": 3, "Wn": 0.1, "btype": "highpass"}
     if collection is not None:
         xout = np.zeros_like(x)
         for c in np.unique(collection):
             sel = collection == c
-            xout[sel, :] = kfilt(
-                x=x[sel, :],
-                ntr_pad=0,
-                ntr_tap=None,
-                collection=None,
-                butter_kwargs=butter_kwargs,
-            )
+            xout[sel, :] = car(x=x[sel, :], collection=None, **kwargs)
         return xout
 
-    # apply agc and keep the gain in handy
-    if not lagc:
-        xf = np.copy(x)
-        gain = 1
-    else:
-        xf, gain = agc(x, wl=lagc, si=1.0)
-    # apply CAR and then un-apply the gain
-    xf = xf - np.median(xf, axis=0)
-    return xf * gain
+    if operator == 'median':
+        x = x - np.median(x, axis=0)
+    elif operator == 'average':
+        x = x - np.mean(x, axis=0)
+    return x
 
 
 def kfilt(
@@ -390,21 +378,18 @@ def destripe(
     return x
 
 
-def destripe_lfp(x, fs, channel_labels=None, **kwargs):
+def destripe_lfp(x, fs, channel_labels=None, butter_kwargs=None, k_filter=False):
     """
-    Wrapper around the destipe function with some default parameters to destripe the LFP band
+    Wrapper around the destripe function with some default parameters to destripe the LFP band
     See help destripe function for documentation
-    :param x:
-    :param fs:
-    :return:
+    :param x: demultiplexed array (nc, ns)
+    :param fs: sampling frequency
+    :param channel_labels: see destripe
     """
-    kwargs["butter_kwargs"] = {"N": 3, "Wn": 2 / fs * 2, "btype": "highpass"}
-    kwargs["k_filter"] = False
+    butter_kwargs = {"N": 3, "Wn": [0.5, 300], "btype": "bandpass", "fs": fs} if butter_kwargs is None else butter_kwargs
     if channel_labels is True:
-        kwargs["channel_labels"], _ = detect_bad_channels(
-            x, fs=fs, psd_hf_threshold=1.4
-        )
-    return destripe(x, fs, **kwargs)
+        channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    return destripe(x, fs, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
 
 
 def decompress_destripe_cbin(
@@ -632,11 +617,9 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        output_qc_path = output_qc_path or output_file.parent
+        output_qc_path = output_file.parent if output_qc_path is None else output_qc_path
         np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.rms.npy"), rms_data)
-        np.save(
-            output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
-        )
+        np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data)
         np.save(output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"), saturation_data)
 
 
@@ -715,15 +698,18 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
-    if psd_hf_threshold is None:
-        # the LFP band data is obviously much stronger so auto-adjust the default threshold
-        psd_hf_threshold = 1.4 if fs < 5000 else 0.02
-    sos_hp = scipy.signal.butter(
-        **{"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}, output="sos"
-    )
+    # auto-detection of the band with which we are working
+    band = 'ap' if fs > 2600 else 'lf'
+    # the LFP band data is obviously much stronger so auto-adjust the default threshold
+    if band == 'ap':
+        psd_hf_threshold = 0.02 if psd_hf_threshold is None else psd_hf_threshold
+        filter_kwargs = {"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}
+    elif band == 'lf':
+        psd_hf_threshold = 1.4 if psd_hf_threshold is None else psd_hf_threshold
+        filter_kwargs = {"N": 3, "Wn": 1 / fs * 2, "btype": "highpass"}
+    sos_hp = scipy.signal.butter(**filter_kwargs, output="sos")
     hf = scipy.signal.sosfiltfilt(sos_hp, raw)
     xcorf = channels_similarity(hf)
-
     xfeats = {
         "ind": np.arange(nc),
         "rms_raw": utils.rms(raw),  # very similar to the rms avfter butterworth filter
@@ -754,7 +740,8 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     # from ibllib.plots.figures import ephys_bad_channels
     # ephys_bad_channels(x, 30000, ichannels, xfeats)
     if display:
-        ibldsp.plots.show_channels_labels(raw, fs, ichannels, xfeats)
+        ibldsp.plots.show_channels_labels(
+            raw, fs, ichannels, xfeats, similarity_threshold=similarity_threshold, psd_hf_threshold=psd_hf_threshold)
     return ichannels, xfeats
 
 

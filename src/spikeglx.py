@@ -2,6 +2,8 @@ import json
 import logging
 from pathlib import Path
 import re
+import shutil
+import time
 
 import numpy as np
 
@@ -14,7 +16,7 @@ import neuropixel
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
-_logger = logging.getLogger("ibllib")
+_logger = logging.getLogger(__name__)
 
 
 def _get_companion_file(sglx_file, pattern='.meta'):
@@ -373,6 +375,27 @@ class Reader:
             self.file_bin.unlink()
             self.file_bin = file_out
         return file_out
+
+    def decompress_to_scratch(self, scratch_dir=None):
+        """
+        Decompresses the file to a temporary directory
+        Copy over the metadata file
+        """
+        if scratch_dir is None:
+            bin_file = Path(self.file_bin).with_suffix('.bin')
+        else:
+            scratch_dir.mkdir(exist_ok=True, parents=True)
+            bin_file = Path(scratch_dir).joinpath(self.file_bin.name).with_suffix('.bin')
+            shutil.copy(self.file_meta_data, bin_file.with_suffix('.meta'))
+        if not bin_file.exists():
+            t0 = time.time()
+            _logger.info('File is compressed, decompressing to a temporary file...')
+            self.decompress_file(
+                keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True
+            )
+            shutil.move(bin_file.with_suffix('.bin_temp'), bin_file)
+            _logger.info(f"Decompression complete: {time.time() - t0:.2f}s")
+        return bin_file
 
     def decompress_file(self, keep_original=True, **kwargs):
         """

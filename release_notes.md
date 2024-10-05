@@ -1,3 +1,13 @@
+# 1.4
+
+## 1.4.0 2024-10-05
+- Waveform extraction:
+  - Optimization of the waveform extractor, outputs flattened waveforms
+  - Refactoring ot the waveform loader with back compability
+- Bad channel detector:
+  - The bad channel detector has a plot option to visualize the bad channels and thresholds
+  - The default low-cut filters are set to 300Hz for AP band and 2 Hz for LF band
+
 # 1.3
 
 ## 1.3.2 2024-09-18

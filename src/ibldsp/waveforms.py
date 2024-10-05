@@ -6,7 +6,9 @@ For efficiency, several wavforms are fed in a memory contiguous manner: (iwavefo
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import scipy
+
 from ibldsp.utils import parabolic_max
 from ibldsp.fourier import fshift
 
@@ -231,16 +233,24 @@ def find_tip_trough(arr_peak, arr_peak_real, df):
     return df, arr_peak
 
 
-def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
+def plot_wiggle(wav, fs=1, ax=None, scale=0.3, clip=10, fill_sign=-1, plot_kwargs=None, fill_kwargs=None):
     """
     Displays a multi-trace waveform in a wiggle traces with negative
     amplitudes filled
     :param wav: (nchannels, nsamples)
-    :param axkwargs: keyword arguments to feed to ax.set()
-    :return:
+    :param fs: sampling rate
+    :param ax: axis to plot on
+    :param scale: waveform amplitude that will be displayed as one inter-trace: if scale = 20e-6 one intertrace will be 20uV
+    :param clip: maximum value for the traces
+    :param fill_sign: -1 for negative (default for spikes), 1 for positive
+    :param plot_kwargs: kwargs for the line plot
+    :param fill_kwargs: kwargs for the fill
+    :return: axis
     """
     if ax is None:
         fig, ax = plt.subplots()
+    plot_kwargs = {'color': 'k', 'linewidth': 0.5} | (plot_kwargs or {})
+    fill_kwargs = {'color': 'k', 'aa': True} | (fill_kwargs or {})
     nc, ns = wav.shape
     vals = np.c_[wav, wav[:, :1] * np.nan].ravel()  # flat view of the 2d array.
     vect = np.arange(vals.size).astype(
@@ -255,19 +265,48 @@ def plot_wiggle(wav, fs=1, ax=None, scalar=0.3, clip=1.5, **axkwargs):
     m = (y2 - y1) / (x2 - x1)
     c = y1 - m * x1
     # tack these values onto the end of the existing data
-    x = np.hstack([vals, np.zeros_like(c)]) * scalar
+    x = np.hstack([vals, np.zeros_like(c)]) / scale
     x = np.maximum(np.minimum(x, clip), -clip)
     y = np.hstack([vect, c])
     # resort the data
     order = np.argsort(y)
     # shift from amplitudes to plotting coordinates
     x_shift, y = y[order].__divmod__(ns + 1)
-    ax.plot(y / fs, x[order] + x_shift + 1, 'k', linewidth=.5)
-    x[x > 0] = np.nan
+    print(plot_kwargs)
+    ax.plot(y / fs, x[order] + x_shift + 1, **plot_kwargs)
+    if fill_sign < 0:
+        x[x > 0] = np.nan
+    else:
+        x[x < 0] = np.nan
     x = x[order] + x_shift + 1
-    ax.fill(y / fs, x, 'k', aa=True)
-    ax.set(xlim=[0, ns / fs], ylim=[0, nc], xlabel='sample', ylabel='trace')
+    ax.fill(y / fs, x, **fill_kwargs)
+    ax.set(xlim=[0, ns / fs], ylim=[0, nc])
     plt.tight_layout()
+    return ax
+
+
+def double_wiggle(wav, fs=1, ax=None, colors=None, **kwargs):
+    """
+    Double trouble: this wiggle colours both the negative and the postive values
+    :param wav: (nchannels, nsamples)
+    :param fs: sampling rate
+    :param ax: axis to plot on
+    :param scale: scale factor for the traces
+    :param clip: maximum value for the traces
+    :param fill_sign: -1 for negative (default for spikes), 1 for positive
+    :param plot_kwargs: kwargs for the line plot
+    :param fill_kwargs: kwargs for the fill
+    :return:
+    """
+    if colors is None:
+        cmap = 'PuOr'
+        _cmap = mpl.colormaps.get_cmap(cmap)
+        colors = _cmap(np.linspace(0, 1, 256))
+        colors = [colors[50], colors[-50]]
+    if ax is None:
+        fig, ax = plt.subplots()
+    plot_wiggle(wav, fs=fs / 1e3, ax=ax, plot_kwargs={'linewidth': 0}, fill_kwargs={'color': colors[0]}, **kwargs)
+    plot_wiggle(wav, fs=fs / 1e3, ax=ax, fill_sign=1, plot_kwargs={'linewidth': 0.5}, fill_kwargs={'color': colors[1]}, **kwargs)
     return ax
 
 
