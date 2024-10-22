@@ -276,10 +276,8 @@ class Reader:
         """
         if not self.is_open:
             raise IOError("Reader not open; call `open` before `read`")
-        
         if hasattr(self, '_raw_channel_order'):
             csel = self._raw_channel_order[csel]
-            
         darray = self._raw[nsel, csel].astype(np.float32, copy=True)
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
@@ -689,13 +687,13 @@ def _geometry_from_meta(meta_data, return_index=False):
     )
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
-
     if return_index:
         cols = ["shank", "row", "col"]
         inds = np.lexsort([th[c] for c in cols][::-1])
         return th, inds
     else:
         return th
+
 
 def read_geometry(meta_file):
     """
