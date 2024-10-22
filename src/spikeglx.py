@@ -125,6 +125,7 @@ class Reader:
             self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
+            _, self._raw_channel_order = _geometry_from_meta(self.meta, return_index=True)
         if open and self.file_bin:
             self.open()
 
@@ -189,14 +190,6 @@ class Reader:
     @property
     def sample2volts(self):
         return self.channel_conversion_sample2v[self.type]
-
-    @property
-    def geometry(self):
-        """
-        Gets the geometry, ie. the full trace header for the recording
-        :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
-        """
-        return _geometry_from_meta(self.meta)
 
     @property
     def shape(self):
@@ -283,6 +276,10 @@ class Reader:
         """
         if not self.is_open:
             raise IOError("Reader not open; call `open` before `read`")
+        
+        if hasattr(self, '_raw_channel_order'):
+            csel = self._raw_channel_order[csel]
+            
         darray = self._raw[nsel, csel].astype(np.float32, copy=True)
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
@@ -658,7 +655,7 @@ def _split_geometry_into_shanks(th, meta_data):
     return th
 
 
-def _geometry_from_meta(meta_data):
+def _geometry_from_meta(meta_data, return_index=False):
     """
     Gets the geometry, ie. the full trace header for the recording
     :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
@@ -693,8 +690,12 @@ def _geometry_from_meta(meta_data):
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
 
-    return th
-
+    if return_index:
+        cols = ["shank", "row", "col"]
+        inds = np.lexsort([th[c] for c in cols][::-1])
+        return th, inds
+    else:
+        return th
 
 def read_geometry(meta_file):
     """
