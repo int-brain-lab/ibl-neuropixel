@@ -437,7 +437,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def assert_read_glx(self, tglx):
         with spikeglx.Reader(tglx["bin_file"]) as sr:
-            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx["D"]
+            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx["D"][:, sr.raw_channel_order]
             d, sync = sr.read_samples(0, tglx["ns"])
             # could be rounding errors with non-integer sampling rates
             self.assertTrue(sr.nsync == 1)

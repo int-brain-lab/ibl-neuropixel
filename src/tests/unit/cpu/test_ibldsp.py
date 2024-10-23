@@ -569,6 +569,7 @@ class TestRawDataFeatures(unittest.TestCase):
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.joinpath("fixtures")
         self.tmpdir = Path(tempfile.gettempdir()) / "rawdata"
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
         self.tmpdir.mkdir()
         self.ns_ap = 38502
         self.nc = 385
