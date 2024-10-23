@@ -665,7 +665,10 @@ def _geometry_from_meta(meta_data, return_index=False):
         _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
         th = neuropixel.trace_header(version=major_version)
         th["flag"] = th["x"] * 0 + 1.0
-        return th
+        if return_index:
+            return th, np.arange(th['shank'].shape[0])
+        else:
+            return th
     th = cm.copy()
     # as of 2023-04 spikeglx stores only x, y coordinates of sites in UM and no col / row. Here
     # we convert to col / row for consistency with previous versions
