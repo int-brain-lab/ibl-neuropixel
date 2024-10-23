@@ -70,6 +70,7 @@ class Reader:
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
         :param open: when True the file is opened
         """
+        self.geometry = None
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
         meta_file = meta_file or _get_companion_file(sglx_file, '.meta')
@@ -125,7 +126,9 @@ class Reader:
             self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
-            _, self._raw_channel_order = _geometry_from_meta(self.meta, return_index=True)
+            self.geometry, order = _geometry_from_meta(self.meta, return_index=True)
+            self._raw_channel_order = np.arange(self.nc)
+            self._raw_channel_order[:order.size] = order
         if open and self.file_bin:
             self.open()
 
