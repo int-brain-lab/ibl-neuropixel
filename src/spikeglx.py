@@ -125,8 +125,9 @@ class Reader:
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
             self.geometry, order = _geometry_from_meta(self.meta, return_index=True)
-            self._raw_channel_order = np.arange(self.nc)
-            self._raw_channel_order[:order.size] = order
+            self.raw_channel_order = np.arange(self.nc)
+            if self.geometry is not None:  # nidq files won't return any geometry here
+                self.raw_channel_order[:order.size] = order
         if open and self.file_bin:
             self.open()
 
@@ -633,7 +634,7 @@ def _split_geometry_into_shanks(th, meta_data):
     return th
 
 
-def _geometry_from_meta(meta_data):
+def _geometry_from_meta(meta_data, return_index=False, nc=384):
     """
     Gets the geometry, ie. the full trace header for the recording
     :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
@@ -641,8 +642,13 @@ def _geometry_from_meta(meta_data):
     """
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
-    if cm is None:
+    if cm is None or all(map(lambda x: x is None, cm.values())):
         _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
+        if major_version is None:
+            if return_index:
+                return None, None
+            else:
+                return None
         th = neuropixel.trace_header(version=major_version)
         th["flag"] = th["x"] * 0 + 1.0
         if return_index:
@@ -670,13 +676,6 @@ def _geometry_from_meta(meta_data):
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
     if return_index:
-        cols = ["shank", "row", "col"]
-        inds = np.lexsort([th[c] for c in cols][::-1])
-        return th, inds
-    else:
-        return th
-
-    if return_index:
         # here we sort the channels by shank, row and -col, this preserves the original NP1
         # order while still allowing to deal with creative imro tables in NP2
         sort_keys = np.c_[-th['col'], th['row'], th['shank']]
@@ -685,6 +684,7 @@ def _geometry_from_meta(meta_data):
         return th, inds
     else:
         return th
+
 
 def read_geometry(meta_file):
     """

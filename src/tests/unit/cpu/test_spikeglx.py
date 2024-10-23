@@ -212,7 +212,7 @@ class TestsSpikeGLX_compress(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(sr._raw[5:500, :-1] * s2mv, sr[5:500, :-1])))
         self.assertTrue(np.all(np.isclose(sr._raw[5:500, 5] * s2mv, sr[5:500, 5])))
         self.assertTrue(np.all(np.isclose(sr._raw[5, :-1] * s2mv, sr[5, :-1])))
-        self.assertTrue(sr._raw[55, 5] * s2mv == sr[55, 5])
+        np.testing.assert_almost_equal(sr._raw[55, 5] * s2mv, sr[55, 5])
         self.assertTrue(np.all(np.isclose(sr._raw[55] * s2mv, sr[55])))
         self.assertTrue(np.all(np.isclose(sr._raw[5:500] * s2mv, sr[5:500])[:, :-1]))
 
@@ -494,11 +494,11 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             # test the channel geometries but skip when meta data doesn't correspond to NP
             if sr.major_version is not None:
                 th = sr.geometry
-                h = neuropixel.trace_header(
+                h_expected = neuropixel.trace_header(
                     sr.major_version, nshank=np.unique(th["shank"]).size
                 )
-                for k in h.keys():
-                    assert np.all(th[k] == h[k]), print(k)
+                for k in h_expected.keys():
+                    np.testing.assert_equal(h_expected[k][sr.raw_channel_order[:-sr.nsync]], th[k])
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
