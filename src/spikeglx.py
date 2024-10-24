@@ -265,7 +265,7 @@ class Reader:
         :return: [nc, ] array of float32 (V)
         """
         if not self.meta:
-            return self.sample2volts * np.NaN
+            return self.sample2volts * np.nan
         maxint = _get_max_int_from_meta(self.meta)
         return self.sample2volts * maxint
 

@@ -8,7 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="ibl-neuropixel",
-    version="1.4.0",
+    version="1.5.0",
     author="The International Brain Laboratory",
     description="Collection of tools for Neuropixel 1.0 and 2.0 probes data",
     long_description=long_description,
@@ -27,5 +27,5 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src", exclude=["tests"]),
     include_package_data=True,
     py_modules=["spikeglx", "neuropixel"],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
 )
