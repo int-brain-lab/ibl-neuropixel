@@ -1,3 +1,9 @@
+# 1.5
+
+## 1.5.0 2024-10-24
+- Automatic sorting per shank / row / col
+- Minimum Python version is 3.10
+
 # 1.4
 
 ## 1.4.0 2024-10-05

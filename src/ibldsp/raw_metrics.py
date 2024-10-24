@@ -112,7 +112,7 @@ def compute_raw_features_snippet(sr_ap, sr_lf, t0, t1, filter_ap=None, filter_lf
         dc_offset = np.mean(raw, axis=1)
         channel_labels, xfeats_raw = detect_bad_channels(raw, **detect_kwargs[band])
         butter = scipy.signal.sosfiltfilt(filters[band], raw)
-        destriped = destripe_fn[band](raw, fs=sr.fs, channel_labels=channel_labels)
+        destriped = destripe_fn[band](raw, fs=sr.fs, h=sr.geometry, channel_labels=channel_labels)
         # compute same channel feats for destripe
         _, xfeats_destriped = detect_bad_channels(destriped, **detect_kwargs[band])
 

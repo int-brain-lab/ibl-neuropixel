@@ -118,7 +118,7 @@ def test_dist_chanel_from_peak():
     xyz_testd = np.stack(
         (
             np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]]),
-            np.array([[4, 0, 0], [2, 0, 0], [np.NaN, np.NaN, np.NaN], [1, 0, 0]]),
+            np.array([[4, 0, 0], [2, 0, 0], [np.nan, np.nan, np.nan], [1, 0, 0]]),
         ),
         axis=2,
     )
@@ -132,7 +132,7 @@ def test_dist_chanel_from_peak():
     sp_spread = waveforms.spatial_spread_weighted(eu_dist, weights)
 
     np.testing.assert_almost_equal(eu_dist[0, :], np.array([0, 1, 1, np.sqrt(2)]))
-    np.testing.assert_equal(eu_dist[1, :], np.array([2, 0, np.NaN, 1]))
+    np.testing.assert_equal(eu_dist[1, :], np.array([2, 0, np.nan, 1]))
     np.testing.assert_equal(sp_spread, np.array([1, 0.5]))
 
 

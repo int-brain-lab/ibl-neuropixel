@@ -378,7 +378,7 @@ def destripe(
     return x
 
 
-def destripe_lfp(x, fs, channel_labels=None, butter_kwargs=None, k_filter=False):
+def destripe_lfp(x, fs, h=None, channel_labels=None, butter_kwargs=None, k_filter=False):
     """
     Wrapper around the destripe function with some default parameters to destripe the LFP band
     See help destripe function for documentation
@@ -389,7 +389,7 @@ def destripe_lfp(x, fs, channel_labels=None, butter_kwargs=None, k_filter=False)
     butter_kwargs = {"N": 3, "Wn": [0.5, 300], "btype": "bandpass", "fs": fs} if butter_kwargs is None else butter_kwargs
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
-    return destripe(x, fs, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
+    return destripe(x, fs, h=h, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
 
 
 def decompress_destripe_cbin(
