@@ -64,11 +64,14 @@ class Reader:
         ignore_warnings=False,
         meta_file=None,
         ch_file=None,
+        sort=True
     ):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
         :param open: when True the file is opened
+        :param sort: (True) by default always return channels sorted by shank, row and column. If set to false,
+        the data will be returned as written on disk, for NP2 versions this may result in interleaved shanks
         """
         self.geometry = None
         self.ignore_warnings = ignore_warnings
@@ -126,7 +129,7 @@ class Reader:
             self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
-            self.geometry, order = _geometry_from_meta(self.meta, return_index=True)
+            self.geometry, order = geometry_from_meta(self.meta, return_index=True, sort=sort)
             self.raw_channel_order = np.arange(self.nc)
             if self.geometry is not None:  # nidq files won't return any geometry here
                 self.raw_channel_order[:order.size] = order
@@ -619,7 +622,7 @@ def _get_nchannels_from_meta(md):
 
 
 def _get_nshanks_from_meta(md):
-    th = _geometry_from_meta(md)
+    th = geometry_from_meta(md)
     return len(np.unique(th["shank"]))
 
 
@@ -657,10 +660,13 @@ def _split_geometry_into_shanks(th, meta_data):
     return th
 
 
-def _geometry_from_meta(meta_data, return_index=False, nc=384):
+def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     """
     Gets the geometry, ie. the full trace header for the recording
     :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
+    :param return_index: (False): flag to optionally return the sorted indices
+    :param sort: (True) sort the geometry by shank row col
+    :param nc: number of channels if geometry is not in the metadata file
     :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
     """
     cm = _map_channels_from_meta(meta_data)
@@ -691,19 +697,22 @@ def _geometry_from_meta(meta_data, return_index=False, nc=384):
     else:
         # the spike sorting channel maps have a flipped version of the channel map
         if major_version == 1:
-            th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
+            th["col"] = - cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
     th["sample_shift"], th["adc"] = neuropixel.adc_shifts(
         version=major_version, nc=th["col"].size
     )
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
-    if return_index:
+    if sort:
         # here we sort the channels by shank, row and -col, this preserves the original NP1
         # order while still allowing to deal with creative imro tables in NP2
         sort_keys = np.c_[-th['col'], th['row'], th['shank']]
         inds = np.lexsort(sort_keys.T)
         th = {k: v[inds] for k, v in th.items()}
+    else:
+        inds = np.arange(th['col'].size)
+    if return_index:
         return th, inds
     else:
         return th
@@ -715,7 +724,7 @@ def read_geometry(meta_file):
     :param meta_file:
     :return: dictionary with keys 'shank', 'col', 'row', 'flag', 'x', 'y', 'sample_shift', 'adc', 'ind'
     """
-    return _geometry_from_meta(read_meta_data(meta_file))
+    return geometry_from_meta(read_meta_data(meta_file))
 
 
 def _map_channels_from_meta(meta_data):

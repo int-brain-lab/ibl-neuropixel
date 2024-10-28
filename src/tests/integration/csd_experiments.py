@@ -6,7 +6,7 @@ import scipy.signal
 from one.api import ONE
 from brainbox.io.spikeglx import Streamer
 from brainbox.io.one import SpikeSortingLoader
-from ibllib.atlas import BrainRegions
+from iblatlas.atlas import BrainRegions
 from viewephys.gui import viewephys
 
 from ibldsp import voltage, fourier

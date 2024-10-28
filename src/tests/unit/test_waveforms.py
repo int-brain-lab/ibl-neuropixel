@@ -16,7 +16,7 @@ from neuropixel import trace_header
 from ibldsp.fourier import fshift
 
 
-TEST_PATH = Path(__file__).parent.joinpath("fixtures")
+TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
 def make_array_peak_through_tip():
@@ -100,7 +100,7 @@ def test_peak_through_tip_3d():
 
 def test_halfpeak_slopes():
     # Load fixtures
-    folder_save = Path(__file__).parent.joinpath("fixtures", "waveform_sample")
+    folder_save = TEST_PATH.joinpath("waveform_sample")
     arr_in = np.load(folder_save.joinpath("test_arr_in.npy"))
     test_arr_peak = np.load(folder_save.joinpath("test_arr_peak.npy"))
     test_df = pd.read_csv(folder_save.joinpath("test_df.csv"))

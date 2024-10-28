@@ -9,7 +9,7 @@ from iblutil.io import hashfile
 import neuropixel
 import spikeglx
 
-TEST_PATH = Path(__file__).parent.joinpath("fixtures")
+TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
 class TestSpikeGLX_hardwareInfo(unittest.TestCase):

@@ -259,7 +259,7 @@ class NP2Converter:
         split into shanks (only applicable to NP2.4)
         """
         self.ap_file = Path(ap_file)
-        self.sr = spikeglx.Reader(ap_file)
+        self.sr = spikeglx.Reader(ap_file, sort=False)
         self.post_check = post_check
         self.compress = compress
         self.delete_original = delete_original
@@ -299,7 +299,7 @@ class NP2Converter:
         ]
 
         # Low pass filter (acts as both anti-aliasing and LP filter)
-        butter_lp_kwargs = {"N": 2, "Wn": 1000 / 2500 / 2, "btype": "lowpass"}
+        butter_lp_kwargs = {"N": 2, "Wn": 1000 / self.fs_lf / 2, "btype": "lowpass"}
         self.sos_lp = scipy.signal.butter(**butter_lp_kwargs, output="sos")
 
         # Number of ap channels
@@ -408,7 +408,6 @@ class NP2Converter:
         :param overwrite: set to True to force rerunning even if lf.bin file already exists
         :return:
         """
-
         chn_info = spikeglx._map_channels_from_meta(self.sr.meta)
         n_shanks = self.nshank or np.unique(chn_info["shank"]).astype(np.int16)
         label = self.ap_file.parent.parts[-1]
@@ -552,21 +551,17 @@ class NP2Converter:
         :return:
         """
         for sh in self.shank_info.keys():
-            self.shank_info[sh]["sr"] = spikeglx.Reader(self.shank_info[sh]["ap_file"])
-
+            self.shank_info[sh]["sr"] = spikeglx.Reader(self.shank_info[sh]["ap_file"], sort=False)
         wg = WindowGenerator(self.nsamples, self.samples_window, 0)
         for first, last in wg.firstlast:
             expected = self.sr[first:last, :]
             chunk = np.zeros_like(expected)
             for ish, sh in enumerate(self.shank_info.keys()):
+                srs = self.shank_info[sh]["sr"]
                 if ish == 0:
-                    chunk[:, self.shank_info[sh]["chns"]] = self.shank_info[sh]["sr"][
-                        first:last, :
-                    ]
+                    chunk[:, self.shank_info[sh]["chns"]] = srs[first:last, :]
                 else:
-                    chunk[:, self.shank_info[sh]["chns"][:-1]] = self.shank_info[sh][
-                        "sr"
-                    ][first:last, :-1]
+                    chunk[:, self.shank_info[sh]["chns"][:-1]] = srs[first:last, :-1]
             assert np.array_equal(
                 expected, chunk
             ), "data in original file and split files do no match"
@@ -898,9 +893,8 @@ class NP2Reconstructor:
         for iF, fold in enumerate(folders):
             ap_file = next(fold.glob("*ap.*bin"))
             _shank_info = {}
-
             _shank_info["ap_file"] = ap_file
-            sr = spikeglx.Reader(ap_file)
+            sr = spikeglx.Reader(ap_file, sort=False)
             sh = sr.meta.get(f"{self.np_version}_shank")
             _shank_info["sr"] = sr
             _shank_info["chns"] = self._get_chans(sr.meta)
@@ -950,14 +944,9 @@ class NP2Reconstructor:
             chunk = np.zeros((ns, self.nch), dtype=np.int16)
             for ish, sh in enumerate(self.shank_info.keys()):
                 if ish == 0:
-                    chunk[:, self.shank_info[sh]["chns"]] = self.shank_info[sh][
-                        "sr"
-                    ]._raw[first:last, :]
+                    chunk[:, self.shank_info[sh]["chns"]] = self.shank_info[sh]["sr"]._raw[first:last, :]
                 else:
-                    chunk[:, self.shank_info[sh]["chns"][:-1]] = self.shank_info[sh][
-                        "sr"
-                    ]._raw[first:last, :-1]
-
+                    chunk[:, self.shank_info[sh]["chns"][:-1]] = self.shank_info[sh]["sr"]._raw[first:last, :-1]
             chunk.tofile(file_out)
 
         # close the sglx instances once we are done converting
@@ -1005,7 +994,7 @@ class NP2Reconstructor:
         :return:
         """
 
-        sr = spikeglx.Reader(self.save_file)
+        sr = spikeglx.Reader(self.save_file, sort=False)
         cbin_file = sr.compress_file(**kwargs)
         sr.close()
         self.save_file.unlink()

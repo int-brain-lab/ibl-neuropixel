@@ -1,3 +1,6 @@
+# repo specific stuff
+src/tests/fixtures/np2split/*.*bin*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
