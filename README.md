@@ -3,6 +3,7 @@ Collection of tools to handle Neuropixel 1.0 and 2.0 data
 (documentation coming soon...)
 
 ## Installation
+Minimum Python version supported is 3.10
 `pip install ibl-neuropixel`
 
 

@@ -16,6 +16,8 @@ from pathlib import Path
 import tempfile
 import shutil
 
+FIXTURE_PATH = Path(__file__).parents[1].joinpath("fixtures")
+
 
 class TestSyncTimestamps(unittest.TestCase):
 
@@ -567,8 +569,9 @@ class TestSpikeTrains(unittest.TestCase):
 
 class TestRawDataFeatures(unittest.TestCase):
     def setUp(self):
-        self.fixtures_path = Path(__file__).parent.joinpath("fixtures")
+        self.fixtures_path = FIXTURE_PATH
         self.tmpdir = Path(tempfile.gettempdir()) / "rawdata"
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
         self.tmpdir.mkdir()
         self.ns_ap = 38502
         self.nc = 385

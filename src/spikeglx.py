@@ -16,7 +16,7 @@ import neuropixel
 
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger("ibllib")
 
 
 def _get_companion_file(sglx_file, pattern='.meta'):
@@ -64,12 +64,16 @@ class Reader:
         ignore_warnings=False,
         meta_file=None,
         ch_file=None,
+        sort=True
     ):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise), or to a meta-data file
         :param open: when True the file is opened
+        :param sort: (True) by default always return channels sorted by shank, row and column. If set to false,
+        the data will be returned as written on disk, for NP2 versions this may result in interleaved shanks
         """
+        self.geometry = None
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
         meta_file = meta_file or _get_companion_file(sglx_file, '.meta')
@@ -125,6 +129,10 @@ class Reader:
             self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
+            self.geometry, order = geometry_from_meta(self.meta, return_index=True, sort=sort)
+            self.raw_channel_order = np.arange(self.nc)
+            if self.geometry is not None:  # nidq files won't return any geometry here
+                self.raw_channel_order[:order.size] = order
         if open and self.file_bin:
             self.open()
 
@@ -189,14 +197,6 @@ class Reader:
     @property
     def sample2volts(self):
         return self.channel_conversion_sample2v[self.type]
-
-    @property
-    def geometry(self):
-        """
-        Gets the geometry, ie. the full trace header for the recording
-        :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
-        """
-        return _geometry_from_meta(self.meta)
 
     @property
     def shape(self):
@@ -270,7 +270,7 @@ class Reader:
         :return: [nc, ] array of float32 (V)
         """
         if not self.meta:
-            return self.sample2volts * np.NaN
+            return self.sample2volts * np.nan
         maxint = _get_max_int_from_meta(self.meta)
         return self.sample2volts * maxint
 
@@ -283,7 +283,9 @@ class Reader:
         """
         if not self.is_open:
             raise IOError("Reader not open; call `open` before `read`")
-        darray = self._raw[nsel, csel].astype(np.float32, copy=True)
+        if hasattr(self, 'raw_channel_order'):
+            csel = self.raw_channel_order[csel]
+        darray = self._raw[nsel, :].astype(np.float32, copy=True)[..., csel]
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
@@ -376,27 +378,6 @@ class Reader:
             self.file_bin = file_out
         return file_out
 
-    def decompress_to_scratch(self, scratch_dir=None):
-        """
-        Decompresses the file to a temporary directory
-        Copy over the metadata file
-        """
-        if scratch_dir is None:
-            bin_file = Path(self.file_bin).with_suffix('.bin')
-        else:
-            scratch_dir.mkdir(exist_ok=True, parents=True)
-            bin_file = Path(scratch_dir).joinpath(self.file_bin.name).with_suffix('.bin')
-            shutil.copy(self.file_meta_data, bin_file.with_suffix('.meta'))
-        if not bin_file.exists():
-            t0 = time.time()
-            _logger.info('File is compressed, decompressing to a temporary file...')
-            self.decompress_file(
-                keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True
-            )
-            shutil.move(bin_file.with_suffix('.bin_temp'), bin_file)
-            _logger.info(f"Decompression complete: {time.time() - t0:.2f}s")
-        return bin_file
-
     def decompress_file(self, keep_original=True, **kwargs):
         """
         Decompresses a mtscomp file
@@ -418,6 +399,27 @@ class Reader:
             self.file_bin.with_suffix(".ch").unlink()
             self.file_bin = kwargs["out"]
         return kwargs["out"]
+
+    def decompress_to_scratch(self, scratch_dir=None):
+        """
+        Decompresses the file to a temporary directory
+        Copy over the metadata file
+        """
+        if scratch_dir is None:
+            bin_file = Path(self.file_bin).with_suffix('.bin')
+        else:
+            scratch_dir.mkdir(exist_ok=True, parents=True)
+            bin_file = Path(scratch_dir).joinpath(self.file_bin.name).with_suffix('.bin')
+            shutil.copy(self.file_meta_data, bin_file.with_suffix('.meta'))
+        if not bin_file.exists():
+            t0 = time.time()
+            _logger.info('File is compressed, decompressing to a temporary file...')
+            self.decompress_file(
+                keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True
+            )
+            shutil.move(bin_file.with_suffix('.bin_temp'), bin_file)
+            _logger.info(f"Decompression complete: {time.time() - t0:.2f}s")
+        return bin_file
 
     def verify_hash(self):
         """
@@ -620,7 +622,7 @@ def _get_nchannels_from_meta(md):
 
 
 def _get_nshanks_from_meta(md):
-    th = _geometry_from_meta(md)
+    th = geometry_from_meta(md)
     return len(np.unique(th["shank"]))
 
 
@@ -658,19 +660,30 @@ def _split_geometry_into_shanks(th, meta_data):
     return th
 
 
-def _geometry_from_meta(meta_data):
+def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     """
     Gets the geometry, ie. the full trace header for the recording
     :param meta_data: meta_data dictionary as read by ibllib.io.spikeglx.read_meta_data
+    :param return_index: (False): flag to optionally return the sorted indices
+    :param sort: (True) sort the geometry by shank row col
+    :param nc: number of channels if geometry is not in the metadata file
     :return: dictionary with keys 'row', 'col', 'ind', 'shank', 'adc', 'x', 'y', 'sample_shift'
     """
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
-    if cm is None:
+    if cm is None or all(map(lambda x: x is None, cm.values())):
         _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
+        if major_version is None:
+            if return_index:
+                return None, None
+            else:
+                return None
         th = neuropixel.trace_header(version=major_version)
         th["flag"] = th["x"] * 0 + 1.0
-        return th
+        if return_index:
+            return th, np.arange(nc)
+        else:
+            return th
     th = cm.copy()
     # as of 2023-04 spikeglx stores only x, y coordinates of sites in UM and no col / row. Here
     # we convert to col / row for consistency with previous versions
@@ -679,21 +692,30 @@ def _geometry_from_meta(meta_data):
         # there is a 20um offset between the probe tip and the first site in the coordinate conversion
         if major_version == 1:
             th["x"] = 70 - (th["x"])
-
         th["y"] += 20
         th.update(neuropixel.xy2rc(th["x"], th["y"], version=major_version))
     else:
         # the spike sorting channel maps have a flipped version of the channel map
         if major_version == 1:
-            th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
+            th["col"] = - cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
     th["sample_shift"], th["adc"] = neuropixel.adc_shifts(
         version=major_version, nc=th["col"].size
     )
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
-
-    return th
+    if sort:
+        # here we sort the channels by shank, row and -col, this preserves the original NP1
+        # order while still allowing to deal with creative imro tables in NP2
+        sort_keys = np.c_[-th['col'], th['row'], th['shank']]
+        inds = np.lexsort(sort_keys.T)
+        th = {k: v[inds] for k, v in th.items()}
+    else:
+        inds = np.arange(th['col'].size)
+    if return_index:
+        return th, inds
+    else:
+        return th
 
 
 def read_geometry(meta_file):
@@ -702,7 +724,7 @@ def read_geometry(meta_file):
     :param meta_file:
     :return: dictionary with keys 'shank', 'col', 'row', 'flag', 'x', 'y', 'sample_shift', 'adc', 'ind'
     """
-    return _geometry_from_meta(read_meta_data(meta_file))
+    return geometry_from_meta(read_meta_data(meta_file))
 
 
 def _map_channels_from_meta(meta_data):
