@@ -9,6 +9,7 @@ def show_channels_labels(raw, fs, channel_labels, xfeats, similarity_threshold, 
     :return:
     """
     nc, ns = raw.shape
+    raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     ns_plot = np.minimum(ns, 3000)
     vaxis_uv = 250 if fs < 2600 else 75
     fig, ax = plt.subplots(1, 5, figsize=(18, 6), gridspec_kw={'width_ratios': [1, 1, 1, 8, .2]})
