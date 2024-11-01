@@ -10,7 +10,7 @@ import numpy as np
 import mtscomp
 from iblutil.io import hashfile
 from iblutil.util import Bunch
-import one.alf.files
+import one.alf.path
 
 import neuropixel
 
@@ -24,7 +24,7 @@ def _get_companion_file(sglx_file, pattern='.meta'):
     sglx_file = Path(sglx_file)
     companion_file = sglx_file.with_suffix(pattern)
     if not companion_file.exists():
-        search_pattern = f"{one.alf.files.remove_uuid_string(sglx_file).stem}*{pattern}"
+        search_pattern = f"{one.alf.path.remove_uuid_string(sglx_file).stem}*{pattern}"
         companion_file = next(sglx_file.parent.glob(search_pattern), companion_file)
     return companion_file
 
