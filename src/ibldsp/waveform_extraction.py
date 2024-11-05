@@ -43,18 +43,18 @@ def extract_wfs_array(
     Extract waveforms at specified samples and peak channels
     as a stack.
 
-    :param arr: Array of traces. (samples, channels). The last trace of the array should be a
+    :param arr: Array of traces. (nc, ns). The last trace of the array should be a
         row of non-data NaNs. If this has not been added set the `add_nan_trace` flag.
     :param df: df containing "sample" and "peak_channel" columns.
-    :param channel_neighbors: Channel neighbor matrix (384x384)
+    :param channel_neighbors: Channel neighbor matrix (nc, nx)
     :param trough_offset: Number of samples to include before peak.
     (defaults to 42)
     :param spike_length_samples: Total length of wf in samples.
     (defaults to 128)
-    :param add_nan_trace: Whether to add a row of `NaN`s as the last trace.
+    :param add_nan_trace: Whether to add a row of nan's as the last trace.
         (If False, code assumes this has already been added)
     """
-    # This is to do fast index assignment to assign missing channels (out of the probe) to NaN
+    # This is to do fast index assignment to assign missing channels (out of the probe) to nan
     if add_nan_trace:
         newcol = np.empty((1, arr.shape[1]))
         newcol[:] = np.nan
