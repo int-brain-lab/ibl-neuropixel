@@ -23,7 +23,7 @@ def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
     Automatic gain control
     w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
     such as w_agc * gain = w
-    :param x: seismic array (sample last dimension)
+    :param x: seismic array (nc, ns)
     :param wl: window length (secs)
     :param si: sampling interval (secs)
     :param epsilon: whitening (useful mainly for synthetic data)

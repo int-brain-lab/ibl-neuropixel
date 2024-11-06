@@ -280,7 +280,7 @@ def plot_wiggle(wav, fs=1, ax=None, scale=0.3, clip=10, fill_sign=-1, plot_kwarg
         x[x < 0] = np.nan
     x = x[order] + x_shift + 1
     ax.fill(y / fs, x, **fill_kwargs)
-    ax.set(xlim=[0, ns / fs], ylim=[0, nc])
+    ax.set(xlim=[0, ns / fs], ylim=[-1, nc + 1])
     plt.tight_layout()
     return ax
 
@@ -632,7 +632,7 @@ def compute_spike_features(
     # Tip-trough (this also computes the peak_to_trough_ratio)
     df, arr_peak = find_tip_trough(arr_peak, arr_peak_real, df)
     # Peak to trough duration
-    df = peak_to_trough_duration(df, fs=30000)
+    df = peak_to_trough_duration(df, fs=fs)
     # Half peak points
     df = half_peak_point(arr_peak, df)
     # Half peak duration
@@ -797,3 +797,73 @@ def shift_waveform(wf_cluster):
         shift_applied[i_spike] = shift_computed
 
     return wf_out, shift_applied
+
+
+def iradon(w, sr, offset, fmin=0, fmax=None, slowness=None, N=1, mu=.1):
+    """
+    Given a waveform w, computes the plane wave decomposition
+    :param w:
+    :param sr:
+    :param offset:
+    :param slowness:
+    :param fmin: minimum frequency to invert for, defaults to 0
+    :param fmax: maximum frequency to invert for, defaults to Nyquist
+    :param N: ray parameter: 1: linear Tau-P, 2: parabolic Tau-P
+    :param mu:
+    :return:
+    """
+
+    fmax = 1 / (sr * 2) if fmax is None else fmax
+    if slowness is None:
+       ds = 1 / fmax / (np.max(offset) - np.min(offset))
+       dx = np.median(np.abs(np.diff(offset)))
+       smax = 1 / dx / fmax
+       slowness = np.linspace(0, smax, int(np.ceil(smax / ds)))
+
+    # Decompose les donnees sous la forme d'une somme d'ondes de vitesse 1./slowness
+    ns, nc = w.shape
+    nq = slowness.size
+
+    W = np.fft.rfft(w, axis=0)
+    freqs = np.fft.rfftfreq(ns, d=sr)
+    R = np.zeros((W.shape[0], nq), dtype=complex)
+
+    # propagation matrix M[nc, nq] corresponds to time shifts (secs)
+    M = (offset[:, np.newaxis] ** N) * slowness[np.newaxis, :]
+
+    for k in np.where(np.logical_and(fmin <= freqs, freqs <= fmax))[0]:
+        L = np.exp(2j * np.pi * freqs[k] * M)
+        y = np.conj(W[k, :]).T
+        MATRIX = np.conj(L).T @ L
+        tr = np.abs(np.trace(MATRIX))
+        Q = mu * tr * np.eye(nq) / nq
+        x, _, _, _ = np.linalg.lstsq(MATRIX + Q, np.conj(L).T @ y, rcond=None)
+        R[k, :] = np.conj(x).T
+
+    return np.fft.irfft(R, ns, axis=0)
+
+
+def radon(r, sr, offset, slowness, N=1, fmin=0, fmax=None):
+    """
+    Given a plane-wave decomposition, returns
+    :param r:
+    :param sr:
+    :param offset:
+    :param slowness:
+    :param N:
+    :param fmin:
+    :param fmax:
+    :return:
+    """
+    fmax = 1 / (sr * 2) if fmax is None else fmax
+    ns, nq = r.shape
+    nc = offset.size
+    R = np.fft.rfft(r, axis=0)
+    W = np.zeros((r.shape[0], nc), dtype=complex)
+    freqs = np.fft.rfftfreq(ns, d=sr)
+    for k in np.where(np.logical_and(fmin <= freqs, freqs <= fmax))[0]:
+        propagation = (offset[:, np.newaxis] ** N) * slowness[np.newaxis, :]  # nc * nq
+        L = np.exp(2j * np.pi * freqs[k] * propagation)  # nc * nq
+        W[k, :] = np.conj(L @ np.conj(R[k, :]).T).T
+
+    return np.fft.irfft(W, ns, axis=0)
