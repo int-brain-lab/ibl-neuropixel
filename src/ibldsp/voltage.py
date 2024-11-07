@@ -871,7 +871,7 @@ def current_source_density(lfp, h, method="diff", sigma=1 / 3):
     :param sigma: conductivity, defaults to 1/3 S.m-1
     :return:
     """
-    csd = np.zeros(lfp.shape, dtype=np.float64) * np.NAN
+    csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
     xy = h["x"] + 1j * h["y"]
     for col in np.unique(h["col"]):
         ind = np.where(h["col"] == col)[0]
