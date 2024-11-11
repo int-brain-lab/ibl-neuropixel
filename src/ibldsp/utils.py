@@ -102,7 +102,7 @@ def parabolic_max(x):
             )
         )
     poly = np.matmul(0.5 * np.array([[1, -2, 1], [-1, 0, 1], [0, 2, 0]]), v010)
-    ipeak = -poly[1] / (poly[0] + np.double(poly[0] == 0)) / 2
+    ipeak = -poly[1] / (poly[0] + np.double(np.sum(poly[0] == 0))) / 2
     maxi = poly[2] + ipeak * poly[1] + ipeak**2.0 * poly[0]
     ipeak += imax
     # handle edges
