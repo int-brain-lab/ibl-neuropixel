@@ -862,11 +862,12 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
     return stack, hstack
 
 
-def current_source_density(lfp, h, method="diff", sigma=1 / 3):
+def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
     """
     Compute the current source density (CSD) of a given LFP signal recorded on neuropixel 1 or 2
     :param data: LFP signal (n_channels, n_samples)
     :param h: trace header dictionary
+    :param n: the n derivative
     :param method: diff (straight double difference) or kernel CSD (needs the KCSD python package)
     :param sigma: conductivity, defaults to 1/3 S.m-1
     :return:
@@ -879,8 +880,9 @@ def current_source_density(lfp, h, method="diff", sigma=1 / 3):
         itr = ind[isort]
         dx = np.median(np.diff(np.abs(xy[itr])))
         if method == "diff":
-            csd[itr[1:-1], :] = (
-                np.diff(lfp[itr, :].astype(np.float64), n=2, axis=0) / dx**2 * sigma
+            sl = slice(1, -1) if n == 2 else slice(0, -1)
+            csd[itr[sl], :] = (
+                np.diff(lfp[itr, :].astype(np.float64), n=n, axis=0) / dx**n * sigma
             )
             csd[itr[0], :] = csd[itr[1], :]
             csd[itr[-1], :] = csd[itr[-2], :]
@@ -904,7 +906,6 @@ def current_source_density(lfp, h, method="diff", sigma=1 / 3):
                 src_type="gauss",
             ).values("CSD")
     return csd
-
 
 def _svd_denoise(datr, rank):
     """
