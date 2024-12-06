@@ -369,7 +369,7 @@ def destripe(
     if neuropixel_version is not None:
         x = fourier.fshift(x, h["sample_shift"], axis=1)
     # apply spatial filter only on channels that are inside of the brain
-    if channel_labels is not None:
+    if (channel_labels is not None) and (channel_labels is not False):
         x = interpolate_bad_channels(x, channel_labels, h["x"], h["y"])
         inside_brain = np.where(channel_labels != 3)[0]
         x[inside_brain, :] = spatial_fcn(x[inside_brain, :])  # apply the k-filter

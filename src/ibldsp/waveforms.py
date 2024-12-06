@@ -815,10 +815,10 @@ def iradon(w, sr, offset, fmin=0, fmax=None, slowness=None, N=1, mu=.1):
 
     fmax = 1 / (sr * 2) if fmax is None else fmax
     if slowness is None:
-       ds = 1 / fmax / (np.max(offset) - np.min(offset))
-       dx = np.median(np.abs(np.diff(offset)))
-       smax = 1 / dx / fmax
-       slowness = np.linspace(0, smax, int(np.ceil(smax / ds)))
+        ds = 1 / fmax / (np.max(offset) - np.min(offset))
+        dx = np.median(np.abs(np.diff(offset)))
+        smax = 1 / dx / fmax
+        slowness = np.linspace(0, smax, int(np.ceil(smax / ds)))
 
     # Decompose les donnees sous la forme d'une somme d'ondes de vitesse 1./slowness
     ns, nc = w.shape

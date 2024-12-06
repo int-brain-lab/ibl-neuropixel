@@ -123,6 +123,7 @@ class Reader:
             self.channel_conversion_sample2v = {"samples": np.ones(nc) * s2v}
             if self._nsync > 0:
                 self.channel_conversion_sample2v["samples"][-nsync:] = 1
+            self.geometry = neuropixel.trace_header(version=1)
         else:
             # normal case we continue reading and interpreting the metadata file
             self.file_meta_data = meta_file
