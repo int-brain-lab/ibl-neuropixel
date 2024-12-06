@@ -78,9 +78,6 @@ class TestParabolicMax(unittest.TestCase):
         ]
     )
 
-    def test_error_cases(self):
-        pass
-
     def test_2d(self):
         ipeak_, maxi_ = utils.parabolic_max(self.x)
         self.assertTrue(np.all(np.isclose(self.maxi, maxi_, equal_nan=True)))

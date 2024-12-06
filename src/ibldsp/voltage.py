@@ -907,6 +907,7 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
             ).values("CSD")
     return csd
 
+
 def _svd_denoise(datr, rank):
     """
     SVD Encoder: does the decomposition, derank the mtrix and reproject in the feature's space

@@ -1,20 +1,28 @@
-# 1.5
+# Changelog
 
-## 1.5.0 2024-10-24
+## [1.6.0] - 2024-12-06
+
+### added
+- single derivative option for CSD for RIGOR metrics
+- radon forward and inverse transforms
+- support headerless binary files (open ephys)
+- 
+### fixed
+- cadzow iterations
+- numpy 2.0 support
+- destripe with channels=False
+
+## [1.5.0] - 2024-10-24
 - Automatic sorting per shank / row / col
 - Minimum Python version is 3.10
 
-# 1.4
-
-## 1.4.0 2024-10-05
+## [1.4.0] - 2024-10-05
 - Waveform extraction:
   - Optimization of the waveform extractor, outputs flattened waveforms
   - Refactoring ot the waveform loader with back compability
 - Bad channel detector:
   - The bad channel detector has a plot option to visualize the bad channels and thresholds
   - The default low-cut filters are set to 300Hz for AP band and 2 Hz for LF band
-
-# 1.3
 
 ## 1.3.2 2024-09-18
 
@@ -29,15 +37,11 @@
 - Add support for NPultra high-density probes
 - NumPy and SciPy version floors
 
-# 1.2
-
 ## 1.2.1 2024-08-20
 - bugfix waveform extraction: fix logic when channel labels is not None
 
 ## 1.2.0 2024-08-01
 - Adds `ibldsp.waveform_extraction.WaveformsLoader`, an interface for waveforms extracted by `extract_wfs_cbin`.
-
-# 1.1.0
 
 ## 1.1.3 2024-07-11
 - Add features and tests for `extract_wfs_cbin`, including various preprocessing options.
@@ -48,7 +52,6 @@
 ## 1.1.1 2024-06-07
 -  Add support for NP2.0 prototype probe with probetype 1030
 
-# 1.0.0
 ## 1.0.1 2024-05-29: support for waveform extraction on non-standard electrode layouts
   - bugfix waveform extraction: the probe channel layout is inferred from the spikeglx metadata by default
   - bugfix waveform extraction: the channel neighnourhood fill value is the last channel index + 1 by default instead of 384
@@ -58,7 +61,6 @@
   - `ibldsp.voltage.saturation()` is a function that returns a boolean array indicating which samples are saturated, and a mute function
   - `ibldsp.voltage.decompress_destripe_cbin` saves a `_iblqc_ephysSaturation.samples.npy` and applies the mute function post-destriping
 
-# 0.10.0
 ## 0.10.3 2024-04-18
 -  Patch fixing memory leaks for `waveform_extraction` module.
 ## 0.10.2 2024-04-10
@@ -69,20 +71,16 @@
 ## 0.10.0 2024-03-14
 -  add support for online spikeglx reader
 
-# 0.9.0
 ## 0.9.2 2024-02-08
 -   `neurodsp` is now `ibldsp`. Drop-in replacement of the package name is all that is required to update. The `neurodsp` name will disappear on 01-Sep-2024; until then both names will work.
 ## 0.9.0 2024-01-17
 -   `neurodsp.utils.sync_timestamps`: uses FFT based correlation to speed up large arrays alignments
 -   `waveforms`: new wiggle plot for multi-trace waveforms
 
-# 0.8.0
 ## 0.8.1 2023-09-21
 - revert to reading channel info from private methods in shank splitting NP2.4 code to get the original channel layout from shank metadata file
 ## 0.8.0 2023-09-01
 - add compatibility with spikeglx metadata version 2023-04 to get probe geometry
-
-# 0.7.0
 
 ## 0.7.0 2023-06-29
 - Add function `spike_venn3` in new module `neurodsp.spiketrains`
@@ -97,7 +95,6 @@
 ## 0.6.0 2023-05-15
 - Add waveforms utilities for spike features computations
 
-# 0.5.0
 ## 0.5.3 2023-04-24
 - Fix for cases where channel map keys are not present
 
@@ -112,28 +109,23 @@
 - KCSD option for LFP current source density
 - Cadzow for NP1: expose spatial parameters for LFP
 
-# 0.4.0
 ## 0.4.1 2022-11-29
 - CAT GT command in meta file
 
 ## 0.4.0 2022-10-28
 - current source density simple double diff with denoising from raw LFP
-
-# 0.3.0
+- 
 ## 0.3.2 2022-10-27
 - spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
 - agc: gain refers to the inverse of applied gains for agc - done to handle dead channels in destriping
+- 
 ## 0.3.1
 - neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
-
-
-## 0.3.0
 - neuropixel: add functions to reconstruct original files from split NP2.4 files
 
 ## minor changes
 - support for returning number of shanks from metadata
 
-# 0.2.0
 ## 0.2.2
 - BUGFIX change getattr of `neuropixel` to allow for stared imports
 
@@ -147,3 +139,4 @@
 ## minor changes
 -   deprecated SITES_COORDINATES that would default on Neuropixel 1.0 early generations (3A probes with 374 channels)
 -   spikeglx compress: pass dtype to mtscomp
+- 
