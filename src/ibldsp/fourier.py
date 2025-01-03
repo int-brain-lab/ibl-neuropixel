@@ -1,6 +1,7 @@
 """
 Low-level functions to work in frequency domain for n-dim arrays
 """
+
 from math import pi
 
 import numpy as np

@@ -28,9 +28,9 @@ jobs:
 
       - name: flake8
         run: |
-          pip install flake8>=7 --quiet
+          pip install ruff --quiet
           cd ibl-neuropixel
-          python -m flake8
+          ruff check
 
       - name: iblrig and iblpybpod requirements
         shell: bash -l {0}

@@ -68,7 +68,7 @@ def rolling_window(x, window_len=11, window="blackman"):
 'bartlett', 'blackman'"
         )
 
-    s = np.r_[x[window_len - 1: 0: -1], x, x[-1:-window_len:-1]]
+    s = np.r_[x[window_len - 1 : 0 : -1], x, x[-1:-window_len:-1]]
     # print(len(s))
     if window == "flat":  # moving average
         w = np.ones(window_len, "d")
@@ -76,7 +76,7 @@ def rolling_window(x, window_len=11, window="blackman"):
         w = eval("np." + window + "(window_len)")
 
     y = np.convolve(w / w.sum(), s, mode="valid")
-    return y[round((window_len / 2 - 1)): round(-(window_len / 2))]
+    return y[round((window_len / 2 - 1)) : round(-(window_len / 2))]
 
 
 def non_uniform_savgol(x, y, window, polynom):

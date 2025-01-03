@@ -11,13 +11,15 @@ from ibldsp import voltage, utils
 from iblutil.io import params
 
 _logger = logging.getLogger(__name__)
-pars = params.read('ibl_ci', {'data_root': './'})
+pars = params.read("ibl_ci", {"data_root": "./"})
 DATA_PATH = Path(pars.data_root)  # "/datadisk/Data/IntegrationTests"
 
 
 class TestEphysSpikeSortingPreProc(unittest.TestCase):
     def test_pre_proc(self):
-        cbin_file = DATA_PATH.joinpath("ephys", "ephys_spike_sorting", "adc_test.ap.cbin")
+        cbin_file = DATA_PATH.joinpath(
+            "ephys", "ephys_spike_sorting", "adc_test.ap.cbin"
+        )
         sr = spikeglx.Reader(cbin_file, open=True)
         bin_file = cbin_file.with_suffix(".bin")
 
@@ -54,7 +56,12 @@ class TestEphysSpikeSortingPreProc(unittest.TestCase):
 class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
     def setUp(self) -> None:
         file_path = DATA_PATH.joinpath(
-            "ephys", "ephys_np2", "raw_ephys_data", "probe00", "_spikeglx_ephysData_g0_t0.imec0.ap.bin")
+            "ephys",
+            "ephys_np2",
+            "raw_ephys_data",
+            "probe00",
+            "_spikeglx_ephysData_g0_t0.imec0.ap.bin",
+        )
         self.file_path = file_path.parent.parent.joinpath(
             "probe00_temp", file_path.name
         )
@@ -78,10 +85,18 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
 
     def _assert_qc(self):
         sr = spikeglx.Reader(self.file_path)
-        saturated = np.load(self.file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy"))
+        saturated = np.load(
+            self.file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+        )
         self.assertEqual(sr.ns, saturated.size)
-        self.assertTrue(self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.rms.npy").exists())
-        self.assertTrue(self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy").exists())
+        self.assertTrue(
+            self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.rms.npy").exists()
+        )
+        self.assertTrue(
+            self.file_path.parent.joinpath(
+                "_iblqc_ephysTimeRmsAP.timestamps.npy"
+            ).exists()
+        )
         for fil in self.file_path.parent.glob("_iblqc_*"):
             fil.unlink()
 
@@ -141,7 +156,7 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
         self.sglx_instances.append(sr_four_append)
         assert sr_four_append.ns == 2 * sr_four.ns
         assert np.array_equal(
-            sr_four_append[sr_four.ns:, :], sr_four_append[: sr_four.ns, :]
+            sr_four_append[sr_four.ns :, :], sr_four_append[: sr_four.ns, :]
         )
         assert np.array_equal(sr_four_append[: sr_four.ns, :], sr_four[:, :])
-        assert np.array_equal(sr_four_append[sr_four.ns:, :], sr_four[:, :])
+        assert np.array_equal(sr_four_append[sr_four.ns :, :], sr_four[:, :])

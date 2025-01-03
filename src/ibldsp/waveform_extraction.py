@@ -22,10 +22,14 @@ def aggregate_by_clusters(df_wavs):
     :param df_wavs:
     :return:
     """
-    df_clusters = df_wavs.loc[df_wavs['sample'] >= 0, :].groupby('cluster').aggregate(
-        count=pd.NamedAgg(column="cluster", aggfunc="count"),
-        first_index=pd.NamedAgg(column="waveform_index", aggfunc="min"),
-        last_index=pd.NamedAgg(column="waveform_index", aggfunc="max"),
+    df_clusters = (
+        df_wavs.loc[df_wavs["sample"] >= 0, :]
+        .groupby("cluster")
+        .aggregate(
+            count=pd.NamedAgg(column="cluster", aggfunc="count"),
+            first_index=pd.NamedAgg(column="waveform_index", aggfunc="min"),
+            last_index=pd.NamedAgg(column="waveform_index", aggfunc="max"),
+        )
     )
     return df_clusters
 
@@ -130,7 +134,7 @@ def _make_wfs_table(
     max_wf=256,
     trough_offset=42,
     spike_length_samples=128,
-    seed=None
+    seed=None,
 ):
     """
     Given a recording `sr` and spike detections, pick up to `max_wf`
@@ -164,7 +168,7 @@ def _make_wfs_table(
     # all wf indices in order
     wf_idx = np.sort(unit_wf_idx.flatten())
     # remove initial zeros
-    wf_idx = wf_idx[np.nonzero(wf_idx)[0][0]:]
+    wf_idx = wf_idx[np.nonzero(wf_idx)[0][0] :]
 
     # get sample times, clusters, channels
     wf_flat = pd.DataFrame(
@@ -179,9 +183,12 @@ def _make_wfs_table(
 
     # we pre-compute the final absolute indices of each waveform
     unique_clusters, cluster_index, cluster_counts = np.unique(
-        wf_flat["cluster"], return_inverse=True, return_counts=True)
-    index_order_clusters = np.argsort(cluster_index, kind='stable')
-    wf_flat.loc[index_order_clusters, 'waveform_index'] = np.arange(wf_flat.shape[0])  # 3d "flat" version
+        wf_flat["cluster"], return_inverse=True, return_counts=True
+    )
+    index_order_clusters = np.argsort(cluster_index, kind="stable")
+    wf_flat.loc[index_order_clusters, "waveform_index"] = np.arange(
+        wf_flat.shape[0]
+    )  # 3d "flat" version
     return wf_flat, unit_ids
 
 
@@ -221,7 +228,7 @@ def write_wfs_chunk(
     df = pd.DataFrame({"sample": sample, "peak_channel": peak_channel})
 
     snip = my_sr[
-        s0 - offset:s1 + spike_length_samples - trough_offset, :-my_sr.nsync
+        s0 - offset : s1 + spike_length_samples - trough_offset, : -my_sr.nsync
     ].T
 
     if "butterworth" in preprocess_steps:
@@ -253,8 +260,10 @@ def write_wfs_chunk(
     if "kfilt" in preprocess_steps:
         kfilt_func = lambda dat: kfilt(dat, **k_kwargs)  # noqa: E731
         snip = kfilt_func(snip)
-    iw = wf_flat['waveform_index'].values
-    wfs_mmap[iw, :, :] = extract_wfs_array(snip, df, channel_neighbors, add_nan_trace=True)[0]
+    iw = wf_flat["waveform_index"].values
+    wfs_mmap[iw, :, :] = extract_wfs_array(
+        snip, df, channel_neighbors, add_nan_trace=True
+    )[0]
 
 
 def extract_wfs_cbin(
@@ -325,17 +334,13 @@ def extract_wfs_cbin(
         By default a butterworth 300Hz high-pass and the rephasing of the channels is perfomed
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
-    preprocess_steps = ['butterworth', 'phase_shift'] if preprocess_steps is None else preprocess_steps
+    preprocess_steps = (
+        ["butterworth", "phase_shift"] if preprocess_steps is None else preprocess_steps
+    )
     reader_kwargs = {} if reader_kwargs is None else reader_kwargs
 
     assert set(preprocess_steps).issubset(
-        {
-            "phase_shift",
-            "bad_channel_interpolation",
-            "butterworth",
-            "car",
-            "kfilt"
-        }
+        {"phase_shift", "bad_channel_interpolation", "butterworth", "car", "kfilt"}
     )
 
     if "car" in preprocess_steps and "kfilt" in preprocess_steps:
@@ -429,17 +434,23 @@ def extract_wfs_cbin(
     df_clusters = aggregate_by_clusters(wf_flat)
 
     # we want to store the index of the waveform within each cluster to facilitate loading later
-    wf_flat['index_within_clusters'] = np.ones(wf_flat.shape[0])
-    inewc = np.diff(wf_flat['cluster'].values, prepend=wf_flat['cluster'].values[0]) != 0
-    wf_flat.loc[inewc, 'index_within_clusters'] = - df_clusters['count'].values[:-1] + 1
-    wf_flat['index_within_clusters'] = np.cumsum(wf_flat['index_within_clusters'].values).astype(int) - 1
+    wf_flat["index_within_clusters"] = np.ones(wf_flat.shape[0])
+    inewc = (
+        np.diff(wf_flat["cluster"].values, prepend=wf_flat["cluster"].values[0]) != 0
+    )
+    wf_flat.loc[inewc, "index_within_clusters"] = -df_clusters["count"].values[:-1] + 1
+    wf_flat["index_within_clusters"] = (
+        np.cumsum(wf_flat["index_within_clusters"].values).astype(int) - 1
+    )
 
     # store medians across waveforms
     wfs_templates = np.full((nu, nc, spike_length_samples), np.nan, dtype=np.float32)
     logger.info("Writing to output files")
     wfs = open_memmap(traces_fn)
     for i, rec in enumerate(df_clusters.itertuples()):
-        wfs_templates[i] = np.nanmedian(wfs[rec.first_index:rec.last_index + 1], axis=0)
+        wfs_templates[i] = np.nanmedian(
+            wfs[rec.first_index : rec.last_index + 1], axis=0
+        )
     # save templates
     np.save(templates_fn, wfs_templates)
     # save the waveform table
@@ -449,13 +460,16 @@ def extract_wfs_cbin(
     # save channel map for each waveform
     # these values are now reordered so that they match the pqt
     # and the traces file
-    peak_channel = np.nan_to_num(wf_flat["peak_channel"].to_numpy(), nan=-1).astype(np.int16)
+    peak_channel = np.nan_to_num(wf_flat["peak_channel"].to_numpy(), nan=-1).astype(
+        np.int16
+    )
     chan_map = channel_neighbors[peak_channel.astype(int)]
     np.savez(channels_fn, channels=chan_map)
     # clean up the cached bin file
     if file_to_unlink is not None:
         file_to_unlink.with_suffix(".meta").unlink()
         file_to_unlink.unlink()
+    return sorted([templates_fn, table_fn, channels_fn, traces_fn])
 
 
 class WaveformsLoader:
@@ -494,7 +508,6 @@ class WaveformsLoader:
         trough_offset=42,
         **kwargs,
     ):
-
         self.data_dir = Path(data_dir)
         self.trough_offset = trough_offset
         self.traces_fp = self.data_dir.joinpath("waveforms.traces.npy")
@@ -508,13 +521,21 @@ class WaveformsLoader:
         assert self.channels_fp.exists(), "waveforms.channels.npz file missing!"
 
         self.traces = np.lib.format.open_memmap(self.traces_fp)
-        self.df_wav = pd.read_parquet(self.table_fp).reset_index(drop=True).drop(columns=["index"])
+        self.df_wav = (
+            pd.read_parquet(self.table_fp)
+            .reset_index(drop=True)
+            .drop(columns=["index"])
+        )
         if len(self.traces.shape) == 4:
             self.data_version = 1
-            self.df_wav["sample"] = self.df_wav["sample"].astype('Int64')
-            self.df_wav["peak_channel"] = self.df_wav["peak_channel"].astype('Int64')
-            self.df_wav['waveform_index'] = np.arange(self.df_wav.shape[0], dtype=np.int64)
-            self.df_wav['index_within_cluster'] = np.tile(np.arange(self.traces.shape[1]), self.traces.shape[0])
+            self.df_wav["sample"] = self.df_wav["sample"].astype("Int64")
+            self.df_wav["peak_channel"] = self.df_wav["peak_channel"].astype("Int64")
+            self.df_wav["waveform_index"] = np.arange(
+                self.df_wav.shape[0], dtype=np.int64
+            )
+            self.df_wav["index_within_cluster"] = np.tile(
+                np.arange(self.traces.shape[1]), self.traces.shape[0]
+            )
             self.total_wfs = sum(~self.df_wav["peak_channel"].isna())
         else:
             self.data_version = 2
@@ -534,7 +555,7 @@ class WaveformsLoader:
 
     @property
     def max_wf(self):
-        return self.df_clusters['count'].max()
+        return self.df_clusters["count"].max()
 
     @property
     def wfs_dtype(self):
@@ -556,7 +577,9 @@ class WaveformsLoader:
     def nw(self):
         return self.df_wav.shape[0]
 
-    def load_waveforms(self, labels=None, indices=None, return_info=True, flatten=False):
+    def load_waveforms(
+        self, labels=None, indices=None, return_info=True, flatten=False
+    ):
         """
         Returns a specified subset of waveforms from the dataset.
 
@@ -568,13 +591,18 @@ class WaveformsLoader:
             array of shape (num_labels, num_indices_per_label, num_channels, spike_length_samples)
         """
         labels = np.array(self.df_clusters.index if labels is None else labels)
-        iw, _ = ismember(self.df_wav['cluster'], labels)
+        iw, _ = ismember(self.df_wav["cluster"], labels)
         if self.data_version == 1:
             indices = np.array(np.arange(self.max_wf) if indices is None else indices)
-            indices = np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
-            assert indices.shape[0] == labels.size, \
-                "If indices is a 2D-array, the second dimension must match the number of clusters."
-            _, iu, _ = np.intersect1d(self.df_clusters.index, labels, return_indices=True)
+            indices = (
+                np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
+            )
+            assert (
+                indices.shape[0] == labels.size
+            ), "If indices is a 2D-array, the second dimension must match the number of clusters."
+            _, iu, _ = np.intersect1d(
+                self.df_clusters.index, labels, return_indices=True
+            )
             assert iu.size == labels.size, "Not all labels found in dataset."
             wfs = self.traces[iu[:, np.newaxis], indices].astype(np.float32)
             if flatten:
@@ -582,7 +610,11 @@ class WaveformsLoader:
         elif self.data_version == 2:
             if indices is not None:
                 iw = np.where(iw)[0]
-                iw = iw[self.df_wav.loc[iw, 'index_within_clusters'].isin(np.atleast_1d(np.array(indices)))]
+                iw = iw[
+                    self.df_wav.loc[iw, "index_within_clusters"].isin(
+                        np.atleast_1d(np.array(indices))
+                    )
+                ]
             wfs = self.traces[iw].astype(np.float32)
         info = self.df_wav.loc[iw, :].copy()
         channels = self.channels[iw].astype(int)
@@ -601,7 +633,7 @@ class WaveformsLoader:
         num_random_waveforms=None,
         return_info=True,
         seed=None,
-        flatten=False
+        flatten=False,
     ):
         """
         Returns a random subset of waveforms from the dataset.
@@ -625,7 +657,9 @@ class WaveformsLoader:
             else:
                 labels = rg.choice(self.labels, num_random_labels, replace=False)
         else:
-            assert num_random_labels is None, "labels and num_random_labels cannot both be set"
+            assert (
+                num_random_labels is None
+            ), "labels and num_random_labels cannot both be set"
 
         labels = np.array(labels)
         label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
@@ -645,20 +679,18 @@ class WaveformsLoader:
             num_valid_waveforms = len(valid)
             if num_valid_waveforms >= num_random_waveforms:
                 indices[u, :] = rg.choice(
-                    valid.wf_number.to_numpy(),
-                    num_random_waveforms,
-                    replace=False
+                    valid.wf_number.to_numpy(), num_random_waveforms, replace=False
                 )
                 continue
 
             num_nan_waveforms = num_random_waveforms - num_valid_waveforms
             indices[u, :num_valid_waveforms] = rg.choice(
-                valid.wf_number.to_numpy(),
-                num_valid_waveforms,
-                replace=False
+                valid.wf_number.to_numpy(), num_valid_waveforms, replace=False
             )
 
-            indices[u, num_valid_waveforms:] = np.arange(num_valid_waveforms, num_valid_waveforms + num_nan_waveforms)
+            indices[u, num_valid_waveforms:] = np.arange(
+                num_valid_waveforms, num_valid_waveforms + num_nan_waveforms
+            )
 
         wfs = self.traces[label_idx[:, None], indices].astype(np.float32)
 
@@ -667,9 +699,9 @@ class WaveformsLoader:
 
         info = self.table[self.table["cluster"].isin(labels)].copy()
         dfs = []
-        for i, l in enumerate(labels):
+        for i, lab in enumerate(labels):
             _idx = indices[i]
-            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == l)])
+            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == lab)])
         info = pd.concat(dfs).reset_index(drop=True)
 
         channels = self.channels[info["linear_index"].to_numpy()].astype(int)

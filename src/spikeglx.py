@@ -19,7 +19,7 @@ DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger("ibllib")
 
 
-def _get_companion_file(sglx_file, pattern='.meta'):
+def _get_companion_file(sglx_file, pattern=".meta"):
     # on SDSC there is a possibility that there is an UUID string in the filename
     sglx_file = Path(sglx_file)
     companion_file = sglx_file.with_suffix(pattern)
@@ -64,7 +64,7 @@ class Reader:
         ignore_warnings=False,
         meta_file=None,
         ch_file=None,
-        sort=True
+        sort=True,
     ):
         """
         An interface for reading data from a SpikeGLX file
@@ -76,7 +76,7 @@ class Reader:
         self.geometry = None
         self.ignore_warnings = ignore_warnings
         sglx_file = Path(sglx_file)
-        meta_file = meta_file or _get_companion_file(sglx_file, '.meta')
+        meta_file = meta_file or _get_companion_file(sglx_file, ".meta")
         # only used if MTSCOMP compressed
         self.ch_file = ch_file
 
@@ -130,10 +130,12 @@ class Reader:
             self.meta = read_meta_data(meta_file)
             self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
             self._raw = None
-            self.geometry, order = geometry_from_meta(self.meta, return_index=True, sort=sort)
+            self.geometry, order = geometry_from_meta(
+                self.meta, return_index=True, sort=sort
+            )
             self.raw_channel_order = np.arange(self.nc)
             if self.geometry is not None:  # nidq files won't return any geometry here
-                self.raw_channel_order[:order.size] = order
+                self.raw_channel_order[: order.size] = order
         if open and self.file_bin:
             self.open()
 
@@ -142,7 +144,7 @@ class Reader:
         sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
-            ch_file = self.ch_file or _get_companion_file(sglx_file, '.ch')
+            ch_file = self.ch_file or _get_companion_file(sglx_file, ".ch")
             self._raw.open(self.file_bin, ch_file)
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
@@ -284,7 +286,7 @@ class Reader:
         """
         if not self.is_open:
             raise IOError("Reader not open; call `open` before `read`")
-        if hasattr(self, 'raw_channel_order'):
+        if hasattr(self, "raw_channel_order"):
             csel = self.raw_channel_order[csel]
         darray = self._raw[nsel, :].astype(np.float32, copy=True)[..., csel]
         darray *= self.channel_conversion_sample2v[self.type][csel]
@@ -407,18 +409,23 @@ class Reader:
         Copy over the metadata file
         """
         if scratch_dir is None:
-            bin_file = Path(self.file_bin).with_suffix('.bin')
+            bin_file = Path(self.file_bin).with_suffix(".bin")
         else:
             scratch_dir.mkdir(exist_ok=True, parents=True)
-            bin_file = Path(scratch_dir).joinpath(self.file_bin.name).with_suffix('.bin')
-            shutil.copy(self.file_meta_data, bin_file.with_suffix('.meta'))
+            bin_file = (
+                Path(scratch_dir).joinpath(self.file_bin.name).with_suffix(".bin")
+            )
+            shutil.copy(self.file_meta_data, bin_file.with_suffix(".meta"))
         if not bin_file.exists():
             t0 = time.time()
-            _logger.info('File is compressed, decompressing to a temporary file...')
+            _logger.info("File is compressed, decompressing to a temporary file...")
             self.decompress_file(
-                keep_original=True, out=bin_file.with_suffix('.bin_temp'), check_after_decompress=False, overwrite=True
+                keep_original=True,
+                out=bin_file.with_suffix(".bin_temp"),
+                check_after_decompress=False,
+                overwrite=True,
             )
-            shutil.move(bin_file.with_suffix('.bin_temp'), bin_file)
+            shutil.move(bin_file.with_suffix(".bin_temp"), bin_file)
             _logger.info(f"Decompression complete: {time.time() - t0:.2f}s")
         return bin_file
 
@@ -544,7 +551,14 @@ def _get_serial_number_from_meta(md):
 
 
 def _get_neuropixel_major_version_from_meta(md):
-    MAJOR_VERSION = {"3A": 1, "3B2": 1, "3B1": 1, "NP2.1": 2, "NP2.4": 2.4, "NPultra": "NPultra"}
+    MAJOR_VERSION = {
+        "3A": 1,
+        "3B2": 1,
+        "3B1": 1,
+        "NP2.1": 2,
+        "NP2.4": 2.4,
+        "NPultra": "NPultra",
+    }
     version = _get_neuropixel_version_from_meta(md)
     if version is not None:
         return MAJOR_VERSION[version]
@@ -673,7 +687,9 @@ def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     cm = _map_channels_from_meta(meta_data)
     major_version = _get_neuropixel_major_version_from_meta(meta_data)
     if cm is None or all(map(lambda x: x is None, cm.values())):
-        _logger.warning("Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults")
+        _logger.warning(
+            "Meta data doesn't have geometry (snsShankMap/snsGeomMap field), returning defaults"
+        )
         if major_version is None:
             if return_index:
                 return None, None
@@ -698,7 +714,7 @@ def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     else:
         # the spike sorting channel maps have a flipped version of the channel map
         if major_version == 1:
-            th["col"] = - cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
+            th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
     th["sample_shift"], th["adc"] = neuropixel.adc_shifts(
         version=major_version, nc=th["col"].size
@@ -708,11 +724,11 @@ def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     if sort:
         # here we sort the channels by shank, row and -col, this preserves the original NP1
         # order while still allowing to deal with creative imro tables in NP2
-        sort_keys = np.c_[-th['col'], th['row'], th['shank']]
+        sort_keys = np.c_[-th["col"], th["row"], th["shank"]]
         inds = np.lexsort(sort_keys.T)
         th = {k: v[inds] for k, v in th.items()}
     else:
-        inds = np.arange(th['col'].size)
+        inds = np.arange(th["col"].size)
     if return_index:
         return th, inds
     else:
@@ -841,7 +857,8 @@ def _conversion_sample2v_from_meta(meta_data):
             np.ones(
                 int(
                     np.sum(meta_data["snsMnMaXaDw"][3]),
-                )),
+                )
+            ),
         ]  # no unit for digital sync
         out = {"nidq": gain}
 

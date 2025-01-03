@@ -321,11 +321,19 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                         continue
                     np.testing.assert_array_equal(hnew[k], href[k])
 
-        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sample3B_version202304.ap.meta"))
-        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta"))
+        g_new = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3B_version202304.ap.meta")
+        )
+        g_old = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sample3A_g0_t0.imec.ap.meta")
+        )
         assert_geom(g_new, g_old)
-        g_new = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_appVersion20230905.ap.meta"))
-        g_old = spikeglx.read_geometry(Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_g0_t0.imec.ap.meta"))
+        g_new = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_appVersion20230905.ap.meta")
+        )
+        g_old = spikeglx.read_geometry(
+            Path(TEST_PATH).joinpath("sampleNP2.4_4shanks_g0_t0.imec.ap.meta")
+        )
         assert_geom(g_new, g_old)
         # import matplotlib.pyplot as plt
         # plt.plot(g_old['x'] + g_old['shank'] * 200, g_new['y'], 'o')
@@ -437,7 +445,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
 
     def assert_read_glx(self, tglx):
         with spikeglx.Reader(tglx["bin_file"]) as sr:
-            dexpected = sr.channel_conversion_sample2v[sr.type] * tglx["D"][:, sr.raw_channel_order]
+            dexpected = (
+                sr.channel_conversion_sample2v[sr.type]
+                * tglx["D"][:, sr.raw_channel_order]
+            )
             d, sync = sr.read_samples(0, tglx["ns"])
             # could be rounding errors with non-integer sampling rates
             self.assertTrue(sr.nsync == 1)
@@ -448,7 +459,10 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             self.assertTrue(np.all(np.isclose(dexpected, d)))
             # test the sync reading, one front per channel
             np.testing.assert_array_equal(
-                sr.range_volts, sr.channel_conversion_sample2v[sr.type] * spikeglx._get_max_int_from_meta(sr.meta))
+                sr.range_volts,
+                sr.channel_conversion_sample2v[sr.type]
+                * spikeglx._get_max_int_from_meta(sr.meta),
+            )
             self.assertTrue(np.sum(sync) == tglx["sync_depth"])
             for m in np.arange(tglx["sync_depth"]):
                 self.assertTrue(sync[m + 1, m] == 1)
@@ -498,7 +512,9 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                     sr.major_version, nshank=np.unique(th["shank"]).size
                 )
                 for k in h_expected.keys():
-                    np.testing.assert_equal(h_expected[k][sr.raw_channel_order[:-sr.nsync]], th[k])
+                    np.testing.assert_equal(
+                        h_expected[k][sr.raw_channel_order[: -sr.nsync]], th[k]
+                    )
 
     def testGetSerialNumber(self):
         self.meta_files.sort()
@@ -530,8 +546,13 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 if meta_data_file.name.split(".")[-2] in ["lf", "ap"]:
                     # NPultra: non-numerical
                     if "NPultra" in meta_data_file.name:
-                        self.assertEqual("NPultra", spikeglx._get_neuropixel_version_from_meta(md))
-                        self.assertEqual("NPultra", spikeglx._get_neuropixel_major_version_from_meta(md))
+                        self.assertEqual(
+                            "NPultra", spikeglx._get_neuropixel_version_from_meta(md)
+                        )
+                        self.assertEqual(
+                            "NPultra",
+                            spikeglx._get_neuropixel_major_version_from_meta(md),
+                        )
                         continue
 
                     # for ap and lf look for version number
@@ -650,11 +671,14 @@ class TestsBasicReader(unittest.TestCase):
 
     def test_get_companion_file(self):
         import uuid
+
         with tempfile.TemporaryDirectory() as td:
             sglx_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.bin"
             meta_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.meta"
             meta_file.touch()
-            self.assertEqual(meta_file, spikeglx._get_companion_file(sglx_file, '.meta'))
+            self.assertEqual(
+                meta_file, spikeglx._get_companion_file(sglx_file, ".meta")
+            )
 
         with tempfile.TemporaryDirectory() as td:
             sglx_file = Path(td) / "sample3A_g0_t0.imec.ap.bin"
@@ -662,7 +686,9 @@ class TestsBasicReader(unittest.TestCase):
             meta_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.meta"
             meta_file.touch()
             meta_file_ok.touch()
-            self.assertEqual(meta_file_ok, spikeglx._get_companion_file(sglx_file, '.meta'))
+            self.assertEqual(
+                meta_file_ok, spikeglx._get_companion_file(sglx_file, ".meta")
+            )
 
     def test_read_flat_binary_float32(self):
         # here we expect no scaling to V applied and no sync trace as the format is float32

@@ -20,11 +20,12 @@ FIXTURE_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
 class TestSyncTimestamps(unittest.TestCase):
-
     def test_sync_timestamps_linear(self):
         ta = np.cumsum(np.abs(np.random.randn(100))) * 10
         tb = ta * 1.0001 + 100
-        fcn, drif, ia, ib = utils.sync_timestamps(ta, tb, return_indices=True, linear=True)
+        fcn, drif, ia, ib = utils.sync_timestamps(
+            ta, tb, return_indices=True, linear=True
+        )
         np.testing.assert_almost_equal(drif, 100)
         np.testing.assert_almost_equal(tb, fcn(ta))
 
@@ -481,7 +482,14 @@ class TestVoltage(unittest.TestCase):
         w = scipy.signal.ricker(100, 4)
         w = np.minimum(1200, w / w.max() * 1400)
         data[:, 13_600:13700] = data[0, 13_600:13700] + w * 1e-6
-        saturated, mute = voltage.saturation(data, max_voltage=np.ones(384,) * 1200 * 1e-6)
+        saturated, mute = voltage.saturation(
+            data,
+            max_voltage=np.ones(
+                384,
+            )
+            * 1200
+            * 1e-6,
+        )
         self.assertGreater(np.sum(saturated), 5)
         self.assertGreater(np.sum(mute == 0), np.sum(saturated))
 

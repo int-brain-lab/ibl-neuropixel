@@ -2,7 +2,14 @@ import numpy as np
 from ibldsp.fourier import fshift
 
 
-def generate_waveform(spike=None, sxy=None, wxy=None, fs=30000, vertical_velocity_mps=3, decay_exponent=3.0):
+def generate_waveform(
+    spike=None,
+    sxy=None,
+    wxy=None,
+    fs=30000,
+    vertical_velocity_mps=3,
+    decay_exponent=3.0,
+):
     """
     Generate a waveform from a spike and a set of coordinates
     :param spike: the single trace spike waveform
@@ -194,6 +201,6 @@ def generate_waveform(spike=None, sxy=None, wxy=None, fs=30000, vertical_velocit
     r = np.sqrt(np.sum(np.square(sxy - wxy), axis=1))
     sample_shift = (wxy[:, 1] - np.mean(wxy[:, 1])) / 1e6 * vertical_velocity_mps * fs
     # shperical divergence
-    wav = (spike * 1 / (r[..., np.newaxis] + 50) ** decay_exponent)
+    wav = spike * 1 / (r[..., np.newaxis] + 50) ** decay_exponent
     wav = fshift(wav, sample_shift, axis=-1)
     return wav
