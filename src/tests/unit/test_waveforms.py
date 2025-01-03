@@ -347,7 +347,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
         return gt_templates, gt_waveforms
 
     def test_extract_waveforms_bin(self):
-        waveform_extraction.extract_wfs_cbin(
+        output_files = waveform_extraction.extract_wfs_cbin(
             self.bin_file,
             self.tmpdir,
             self.spike_samples,
@@ -358,6 +358,7 @@ class TestWaveformExtractorBin(unittest.TestCase):
             h=trace_header(),
             preprocess_steps=[],
         )
+        assert len(output_files) == 4
         templates = np.load(self.tmpdir.joinpath("waveforms.templates.npy"))
         waveforms = np.load(self.tmpdir.joinpath("waveforms.traces.npy"))
         table = pd.read_parquet(self.tmpdir.joinpath("waveforms.table.pqt"))

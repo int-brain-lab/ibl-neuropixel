@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.1] - 2025-01-03
+
+### fixed
+- waveforms extractor returns a list of files for registration
+
 ## [1.6.0] - 2024-12-06
 
 ### added

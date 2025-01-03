@@ -456,6 +456,7 @@ def extract_wfs_cbin(
     if file_to_unlink is not None:
         file_to_unlink.with_suffix(".meta").unlink()
         file_to_unlink.unlink()
+    return sorted([templates_fn, table_fn, channels_fn, traces_fn])
 
 
 class WaveformsLoader:
@@ -667,9 +668,9 @@ class WaveformsLoader:
 
         info = self.table[self.table["cluster"].isin(labels)].copy()
         dfs = []
-        for i, l in enumerate(labels):
+        for i, lab in enumerate(labels):
             _idx = indices[i]
-            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == l)])
+            dfs.append(info[(info["wf_number"].isin(_idx)) & (info["cluster"] == lab)])
         info = pd.concat(dfs).reset_index(drop=True)
 
         channels = self.channels[info["linear_index"].to_numpy()].astype(int)

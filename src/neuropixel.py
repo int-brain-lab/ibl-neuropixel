@@ -739,7 +739,7 @@ class NP2Converter:
             meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
                 self.shank_info[sh]["chns"]
             )
-            meta_shank["snsSaveChanSubset"] = f"0:{n_chns-1}"
+            meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
             meta_shank["original_meta"] = False
             meta_shank[f"{self.np_version}_shank"] = int(sh[-1])
             meta_file = self.shank_info[sh]["ap_file"].with_suffix(".meta")
@@ -767,7 +767,7 @@ class NP2Converter:
                 meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
                     self.shank_info[sh]["chns"]
                 )
-                meta_shank["snsSaveChanSubset"] = f"0:{n_chns-1}"
+                meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
                 meta_shank["nSavedChans"] = n_chns
             meta_shank["original_meta"] = False
             meta_shank[f"{self.np_version}_shank"] = int(sh[-1])
