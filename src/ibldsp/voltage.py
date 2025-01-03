@@ -1,6 +1,7 @@
 """
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
+
 from pathlib import Path
 
 import numpy as np
@@ -142,7 +143,7 @@ def fk(
     return xf * gain
 
 
-def car(x, collection=None, operator='median', **kwargs):
+def car(x, collection=None, operator="median", **kwargs):
     """
     Applies common average referencing with optional automatic gain control
     :param x: np.array(nc, ns) the input array to be de-referenced. dimension, the filtering is considering
@@ -159,9 +160,9 @@ def car(x, collection=None, operator='median', **kwargs):
             xout[sel, :] = car(x=x[sel, :], collection=None, **kwargs)
         return xout
 
-    if operator == 'median':
+    if operator == "median":
         x = x - np.median(x, axis=0)
-    elif operator == 'average':
+    elif operator == "average":
         x = x - np.mean(x, axis=0)
     return x
 
@@ -235,7 +236,9 @@ def kfilt(
     return xf * gain
 
 
-def saturation(data, max_voltage, v_per_sec=1e-8, fs=30_000, proportion=0.2, mute_window_samples=7):
+def saturation(
+    data, max_voltage, v_per_sec=1e-8, fs=30_000, proportion=0.2, mute_window_samples=7
+):
     """
     Computes
     :param data: [nc, ns]: voltage traces array
@@ -258,7 +261,7 @@ def saturation(data, max_voltage, v_per_sec=1e-8, fs=30_000, proportion=0.2, mut
     saturation = np.logical_or(saturation > proportion, n_diff_saturated > proportion)
     # apply a cosine taper to the saturation to create a mute function
     win = scipy.signal.windows.cosine(mute_window_samples)
-    mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode='same'))
+    mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode="same"))
     return saturation, mute
 
 
@@ -378,7 +381,9 @@ def destripe(
     return x
 
 
-def destripe_lfp(x, fs, h=None, channel_labels=None, butter_kwargs=None, k_filter=False):
+def destripe_lfp(
+    x, fs, h=None, channel_labels=None, butter_kwargs=None, k_filter=False
+):
     """
     Wrapper around the destripe function with some default parameters to destripe the LFP band
     See help destripe function for documentation
@@ -386,10 +391,21 @@ def destripe_lfp(x, fs, h=None, channel_labels=None, butter_kwargs=None, k_filte
     :param fs: sampling frequency
     :param channel_labels: see destripe
     """
-    butter_kwargs = {"N": 3, "Wn": [0.5, 300], "btype": "bandpass", "fs": fs} if butter_kwargs is None else butter_kwargs
+    butter_kwargs = (
+        {"N": 3, "Wn": [0.5, 300], "btype": "bandpass", "fs": fs}
+        if butter_kwargs is None
+        else butter_kwargs
+    )
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
-    return destripe(x, fs, h=h, butter_kwargs=butter_kwargs, k_filter=k_filter, channel_labels=channel_labels)
+    return destripe(
+        x,
+        fs,
+        h=h,
+        butter_kwargs=butter_kwargs,
+        k_filter=k_filter,
+        channel_labels=channel_labels,
+    )
 
 
 def decompress_destripe_cbin(
@@ -474,7 +490,9 @@ def decompress_destripe_cbin(
     # if we want to compute the rms ap across the session as well as the saturation
     if compute_rms:
         # creates a saturation memmap, this is a nsamples vector of booleans
-        file_saturation = output_file.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+        file_saturation = output_file.parent.joinpath(
+            "_iblqc_ephysSaturation.samples.npy"
+        )
         np.save(file_saturation, np.zeros(sr.ns, dtype=bool))
         # creates the place holders for the rms
         ap_rms_file = output_file.parent.joinpath("ap_rms.bin")
@@ -542,7 +560,8 @@ def decompress_destripe_cbin(
             # Apply tapers
             chunk = _sr[first_s:last_s, :ncv].T
             saturated_samples, mute_saturation = saturation(
-                data=chunk, max_voltage=_sr.range_volts[:ncv], fs=_sr.fs)
+                data=chunk, max_voltage=_sr.range_volts[:ncv], fs=_sr.fs
+            )
             _saturation[first_s:last_s] = saturated_samples
             chunk[:, :SAMPLES_TAPER] *= taper[:SAMPLES_TAPER]
             chunk[:, -SAMPLES_TAPER:] *= taper[SAMPLES_TAPER:]
@@ -617,13 +636,22 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        output_qc_path = output_file.parent if output_qc_path is None else output_qc_path
+        output_qc_path = (
+            output_file.parent if output_qc_path is None else output_qc_path
+        )
         np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.rms.npy"), rms_data)
-        np.save(output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data)
-        np.save(output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"), saturation_data)
+        np.save(
+            output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
+        )
+        np.save(
+            output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"),
+            saturation_data,
+        )
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None, display=False):
+def detect_bad_channels(
+    raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None, display=False
+):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -699,12 +727,12 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
     # auto-detection of the band with which we are working
-    band = 'ap' if fs > 2600 else 'lf'
+    band = "ap" if fs > 2600 else "lf"
     # the LFP band data is obviously much stronger so auto-adjust the default threshold
-    if band == 'ap':
+    if band == "ap":
         psd_hf_threshold = 0.02 if psd_hf_threshold is None else psd_hf_threshold
         filter_kwargs = {"N": 3, "Wn": 300 / fs * 2, "btype": "highpass"}
-    elif band == 'lf':
+    elif band == "lf":
         psd_hf_threshold = 1.4 if psd_hf_threshold is None else psd_hf_threshold
         filter_kwargs = {"N": 3, "Wn": 1 / fs * 2, "btype": "highpass"}
     sos_hp = scipy.signal.butter(**filter_kwargs, output="sos")
@@ -741,7 +769,13 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     # ephys_bad_channels(x, 30000, ichannels, xfeats)
     if display:
         ibldsp.plots.show_channels_labels(
-            raw, fs, ichannels, xfeats, similarity_threshold=similarity_threshold, psd_hf_threshold=psd_hf_threshold)
+            raw,
+            fs,
+            ichannels,
+            xfeats,
+            similarity_threshold=similarity_threshold,
+            psd_hf_threshold=psd_hf_threshold,
+        )
     return ichannels, xfeats
 
 
@@ -774,6 +808,7 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     if display:
         raw = sr[sl, :nc].TO
         from ibllib.plots.figures import ephys_bad_channels
+
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
 

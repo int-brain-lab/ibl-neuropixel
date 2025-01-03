@@ -1,6 +1,7 @@
 """
 Window generator, front detections, rms
 """
+
 import numpy as np
 import scipy
 
@@ -276,13 +277,15 @@ class WindowGenerator(object):
 
         :return: tuple of (first_index, last_index, amplitude_vector]
         """
-        w = scipy.signal.windows.hann((self.overlap + 1) * 2 + 1, sym=True)[1:self.overlap + 1]
+        w = scipy.signal.windows.hann((self.overlap + 1) * 2 + 1, sym=True)[
+            1 : self.overlap + 1
+        ]
         assert np.all(np.isclose(w + np.flipud(w), 1))
 
         for first, last in self.firstlast:
             amp = np.ones(last - first)
-            amp[:self.overlap] = 1 if first == 0 else w
-            amp[-self.overlap:] = 1 if last == self.ns else np.flipud(w)
+            amp[: self.overlap] = 1 if first == 0 else w
+            amp[-self.overlap :] = 1 if last == self.ns else np.flipud(w)
             yield (first, last, amp)
 
     @property

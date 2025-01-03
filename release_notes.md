@@ -5,6 +5,10 @@
 ### fixed
 - waveforms extractor returns a list of files for registration
 
+### changed
+- moved the repo contribution guide to automatic ruff formatting 
+
+
 ## [1.6.0] - 2024-12-06
 
 ### added

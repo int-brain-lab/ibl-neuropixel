@@ -64,7 +64,7 @@ SITES_COORDINATES: np.array
 CHANNEL_GRID = {
     1: dict(DX=16, X0=11, DY=20, Y0=20),
     2: dict(DX=32, X0=27, DY=15, Y0=20),
-    "NPultra": dict(DX=6, X0=0, DY=6, Y0=0)
+    "NPultra": dict(DX=6, X0=0, DY=6, Y0=0),
 }
 
 
@@ -104,8 +104,8 @@ def xy2rc(x, y, version=1):
     """
     version = np.floor(version) if isinstance(version, numbers.Number) else version
     grid = CHANNEL_GRID[version]
-    col = (x - grid['X0']) / grid['DX']
-    row = (y - grid['Y0']) / grid['DY']
+    col = (x - grid["X0"]) / grid["DX"]
+    row = (y - grid["Y0"]) / grid["DY"]
     return {"col": col, "row": row}
 
 
@@ -119,8 +119,8 @@ def rc2xy(row, col, version=1):
     """
     version = np.floor(version) if isinstance(version, numbers.Number) else version
     grid = CHANNEL_GRID[version]
-    x = col * grid['DX'] + grid['X0']
-    y = row * grid['DY'] + grid['Y0']
+    x = col * grid["DX"] + grid["X0"]
+    y = row * grid["DY"] + grid["Y0"]
     return {"x": x, "y": y}
 
 
@@ -367,10 +367,10 @@ class NP2Converter:
 
         for first, last in wg.firstlast:
             chunk_ap = self.sr[first:last, : self.napch].T
-            chunk_ap_sync = self.sr[first:last, self.idxsyncch:].T
+            chunk_ap_sync = self.sr[first:last, self.idxsyncch :].T
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch:].T
+                self.sr[first:last, self.idxsyncch :].T
             )
 
             chunk_ap2save = self._ind2save(
@@ -475,7 +475,7 @@ class NP2Converter:
 
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch:].T
+                self.sr[first:last, self.idxsyncch :].T
             )
 
             chunk_lf2save = self._ind2save(
@@ -551,7 +551,9 @@ class NP2Converter:
         :return:
         """
         for sh in self.shank_info.keys():
-            self.shank_info[sh]["sr"] = spikeglx.Reader(self.shank_info[sh]["ap_file"], sort=False)
+            self.shank_info[sh]["sr"] = spikeglx.Reader(
+                self.shank_info[sh]["ap_file"], sort=False
+            )
         wg = WindowGenerator(self.nsamples, self.samples_window, 0)
         for first, last in wg.firstlast:
             expected = self.sr[first:last, :]
@@ -675,7 +677,7 @@ class NP2Converter:
                 chunk[:, slice(*ind2save)].T
                 / self.sr.channel_conversion_sample2v[etype][: self.napch],
                 chunk_sync[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch:],
+                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
             ]
         ).astype(np.int16)
 
@@ -691,7 +693,7 @@ class NP2Converter:
         """
 
         chunk[:, : self.samples_taper] *= self.taper[: self.samples_taper]
-        chunk[:, -self.samples_taper:] *= self.taper[self.samples_taper:]
+        chunk[:, -self.samples_taper :] *= self.taper[self.samples_taper :]
         chunk = scipy.signal.sosfiltfilt(self.sos_lp, chunk)
         chunk = chunk[:, :: self.ratio]
         return chunk
@@ -944,9 +946,13 @@ class NP2Reconstructor:
             chunk = np.zeros((ns, self.nch), dtype=np.int16)
             for ish, sh in enumerate(self.shank_info.keys()):
                 if ish == 0:
-                    chunk[:, self.shank_info[sh]["chns"]] = self.shank_info[sh]["sr"]._raw[first:last, :]
+                    chunk[:, self.shank_info[sh]["chns"]] = self.shank_info[sh][
+                        "sr"
+                    ]._raw[first:last, :]
                 else:
-                    chunk[:, self.shank_info[sh]["chns"][:-1]] = self.shank_info[sh]["sr"]._raw[first:last, :-1]
+                    chunk[:, self.shank_info[sh]["chns"][:-1]] = self.shank_info[sh][
+                        "sr"
+                    ]._raw[first:last, :-1]
             chunk.tofile(file_out)
 
         # close the sglx instances once we are done converting
