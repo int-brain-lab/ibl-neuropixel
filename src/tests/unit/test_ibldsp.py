@@ -128,25 +128,25 @@ class TestPhaseRegression(unittest.TestCase):
 class TestShift(unittest.TestCase):
     def test_shift_already_fft(self):
         for ns in [500, 501]:
-            w = scipy.signal.ricker(ns, 10)
+            w = utils.ricker(ns, 10)
             W = scipy.fft.rfft(w)
             ws = np.real(scipy.fft.irfft(fourier.fshift(W, 1, ns=np.shape(w)[0]), n=ns))
             self.assertTrue(np.all(np.isclose(ws, np.roll(w, 1))))
 
     def test_shift_floats(self):
         ns = 500
-        w = scipy.signal.ricker(ns, 10)
+        w = utils.ricker(ns, 10)
         w_ = fourier.fshift(w.astype(np.float32), 1)
         assert w_.dtype == np.float32
 
     def test_shift_1d(self):
         ns = 500
-        w = scipy.signal.ricker(ns, 10)
+        w = utils.ricker(ns, 10)
         self.assertTrue(np.all(np.isclose(fourier.fshift(w, 1), np.roll(w, 1))))
 
     def test_shift_2d(self):
         ns = 500
-        w = scipy.signal.ricker(ns, 10)
+        w = utils.ricker(ns, 10)
         w = np.tile(w, (100, 1)).transpose()
         self.assertTrue(
             np.all(np.isclose(fourier.fshift(w, 1, axis=0), np.roll(w, 1, axis=0)))
@@ -432,7 +432,7 @@ class TestVoltage(unittest.TestCase):
         """
         ntr, ns, sr, dx, v1, v2 = (500, 2000, 0.002, 5, 2000, 1000)
         data = np.zeros((ntr, ns), np.float32)
-        data[:, :100] = scipy.signal.ricker(100, 4)
+        data[:, :100] = utils.ricker(100, 4)
         offset = np.arange(ntr) * dx
         offset = np.abs(offset - np.mean(offset))
         data_v1 = fourier.fshift(data, offset / v1 / sr)
@@ -479,7 +479,7 @@ class TestVoltage(unittest.TestCase):
         np.testing.assert_array_equal(saturated, 0)
         np.testing.assert_array_equal(mute, 1.0)
         # now we stick a big waveform in the middle of the recorder and expect some saturation
-        w = scipy.signal.ricker(100, 4)
+        w = utils.ricker(100, 4)
         w = np.minimum(1200, w / w.max() * 1400)
         data[:, 13_600:13700] = data[0, 13_600:13700] + w * 1e-6
         saturated, mute = voltage.saturation(
