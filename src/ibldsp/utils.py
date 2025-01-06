@@ -350,3 +350,37 @@ class WindowGenerator(object):
         return np.array(
             [(first + (last - first - 1) / 2) / fs for first, last in self.firstlast]
         )
+
+
+def ricker(points, a):
+    """
+    Return a Ricker wavelet, also known as the "Mexican hat wavelet".
+    scipy.signal.ricker was removed in SciPy 1.15
+
+    It models the function:
+
+        ``A * (1 - (x/a)**2) * exp(-0.5*(x/a)**2)``,
+
+    where ``A = 2/(sqrt(3*a)*(pi**0.25))``.
+
+    Parameters
+    ----------
+    points : int
+        Number of points in `vector`.
+        Will be centered around 0.
+    a : scalar
+        Width parameter of the wavelet.
+
+    Returns
+    -------
+    vector : (N,) ndarray
+        Array of length `points` in shape of ricker curve.
+    """
+    A = 2 / (np.sqrt(3 * a) * (np.pi**0.25))
+    wsq = a**2
+    vec = np.arange(0, points) - (points - 1.0) / 2
+    xsq = vec**2
+    mod = 1 - xsq / wsq
+    gauss = np.exp(-xsq / (2 * wsq))
+    total = A * mod * gauss
+    return total
