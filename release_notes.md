@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.2] - 2025-01-06
+
+### added
+- scipy.signal.ricker has been removed and is now available at ibldsp.utils.ricker
+
+
 ## [1.6.1] - 2025-01-03
 
 ### fixed
