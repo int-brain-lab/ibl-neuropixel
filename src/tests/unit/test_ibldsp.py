@@ -62,6 +62,11 @@ class TestSyncTimestamps(unittest.TestCase):
         )
         assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[imiss2[_ib]]))
 
+        # test timestamps with huge offset (previously caused ArrayMemoryError)
+        tsb -= 1e15
+        _fcn, _drift = utils.sync_timestamps(tsa, tsb)
+        assert np.all(np.isclose(_fcn(tsa), tsb))
+
 
 class TestParabolicMax(unittest.TestCase):
     # expected values
@@ -650,3 +655,7 @@ class TestRawDataFeatures(unittest.TestCase):
         self.assertEqual(multi_index, list(df.index))
         self.assertEqual(["snippet_id", "channel_id"], list(df.index.names))
         self.assertEqual(num_snippets * (self.nc - 1), len(df))
+
+
+if __name__ == "__main__":
+    unittest.main()
