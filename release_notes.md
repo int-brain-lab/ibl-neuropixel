@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.3] - 2025-01-15
+
+### changed
+- ibldsp.utils.sync_timestamps performance no longer impacted by timestamp offset
+
+
 ## [1.6.2] - 2025-01-06
 
 ### added
@@ -12,7 +18,7 @@
 - waveforms extractor returns a list of files for registration
 
 ### changed
-- moved the repo contribution guide to automatic ruff formatting 
+- moved the repo contribution guide to automatic ruff formatting
 
 
 ## [1.6.0] - 2024-12-06
@@ -21,7 +27,7 @@
 - single derivative option for CSD for RIGOR metrics
 - radon forward and inverse transforms
 - support headerless binary files (open ephys)
-- 
+-
 ### fixed
 - cadzow iterations
 - numpy 2.0 support
@@ -62,7 +68,7 @@
 - Add features and tests for `extract_wfs_cbin`, including various preprocessing options.
 
 ## 1.1.2 2024-07-03
--  bugfix waveform extraction: reverting refactoring of the function to maintain compatibility with current ibllib 
+-  bugfix waveform extraction: reverting refactoring of the function to maintain compatibility with current ibllib
 
 ## 1.1.1 2024-06-07
 -  Add support for NP2.0 prototype probe with probetype 1030
@@ -79,7 +85,7 @@
 ## 0.10.3 2024-04-18
 -  Patch fixing memory leaks for `waveform_extraction` module.
 ## 0.10.2 2024-04-10
--  Add `waveform_extraction` module to `ibldsp`. This includes the `extract_wfs_array` and `extract_wfs_cbin` methods. 
+-  Add `waveform_extraction` module to `ibldsp`. This includes the `extract_wfs_array` and `extract_wfs_cbin` methods.
 -  Add code for performing subsample shifts of waveforms.
 ## 0.10.1 2024-03-19
 -  ensure compatibility with spikeglx 202309 metadata coordinates
@@ -106,7 +112,7 @@
 
 ## 0.6.1 2023-06-06
 - Fix bug in ADC cycles sampling for Neuropixel 1.0 probes
-- 
+-
 ## 0.6.0 2023-05-15
 - Add waveforms utilities for spike features computations
 
@@ -129,11 +135,11 @@
 
 ## 0.4.0 2022-10-28
 - current source density simple double diff with denoising from raw LFP
-- 
+-
 ## 0.3.2 2022-10-27
 - spikeglx geometry chops the ADC sample shift to the number of channels to accomodate legacy 3A probes with 276 channels
 - agc: gain refers to the inverse of applied gains for agc - done to handle dead channels in destriping
-- 
+-
 ## 0.3.1
 - neurodsp.utils.rises / falls: detects rising and falling edges of oversampled analog signals
 - neuropixel: add functions to reconstruct original files from split NP2.4 files
@@ -154,4 +160,4 @@
 ## minor changes
 -   deprecated SITES_COORDINATES that would default on Neuropixel 1.0 early generations (3A probes with 374 channels)
 -   spikeglx compress: pass dtype to mtscomp
-- 
+-
