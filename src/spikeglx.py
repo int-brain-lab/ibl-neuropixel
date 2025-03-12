@@ -403,11 +403,14 @@ class Reader:
             self.file_bin = kwargs["out"]
         return kwargs["out"]
 
-    def decompress_to_scratch(self, scratch_dir=None):
+    def decompress_to_scratch(self, file_meta=None, scratch_dir=None):
         """
         Decompresses the file to a temporary directory
         Copy over the metadata file
         """
+        if file_meta is None:
+            file_meta = Path(self.file_bin).with_suffix(".meta")
+
         if scratch_dir is None:
             bin_file = Path(self.file_bin).with_suffix(".bin")
         else:
@@ -415,7 +418,7 @@ class Reader:
             bin_file = (
                 Path(scratch_dir).joinpath(self.file_bin.name).with_suffix(".bin")
             )
-            shutil.copy(self.file_meta_data, bin_file.with_suffix(".meta"))
+            shutil.copy(self.file_meta_data, file_meta)
         if not bin_file.exists():
             t0 = time.time()
             _logger.info("File is compressed, decompressing to a temporary file...")
