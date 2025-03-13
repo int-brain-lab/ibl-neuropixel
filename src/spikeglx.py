@@ -415,10 +415,9 @@ class Reader:
             bin_file = Path(self.file_bin).with_suffix(".bin")
         else:
             scratch_dir.mkdir(exist_ok=True, parents=True)
-            bin_file = (
-                Path(scratch_dir).joinpath(self.file_bin.name).with_suffix(".bin")
-            )
-            shutil.copy(self.file_meta_data, file_meta)
+            bin_file = scratch_dir / Path(self.file_bin).with_suffix(".bin").name
+            file_meta_scratch = scratch_dir / file_meta.name
+            shutil.copy(self.file_meta_data, file_meta_scratch)
         if not bin_file.exists():
             t0 = time.time()
             _logger.info("File is compressed, decompressing to a temporary file...")
