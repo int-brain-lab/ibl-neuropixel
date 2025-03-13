@@ -381,7 +381,7 @@ class Reader:
             self.file_bin = file_out
         return file_out
 
-    def decompress_file(self, keep_original=True, **kwargs):
+    def decompress_file(self, keep_original=True, file_ch=None, **kwargs):
         """
         Decompresses a mtscomp file
         :param keep_original: defaults True. If False, the original compressed file (input)
@@ -392,8 +392,11 @@ class Reader:
         if "out" not in kwargs:
             kwargs["out"] = self.file_bin.with_suffix(".bin")
         assert self.is_mtscomp
+        if file_ch is None:
+            file_ch = self.file_bin.with_suffix(".ch")
+
         r = mtscomp.decompress(
-            self.file_bin, self.file_bin.with_suffix(".ch"), **kwargs
+            self.file_bin, file_ch, **kwargs
         )
         r.close()
         if not keep_original:
@@ -403,7 +406,7 @@ class Reader:
             self.file_bin = kwargs["out"]
         return kwargs["out"]
 
-    def decompress_to_scratch(self, file_meta=None, scratch_dir=None):
+    def decompress_to_scratch(self, file_meta=None, file_ch=None, scratch_dir=None):
         """
         Decompresses the file to a temporary directory
         Copy over the metadata file
@@ -423,6 +426,7 @@ class Reader:
             _logger.info("File is compressed, decompressing to a temporary file...")
             self.decompress_file(
                 keep_original=True,
+                file_ch=file_ch,
                 out=bin_file.with_suffix(".bin_temp"),
                 check_after_decompress=False,
                 overwrite=True,
