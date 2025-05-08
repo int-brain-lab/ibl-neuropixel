@@ -63,7 +63,7 @@ class TestSyncTimestamps(unittest.TestCase):
         assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[imiss2[_ib]]))
 
         # test timestamps with huge offset (previously caused ArrayMemoryError)
-        tsb -= 1e15
+        tsb -= 1e14 # previously 1e-15 but running into rounding issues with float64
         _fcn, _drift = utils.sync_timestamps(tsa, tsb)
         assert np.all(np.isclose(_fcn(tsa), tsb))
 

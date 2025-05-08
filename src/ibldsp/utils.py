@@ -24,7 +24,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
     # determine fixed offset between first timestamp of each series
     # this reduces the size of array for correlation
     offset = tsb[0] - tsa[0]
-    tsa += offset
+    tsa = tsa + offset
 
     def _interp_fcn(tsa, tsb, ib, linear=linear):
         # now compute the bpod/fpga drift and precise time shift
@@ -33,9 +33,10 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
         if linear:
             fcn_a2b = lambda x: (x + offset) * (1 + ab[0]) + ab[1]  # noqa
         else:
-            fcn_a2b = scipy.interpolate.interp1d(
+            interp = scipy.interpolate.interp1d(
                 tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
             )
+            fcn_a2b = lambda x: interp(x + offset)
         return fcn_a2b, drift_ppm
 
     # assert sorted inputs
