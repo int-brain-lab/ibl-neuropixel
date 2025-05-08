@@ -36,7 +36,7 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
             interp = scipy.interpolate.interp1d(
                 tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
             )
-            fcn_a2b = lambda x: interp(x + offset)
+            fcn_a2b = lambda x: interp(x + offset)  # noqa
         return fcn_a2b, drift_ppm
 
     # assert sorted inputs
