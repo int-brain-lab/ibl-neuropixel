@@ -370,8 +370,8 @@ class NP2Converter:
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
 
         for first, last in wg.firstlast:
-            chunk_ap = self.sr[first:last, : self.napch].T
-            chunk_ap_sync = self.sr[first:last, self.idxsyncch :].T
+            chunk_ap = self.sr._raw[first:last, : self.napch].T
+            chunk_ap_sync = self.sr._raw[first:last, self.idxsyncch :].T
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
                 self.sr[first:last, self.idxsyncch :].T
@@ -676,14 +676,20 @@ class NP2Converter:
         if wg.iw == wg.nwin - 1:
             ind2save[1] = int(self.samples_window / ratio)
 
-        chunk2save = (
-            np.c_[
-                chunk[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][: self.napch],
-                chunk_sync[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
-            ]
-        ).astype(np.int16)
+        if etype == "lf":
+            chunk2save = (
+                np.c_[
+                    chunk[:, slice(*ind2save)].T
+                    / self.sr.channel_conversion_sample2v[etype][: self.napch],
+                    chunk_sync[:, slice(*ind2save)].T
+                    / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
+                ]
+            ).astype(np.int16)
+        else:
+            chunk2save = np.c_[
+                    chunk[:, slice(*ind2save)].T,
+                    chunk_sync[:, slice(*ind2save)].T,
+                ]
 
         return chunk2save
 
