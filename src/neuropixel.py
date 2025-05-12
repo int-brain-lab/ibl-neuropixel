@@ -588,7 +588,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["ap_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
 
             sr_ap = spikeglx.Reader(bin_file)
             cbin_file = sr_ap.compress_file(**kwargs)
@@ -599,7 +600,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["lf_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
             sr_lf = spikeglx.Reader(bin_file)
             cbin_file = sr_lf.compress_file(**kwargs)
             sr_lf.close()
@@ -622,7 +624,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["lf_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
             sr_lf = spikeglx.Reader(bin_file)
             cbin_file = sr_lf.compress_file()
             sr_lf.close()
