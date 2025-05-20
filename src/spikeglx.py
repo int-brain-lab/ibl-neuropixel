@@ -381,7 +381,7 @@ class Reader:
             self.file_bin = file_out
         return file_out
 
-    def decompress_file(self, keep_original=True, **kwargs):
+    def decompress_file(self, keep_original=True, file_ch=None, **kwargs):
         """
         Decompresses a mtscomp file
         :param keep_original: defaults True. If False, the original compressed file (input)
@@ -392,9 +392,10 @@ class Reader:
         if "out" not in kwargs:
             kwargs["out"] = self.file_bin.with_suffix(".bin")
         assert self.is_mtscomp
-        r = mtscomp.decompress(
-            self.file_bin, self.file_bin.with_suffix(".ch"), **kwargs
-        )
+        if file_ch is None:
+            file_ch = self.file_bin.with_suffix(".ch")
+
+        r = mtscomp.decompress(self.file_bin, file_ch, **kwargs)
         r.close()
         if not keep_original:
             self.close()
@@ -403,24 +404,27 @@ class Reader:
             self.file_bin = kwargs["out"]
         return kwargs["out"]
 
-    def decompress_to_scratch(self, scratch_dir=None):
+    def decompress_to_scratch(self, file_meta=None, file_ch=None, scratch_dir=None):
         """
         Decompresses the file to a temporary directory
         Copy over the metadata file
         """
+        if file_meta is None:
+            file_meta = Path(self.file_bin).with_suffix(".meta")
+
         if scratch_dir is None:
             bin_file = Path(self.file_bin).with_suffix(".bin")
         else:
             scratch_dir.mkdir(exist_ok=True, parents=True)
-            bin_file = (
-                Path(scratch_dir).joinpath(self.file_bin.name).with_suffix(".bin")
-            )
-            shutil.copy(self.file_meta_data, bin_file.with_suffix(".meta"))
+            bin_file = scratch_dir / Path(self.file_bin).with_suffix(".bin").name
+            file_meta_scratch = scratch_dir / file_meta.name
+            shutil.copy(self.file_meta_data, file_meta_scratch)
         if not bin_file.exists():
             t0 = time.time()
             _logger.info("File is compressed, decompressing to a temporary file...")
             self.decompress_file(
                 keep_original=True,
+                file_ch=file_ch,
                 out=bin_file.with_suffix(".bin_temp"),
                 check_after_decompress=False,
                 overwrite=True,

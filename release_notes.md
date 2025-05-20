@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0] - Not released yet
+
+### changed
+- spikeglx.decompress_to_scratch: supports a custom ch file with a different naming convention (for SDSC datasets)
+
+
 ## [1.6.3] - 2025-01-15
 
 ### changed
