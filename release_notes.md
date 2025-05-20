@@ -1,10 +1,13 @@
 # Changelog
 
-## [1.7.0] - Not released yet
+## [1.7.0] - 2025-05-20
 
 ### changed
 - spikeglx.decompress_to_scratch: supports a custom ch file with a different naming convention (for SDSC datasets)
 
+### fixed
+- neuropixel.NP2Converter: keeps the original NP2 AP band samples in int16 instead of doing a round-trip via float32
+- ibldsp.voltage.destripe_lfp: accepts spurious arguments for back-compatibility
 
 ## [1.6.3] - 2025-01-15
 
