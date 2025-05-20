@@ -266,7 +266,11 @@ class NP2Converter:
         self.np_version = spikeglx._get_neuropixel_version_from_meta(self.sr.meta)
         self.check_metadata()
         self.init_params()
-        self.n_shanks = len(np.unique(spikeglx._map_channels_from_meta(self.sr.meta)['shank']).astype(np.int16))
+        self.n_shanks = len(
+            np.unique(spikeglx._map_channels_from_meta(self.sr.meta)["shank"]).astype(
+                np.int16
+            )
+        )
 
     def init_params(self, nsamples=None, nwindow=None, extra=None, nshank=None):
         """
@@ -333,7 +337,9 @@ class NP2Converter:
         if self.np_version == "NP2.4" and self.n_shanks > 1:
             status = self._process_NP24(overwrite=overwrite)
         elif self.np_version == "NP2.4" and self.n_shanks == 1:
-            _logger.info(f'Detected {self.np_version} but only 1 shank, will process as NP2.1')
+            _logger.info(
+                f"Detected {self.np_version} but only 1 shank, will process as NP2.1"
+            )
             status = self._process_NP21(overwrite=overwrite)
         elif self.np_version == "NP2.1":
             status = self._process_NP21(overwrite=overwrite)
@@ -690,9 +696,9 @@ class NP2Converter:
             ).astype(np.int16)
         else:
             chunk2save = np.c_[
-                    chunk[:, slice(*ind2save)].T,
-                    chunk_sync[:, slice(*ind2save)].T,
-                ]
+                chunk[:, slice(*ind2save)].T,
+                chunk_sync[:, slice(*ind2save)].T,
+            ]
 
         return chunk2save
 
