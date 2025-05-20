@@ -395,9 +395,7 @@ class Reader:
         if file_ch is None:
             file_ch = self.file_bin.with_suffix(".ch")
 
-        r = mtscomp.decompress(
-            self.file_bin, file_ch, **kwargs
-        )
+        r = mtscomp.decompress(self.file_bin, file_ch, **kwargs)
         r.close()
         if not keep_original:
             self.close()
