@@ -51,7 +51,7 @@ Pypi Release checklist:
 
 
 ```shell
-flake8
+ruff format
 tag=X.Y.Z
 git tag -a $tag 
 git push origin %tag
