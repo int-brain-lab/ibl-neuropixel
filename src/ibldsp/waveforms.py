@@ -282,7 +282,6 @@ def plot_wiggle(
     order = np.argsort(y)
     # shift from amplitudes to plotting coordinates
     x_shift, y = y[order].__divmod__(ns + 1)
-    print(plot_kwargs)
     ax.plot(y / fs, x[order] + x_shift + 1, **plot_kwargs)
     if fill_sign < 0:
         x[x > 0] = np.nan
