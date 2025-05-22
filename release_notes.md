@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.7.1] - 2025-05-22
+### fixed
+- remove the offset introduced to sync_timestamps that causes errors downstream due to in place assignment
+
 ## [1.7.0] - 2025-05-20
 
 ### changed
