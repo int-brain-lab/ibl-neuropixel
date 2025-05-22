@@ -19,6 +19,16 @@ from ibldsp.fourier import fshift
 TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
+def _dummy_spike(ns):
+    ns = 100
+    w = np.zeros(ns)
+    w[0] = 1
+    w = np.fft.fftshift(w)
+    sos = scipy.signal.butter(3, 0.2, "low", output="sos")
+    w = scipy.signal.sosfiltfilt(sos, w)
+    return w
+
+
 def make_array_peak_through_tip():
     arr = np.array(
         [
@@ -248,14 +258,10 @@ class TestWaveformExtractorArray(unittest.TestCase):
         sig_lens = [100, 101]
         for sample_shift in sample_shifts:
             for sig_len in sig_lens:
-                spike = scipy.signal.morlet2(sig_len, 8.0, 2.0)
+                spike = _dummy_spike(sig_len)
                 spike = -np.fft.irfft(
                     np.fft.rfft(np.real(spike)) * np.exp(1j * 45 / 180 * np.pi)
                 )
-                import pdb
-
-                pdb.set_trace
-
                 spike2 = fshift(spike, sample_shift)
                 spike3, shift_computed = waveforms.wave_shift_corrmax(spike, spike2)
 
@@ -267,7 +273,7 @@ class TestWaveformExtractorArray(unittest.TestCase):
         fs = 30000
         # Resynch in time spike2 onto spike
         sample_shift_original = 0.323
-        spike = scipy.signal.morlet2(100, 8.5, 2.0)
+        spike = _dummy_spike(100)
         spike = -np.fft.irfft(
             np.fft.rfft(np.real(spike)) * np.exp(1j * 45 / 180 * np.pi)
         )
@@ -284,7 +290,7 @@ class TestWaveformExtractorArray(unittest.TestCase):
     def test_wave_shift_waveform(self):
         sample_shift_original = 15.32
         # Create peak channel spike
-        spike_peak = scipy.signal.morlet2(100, 8.5, 2.0)  # 100 time samples
+        spike_peak = _dummy_spike(100)  # 100 time samples
         spike_peak = -np.fft.irfft(
             np.fft.rfft(np.real(spike_peak)) * np.exp(1j * 45 / 180 * np.pi)
         )
