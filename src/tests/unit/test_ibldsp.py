@@ -431,6 +431,26 @@ class TestFrontDetection(unittest.TestCase):
 
 
 class TestVoltage(unittest.TestCase):
+    def test_destripe_parameters(self):
+        import inspect
+
+        _, _, spatial_fcn = voltage._get_destripe_parameters(
+            30_000, None, None, k_filter=True
+        )
+        assert "kfilt" in inspect.getsource(spatial_fcn)
+        _, _, spatial_fcn = voltage._get_destripe_parameters(
+            2_500, None, None, k_filter=False
+        )
+        assert "car" in inspect.getsource(spatial_fcn)
+        _, _, spatial_fcn = voltage._get_destripe_parameters(
+            2_500, None, None, k_filter=None
+        )
+        assert "dat: dat" in inspect.getsource(spatial_fcn)
+        _, _, spatial_fcn = voltage._get_destripe_parameters(
+            2_500, None, None, k_filter=lambda dat: 3 * dat
+        )
+        assert "lambda dat: 3 * dat" in inspect.getsource(spatial_fcn)
+
     def test_fk(self):
         """
         creates a couple of plane waves and separate them using the velocity HP filter

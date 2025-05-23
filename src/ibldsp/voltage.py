@@ -2,6 +2,7 @@
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
 
+import inspect
 from pathlib import Path
 
 import numpy as np
@@ -320,8 +321,13 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
             "lagc": lagc,
             "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
         }
-    if k_filter:
+    # True: k-filter | None: nothing | function: apply function | otherwise: CAR
+    if k_filter is True:
         spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+    elif k_filter is None:
+        spatial_fcn = lambda dat: dat  # noqa
+    elif inspect.isfunction(k_filter):
+        spatial_fcn = k_filter
     else:
         spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
     return butter_kwargs, k_kwargs, spatial_fcn
@@ -454,7 +460,11 @@ def decompress_destripe_cbin(
      untouched
     :param k_kwargs: (None) arguments for the kfilter function
     :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
-    :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
+    :param k_filter: (True) True | False | None | custom function.
+      If a function is provided (lambda or otherwise), apply the function to each batch (nc, ns)
+      True: Performs a k-filter
+      None: Do nothing
+      False and otherwise performs a median common average referencing
     :param output_qc_path: (None) if specified, will save the QC rms in a different location than the output
     :return:
     """
