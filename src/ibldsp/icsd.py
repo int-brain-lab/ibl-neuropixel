@@ -290,7 +290,7 @@ for symbol, prefix, definition, u_symbol in zip(
     [None, None, None, None, "µS", None],
 ):
     if type(definition) is str:
-        definition = lastdefinition / 1000
+        definition = lastdefinition / 1000  # noqa
     if not hasattr(pq, symbol):
         setattr(
             pq,
@@ -808,7 +808,7 @@ class SplineiCSD(CSD):
                     coord_electrode.units, diam.units
                 )
             )
-            raise
+            raise ae
         try:
             assert np.all(np.diff(coord_electrode) > 0)
         except AssertionError as ae:
