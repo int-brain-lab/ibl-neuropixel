@@ -229,6 +229,8 @@ def make_channel_index(geom, radius=200.0, pad_val=None):
     number of neighbors, the remaining indices in the row are filled with `pad_val`,
     which defaults to the number of channels (ie. last index + 1).
     """
+    if isinstance(geom, dict):
+        geom = np.c_[geom["x"], geom["y"]]
     neighbors = (
         scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(geom)) <= radius
     )

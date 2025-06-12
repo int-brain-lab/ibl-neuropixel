@@ -54,7 +54,7 @@ Pypi Release checklist:
 ruff format
 tag=X.Y.Z
 git tag -a $tag 
-git push origin %tag
+git push origin $tag
 ```
 
 Create new release with tag X.Y.Z (will automatically publish to PyPI)

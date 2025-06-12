@@ -15,7 +15,6 @@ from neurowaveforms.model import generate_waveform
 from neuropixel import trace_header
 from ibldsp.fourier import fshift
 
-
 TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
@@ -447,3 +446,29 @@ def test_wiggle():
     waveforms.plot_wiggle(wav, scale=40 * 1e-6, ax=ax[0])
     waveforms.double_wiggle(wav, scale=40 * 1e-6, fs=30_000, ax=ax[1])
     plt.close("all")
+
+
+def test_waveform_indices():
+    wxy, inds = waveforms.get_waveforms_coordinates(
+        trace_indices=np.array([22, 150, 370]), return_indices=True
+    )
+    np.testing.assert_array_equal(
+        wxy.flatten()[::19],
+        np.array(
+            [
+                59.0,
+                140.0,
+                59.0,
+                320.0,
+                11.0,
+                1400.0,
+                43.0,
+                1580.0,
+                27.0,
+                3580.0,
+                59.0,
+                3760.0,
+                np.nan,
+            ]
+        ),
+    )

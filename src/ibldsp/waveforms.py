@@ -10,8 +10,11 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import scipy
 
-from ibldsp.utils import parabolic_max
+import neuropixel
+from ibldsp.utils import parabolic_max, make_channel_index
 from ibldsp.fourier import fshift
+
+EXTRACT_RADIUS_UM = 200
 
 
 def _validate_arr_in(arr_in):
@@ -908,3 +911,58 @@ def radon(r, sr, offset, slowness, N=1, fmin=0, fmax=None):
         W[k, :] = np.conj(L @ np.conj(R[k, :]).T).T
 
     return np.fft.irfft(W, ns, axis=0)
+
+
+def get_waveforms_coordinates(
+    trace_indices,
+    xy=None,
+    extract_radius_um=EXTRACT_RADIUS_UM,
+    return_indices=False,
+):
+    """
+    Get coordinates of channels within a specified radius around spike detection channels.
+
+    This function reproduces the localization code channel selection when extracting
+    waveforms from raw data. For each spike detection channel, it identifies all channels
+    within a specified radius and returns their coordinates.
+
+    Parameters
+    ----------
+    trace_indices : numpy.ndarray
+        Array of shape (nspikes,) containing indices of the traces where spikes were detected.
+    xy : numpy.ndarray, optional
+        Array of shape (nchannels, 2) containing x and y coordinates of all channels.
+        If None, default Neuropixel probe geometry will be used.
+    extract_radius_um : float, default=EXTRACT_RADIUS_UM
+        Radius in micrometers around each spike detection channel. All channels within
+        this radius will be included in the output.
+    return_indices : bool, default=False
+        If True, also returns the indices of the channels within the radius.
+
+    Returns
+    -------
+    wxy : numpy.ndarray
+        Array of shape (nspikes, ntraces, 2) containing x and y coordinates of channels
+        within the specified radius for each spike.
+    inds : numpy.ndarray, optional
+        Array of shape (nspikes, ntraces) containing indices of channels within the
+        specified radius for each spike. Only returned if return_indices is True.
+
+    Notes
+    -----
+    Channels outside the specified radius are represented with NaN coordinates.
+    """
+    if xy is None:
+        th = neuropixel.trace_header(version=1)
+        xy = np.c_[th["x"], th["y"]]
+    channel_lookups = make_channel_index(
+        xy, radius=extract_radius_um, pad_val=xy.shape[0]
+    )
+    inds = channel_lookups[trace_indices.astype(np.int32)]
+    # add a dummy channel to have nans in the coordinates
+    inds[np.isnan(inds)] = xy.shape[0] - 1
+    wxy = np.r_[(xy, xy[0, np.newaxis] * np.nan)][inds.astype(np.int32)]
+    if return_indices:
+        return wxy, inds.astype(int)
+    else:
+        return wxy

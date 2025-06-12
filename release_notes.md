@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.0] - 2025-06-12
+
+### Added
+- waveforms.get_waveforms_coordinates(): allows finding the indices of raw traces from waveform datasets
+
+
 ## [1.7.1] - 2025-05-22
 ### fixed
 - remove the offset introduced to sync_timestamps that causes errors downstream due to in place assignment
@@ -62,11 +68,11 @@
 
 - Hotfix for WaveformsLoader label ids
 
-## 1.3.1 2024-09-05
+## [1.3.1] 2024-09-05
 
 - Hotfix for running tests with PyPI install
 
-## 1.3.0 2024-09-05
+## [1.3.0] 2024-09-05
 
 - Add support for NPultra high-density probes
 - NumPy and SciPy version floors
