@@ -46,15 +46,49 @@ def traj_matrix_indices(n):
     return itraj
 
 
-def trajectory(x, y):
+def trajectory(x, y, dtype=np.complex128):
     """
-    Computes the 2 spatial dimensions block-Toeplitz indices from x and y traces coordinates
-    Coordinates are assumed to be regularly spaced
-    :param x: trace spatial coordinate (np.array)
-    :param y: trace spatial coordinate (np.array)
-    :return: T: 2-D complex matrix whose elements are the spatial dimensions
-    :return: it, itr: (tuple, ndarray) indices such that T[it] = data[itr]
-    :return: trcount: count of traces in the trajectory matrix
+    Computes the 2 spatial dimensions block-Toeplitz indices from x and y trace coordinates.
+
+    This function creates a trajectory matrix and associated indices for use in
+    2D spatial denoising algorithms, such as Cadzow denoising. It assumes the input
+    coordinates are regularly spaced.
+
+    Parameters:
+    -----------
+    x : array_like
+        1D array of x-coordinates for each trace.
+    y : array_like
+        1D array of y-coordinates for each trace.
+    dtype : numpy.dtype, optional
+        Data type for the trajectory matrix. Default is np.complex128.
+
+    Returns:
+    --------
+    T : ndarray
+        2D empyt matrix representing the trajectory matrix. Its shape is determined
+        by the unique values in x and y.
+    it : tuple of ndarrays
+        A tuple of index arrays that can be used to index into T.
+    ic : ndarray
+        1D array of channel indices that map elements of T to the original data.
+    trcount : ndarray
+        1D array containing the count of traces for each unique (x, y) coordinate.
+
+    Notes:
+    ------
+    - The function creates a block-Toeplitz structure that captures spatial relationships
+      in both x and y dimensions.
+    - The returned indices (it and ic) allow for efficient mapping between the trajectory
+      matrix and the original data space.
+    - This function is particularly useful in multi-dimensional signal processing
+      applications, such as seismic data analysis or image processing.
+
+    Example:
+    --------
+    >>> x = np.array([0, 1, 2, 0, 1, 2])
+    >>> y = np.array([0, 0, 0, 1, 1, 1])
+    >>> T, it, ic, trcount = trajectory(x, y)
     """
     xu, ix = np.unique(x, return_inverse=True)
     yu, iy = np.unique(y, return_inverse=True)
@@ -65,13 +99,13 @@ def trajectory(x, y):
     tiy = np.tile(tiy_, tix_.shape)
     tix = np.repeat(np.repeat(tix_, tiy_.shape[0], axis=0), tiy_.shape[1], axis=1)
 
-    it, itr = ismember2d(np.c_[tix.flatten(), tiy.flatten()], np.c_[ix, iy])
+    it, ic = ismember2d(np.c_[tix.flatten(), tiy.flatten()], np.c_[ix, iy])
     it = np.unravel_index(np.where(it)[0], tiy.shape)
 
-    T = np.zeros(tix.shape, dtype=np.complex128)
+    T = np.zeros(tix.shape, dtype=dtype)
 
-    trcount = np.bincount(itr)
-    return T, it, itr, trcount
+    trcount = np.bincount(ic)
+    return T, it, ic, trcount
 
 
 def denoise(WAV, x, y, r, imax=None, niter=1):

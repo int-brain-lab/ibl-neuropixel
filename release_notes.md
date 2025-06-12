@@ -1,10 +1,14 @@
 # Changelog
 
-## [1.8.0] - 2025-06-12
+## [1.8.0] - unreleased
+
+### changed
+- ibldsp.voltage.destripe: `k_filter` argument: feeding None to the kfilter does not apply any spatial filter. It is also possible give a function to apply to the data.
+- ibldsp.utils.make_channel_index: allow a dictionary as an input to compute neighbour distances 
+- ibldsp.cadzow.trajectory: allows defining dtype of trajectory for time domain applications
 
 ### Added
 - waveforms.get_waveforms_coordinates(): allows finding the indices of raw traces from waveform datasets
-
 
 ## [1.7.1] - 2025-05-22
 ### fixed
