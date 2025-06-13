@@ -66,9 +66,9 @@ def extract_wfs_array(
 
     # check that the spike window is included in the recording:
     last_idx = df["sample"].iloc[-1]
-    assert (
-        last_idx + (spike_length_samples - trough_offset) < arr.shape[1]
-    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
+    assert last_idx + (spike_length_samples - trough_offset) < arr.shape[1], (
+        f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
+    )
 
     nwf = len(df)
 
@@ -277,10 +277,9 @@ def extract_wfs_cbin(
     max_wf=256,
     trough_offset=42,
     spike_length_samples=128,
-    chunksize_samples=int(3000),
+    chunksize_samples=int(30_000),
     reader_kwargs=None,
     n_jobs=None,
-    wfs_dtype=np.float32,
     preprocess_steps=None,
     seed=None,
     scratch_dir=None,
@@ -325,13 +324,13 @@ def extract_wfs_cbin(
     :param max_wf: Max number of waveforms to extract per cluster (default: 256)
     :param trough_offset: Location of peak in spike, in samples (default: 42)
     :param spike_length_samples: Number of samples to extract per spike (default: 128)
-    :param chunksize_samples: Length of chunk to process at a time in samples (default: 3000)
+    :param chunksize_samples: Length of chunk to process at a time in samples (default: 30_000)
     :param reader_kwargs: Kwargs to pass to spikeglx.Reader()
     :param n_jobs: Number of parallel jobs to run. By default it will use 3/4 of available CPUs.
     :param wfs_dtype: Data type of raw waveforms saved (default np.float32)
     :param preprocess: Preprocessing options to apply, list which must be a subset of
         ["phase_shift", "bad_channel_interpolation", "butterworth", "car", "kfilt"]
-        By default a butterworth 300Hz high-pass and the rephasing of the channels is perfomed
+        By default a butterworth 300Hz high-pass and the rephasing of the channels is performed
     """
     n_jobs = n_jobs or int(cpu_count() / 2)
     preprocess_steps = (
@@ -597,9 +596,9 @@ class WaveformsLoader:
             indices = (
                 np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
             )
-            assert (
-                indices.shape[0] == labels.size
-            ), "If indices is a 2D-array, the second dimension must match the number of clusters."
+            assert indices.shape[0] == labels.size, (
+                "If indices is a 2D-array, the second dimension must match the number of clusters."
+            )
             _, iu, _ = np.intersect1d(
                 self.df_clusters.index, labels, return_indices=True
             )
@@ -657,9 +656,9 @@ class WaveformsLoader:
             else:
                 labels = rg.choice(self.labels, num_random_labels, replace=False)
         else:
-            assert (
-                num_random_labels is None
-            ), "labels and num_random_labels cannot both be set"
+            assert num_random_labels is None, (
+                "labels and num_random_labels cannot both be set"
+            )
 
         labels = np.array(labels)
         label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
