@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.8.0] - unreleased
+## [1.8.0] - 2025-06-13
 
 ### changed
 - ibldsp.voltage.destripe: `k_filter` argument: feeding None to the kfilter does not apply any spatial filter. It is also possible give a function to apply to the data.
