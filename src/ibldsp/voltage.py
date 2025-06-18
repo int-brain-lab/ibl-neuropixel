@@ -772,7 +772,23 @@ def detect_bad_channels(
         )
     )[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
-    ioutside = np.where(xfeats["xcor_lf"] < -0.75)[0]  # fixme: hardcoded threshold
+
+    signal_noisy = xfeats["xcor_lf"]
+    # Filter signal
+    window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
+    kernel = np.ones(window_size) / window_size
+    # Apply convolution
+    signal_filtered = np.convolve(signal_noisy, kernel, mode='same')
+
+    diff_x = np.diff(signal_filtered)
+    indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold
+    if indx.size > 0:
+        indx_threshold = np.floor(np.median(indx)).astype(int)
+        threshold = signal_noisy[indx_threshold]
+        ioutside = np.where(signal_noisy < threshold)[0]
+    else:
+        ioutside = np.array([])
+
     if ioutside.size > 0 and ioutside[-1] == (nc - 1):
         a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
         ioutside = ioutside[a == np.max(a)]
