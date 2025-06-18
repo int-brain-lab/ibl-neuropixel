@@ -601,7 +601,6 @@ class TestSpikeTrains(unittest.TestCase):
         assert venn_info["01"] + venn_info["11"] == 1500
 
 
-
 class TestBadChannelDetection(unittest.TestCase):
     def test_bad_channel_detection(self):
 
@@ -682,6 +681,7 @@ class TestBadChannelDetection(unittest.TestCase):
             np.testing.assert_equal(idead, annotations[pid]['idead'])
             np.testing.assert_equal(inoisy, annotations[pid]['inoisy'])
             np.testing.assert_equal(ioutside, annotations[pid]['ioutside'])
+
 
 class TestRawDataFeatures(unittest.TestCase):
     def setUp(self):
