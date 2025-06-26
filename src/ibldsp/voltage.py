@@ -456,8 +456,9 @@ def decompress_destripe_cbin(
     :param nbatch: (optional) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
      interp 3:outside of brain and discard
-    :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
-     untouched
+    :param reject_channels: (True) True | False | np.array()
+      If True, detects noisy or bad channels and interpolate them, zero out the channels outside the brain.
+      If the labels are already computed, they can be provided as a numpy array.
     :param k_kwargs: (None) arguments for the kfilter function
     :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
     :param k_filter: (True) True | False | None | custom function.
@@ -475,8 +476,11 @@ def decompress_destripe_cbin(
     # handles input parameters
     reader_kwargs = {} if reader_kwargs is None else reader_kwargs
     sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
-    if reject_channels:  # get bad channels if option is on
+    if reject_channels is True:  # get bad channels if option is on
         channel_labels = detect_bad_channels_cbin(sr)
+    elif isinstance(reject_channels, np.ndarray):
+        channel_labels = reject_channels
+        reject_channels = True
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
         sr.fs, butter_kwargs, k_kwargs, k_filter
@@ -502,7 +506,6 @@ def decompress_destripe_cbin(
     DEPHAS = np.exp(
         1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
     )
-
     # if we want to compute the rms ap across the session as well as the saturation
     if compute_rms:
         # creates a saturation memmap, this is a nsamples vector of booleans
