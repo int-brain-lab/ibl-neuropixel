@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.1] - 2025-06-13
+
+### fixed
+- ibldsp.voltage.decompress_destripe_cbin: new option to provide a set of custom bad channel labels for the destriping 
+
+
 ## [1.8.0] - 2025-06-13
 
 ### changed
