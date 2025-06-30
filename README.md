@@ -57,4 +57,7 @@ git tag -a $tag
 git push origin $tag
 ```
 
-Create new release with tag X.Y.Z (will automatically publish to PyPI)
+Create new release with tag X.Y.Z (will automatically publish to PyPI). Here are command line instructions to do so:
+```shell 
+gh release create $tag
+```
