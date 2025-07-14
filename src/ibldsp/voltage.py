@@ -781,7 +781,7 @@ def detect_bad_channels(
     window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
     kernel = np.ones(window_size) / window_size
     # Apply convolution
-    signal_filtered = np.convolve(signal_noisy, kernel, mode='same')
+    signal_filtered = np.convolve(signal_noisy, kernel, mode="same")
 
     diff_x = np.diff(signal_filtered)
     indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold
@@ -934,16 +934,39 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
 
 def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
     """
-    Compute the current source density (CSD) of a given LFP signal recorded on neuropixel 1 or 2
-    :param data: LFP signal (n_channels, n_samples)
-    :param h: trace header dictionary
-    :param n: the n derivative
-    :param method: diff (straight double difference) or kernel CSD (needs the KCSD python package)
-    :param sigma: conductivity, defaults to 1/3 S.m-1
-    :return:
+    Compute the current source density (CSD) of a given LFP signal recorded on Neuropixel probes.
+
+    The CSD estimates the location of current sources and sinks in neural tissue based on
+    the spatial distribution of local field potentials (LFPs). This implementation supports
+    both the standard double-derivative method and kernel CSD method.
+
+    The CSD is computed for each column of the Neuropixel probe layout separately.
+
+    Parameters
+    ----------
+    lfp : numpy.ndarray
+        LFP signal array with shape (n_channels, n_samples)
+    h : dict
+        Trace header dictionary containing probe geometry information with keys:
+        'x', 'y' for electrode coordinates, 'col' for column indices, and 'row' for row indices
+    n : int, optional
+        Order of the derivative for the 'diff' method, defaults to 2
+    method : str, optional
+        Method to compute CSD:
+        - 'diff': standard finite difference method (default)
+        - 'kcsd': kernel CSD method (requires the KCSD Python package)
+    sigma : float, optional
+        Tissue conductivity in Siemens per meter, defaults to 1/3 S.m-1
+
+    Returns
+    -------
+    numpy.ndarray
+        Current source density with the same shape as the input LFP array.
+        Positive values indicate current sources, negative values indicate sinks.
+        Units are in A.m-3 (amperes per cubic meter).
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
-    xy = h["x"] + 1j * h["y"]
+    xy = (h["x"] + 1j * h["y"]) / 1e6
     for col in np.unique(h["col"]):
         ind = np.where(h["col"] == col)[0]
         isort = np.argsort(h["row"][ind])
@@ -990,7 +1013,6 @@ def _svd_denoise(datr, rank):
 
 def svd_denoise_npx(datr, rank=None, collection=None):
     """
-
     :param datr: [nc, ns]
     :param rank:
     :param collection:
