@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.0] - Not released 
+
+### added
+- ibldsp.plots.voltageshow: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
+
+### modified
+- ibldsp.voltage.csd: computations in SI to provide current flux in A.m-3 
+
+### fixed
+- ibldsp.plots.show_channels_labels: noisy channels ambiguity resolved: offending channels are displayed with
+their respective features
+
+
 ## [1.8.1] - 2025-06-13
 
 ### fixed

@@ -966,7 +966,7 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
         Units are in A.m-3 (amperes per cubic meter).
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
-    xy = (h["x"] + 1j * h["y"]) * 1e6
+    xy = (h["x"] + 1j * h["y"]) / 1e6
     for col in np.unique(h["col"]):
         ind = np.where(h["col"] == col)[0]
         isort = np.argsort(h["row"][ind])
