@@ -288,17 +288,17 @@ class NP2Converter:
         self.ratio = int(self.fs_ap / self.fs_lf)
         self.nsamples = nsamples or self.sr.ns
         self.samples_window = nwindow or 2 * self.fs_ap
-        assert np.mod(self.samples_window, self.ratio) == 0, (
-            f"nwindow must be a factor or {self.ratio}"
-        )
+        assert (
+            np.mod(self.samples_window, self.ratio) == 0
+        ), f"nwindow must be a factor or {self.ratio}"
         self.samples_overlap = 576
-        assert np.mod(self.samples_overlap, self.ratio) == 0, (
-            f"samples_overlap must be a factor or {self.ratio}"
-        )
+        assert (
+            np.mod(self.samples_overlap, self.ratio) == 0
+        ), f"samples_overlap must be a factor or {self.ratio}"
         self.samples_taper = int(self.samples_overlap / 4)
-        assert np.mod(self.samples_taper, self.ratio) == 0, (
-            f"samples_taper must be a factor or {self.ratio}"
-        )
+        assert (
+            np.mod(self.samples_taper, self.ratio) == 0
+        ), f"samples_taper must be a factor or {self.ratio}"
         self.taper = np.r_[
             0, scipy.signal.windows.cosine((self.samples_taper - 1) * 2), 0
         ]
@@ -574,9 +574,9 @@ class NP2Converter:
                     chunk[:, self.shank_info[sh]["chns"]] = srs[first:last, :]
                 else:
                     chunk[:, self.shank_info[sh]["chns"][:-1]] = srs[first:last, :-1]
-            assert np.array_equal(expected, chunk), (
-                "data in original file and split files do no match"
-            )
+            assert np.array_equal(
+                expected, chunk
+            ), "data in original file and split files do no match"
 
         # close the sglx instances once we are done checking
         for sh in self.shank_info.keys():

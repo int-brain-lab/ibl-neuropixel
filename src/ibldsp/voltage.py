@@ -781,7 +781,7 @@ def detect_bad_channels(
     window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
     kernel = np.ones(window_size) / window_size
     # Apply convolution
-    signal_filtered = np.convolve(signal_noisy, kernel, mode='same')
+    signal_filtered = np.convolve(signal_noisy, kernel, mode="same")
 
     diff_x = np.diff(signal_filtered)
     indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold

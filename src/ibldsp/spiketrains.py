@@ -31,9 +31,9 @@ def spikes_venn2(
     """
     assert len(samples_tuple) == 2, "Must have 2 sets of samples."
     assert len(channels_tuple) == 2, "Must have 2 sets of channels."
-    assert all(samples_tuple[i].shape == channels_tuple[i].shape for i in range(2)), (
-        "Samples and channels must match for each sorter."
-    )
+    assert all(
+        samples_tuple[i].shape == channels_tuple[i].shape for i in range(2)
+    ), "Samples and channels must match for each sorter."
 
     num_sorters = 2
     return _spikes_venn(
@@ -76,9 +76,9 @@ def spikes_venn3(
     """
     assert len(samples_tuple) == 3, "Must have 3 sets of samples."
     assert len(channels_tuple) == 3, "Must have 3 sets of channels."
-    assert all(samples_tuple[i].shape == channels_tuple[i].shape for i in range(3)), (
-        "Samples and channels must match for each sorter."
-    )
+    assert all(
+        samples_tuple[i].shape == channels_tuple[i].shape for i in range(3)
+    ), "Samples and channels must match for each sorter."
 
     num_sorters = 3
     return _spikes_venn(

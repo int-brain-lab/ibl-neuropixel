@@ -4,8 +4,14 @@ import matplotlib.pyplot as plt
 AP_RANGE_UV = 75
 LF_RANGE_UV = 250
 
+
 def show_channels_labels(
-    raw, fs, channel_labels, xfeats, similarity_threshold=(-0.5, 1), psd_hf_threshold=0.02
+    raw,
+    fs,
+    channel_labels,
+    xfeats,
+    similarity_threshold=(-0.5, 1),
+    psd_hf_threshold=0.02,
 ):
     """
     Shows the features side by side a snippet of raw data
@@ -23,7 +29,11 @@ def show_channels_labels(
         xfeats["xcor_hf"][(iko := channel_labels == 1)], np.arange(nc)[iko], "k*"
     )
     ax[0].plot(  # plot the values above the similarity threshold as noisy in red
-        xfeats["xcor_hf"][(iko :=np.where(xfeats["xcor_hf"] > similarity_threshold[1]))], np.arange(nc)[iko], "r*"
+        xfeats["xcor_hf"][
+            (iko := np.where(xfeats["xcor_hf"] > similarity_threshold[1]))
+        ],
+        np.arange(nc)[iko],
+        "r*",
     )
     ax[0].plot(similarity_threshold[0] * np.ones(2), [0, nc], "k--")
     ax[0].plot(similarity_threshold[1] * np.ones(2), [0, nc], "r--")
@@ -34,7 +44,11 @@ def show_channels_labels(
         title="a) dead channel",
     )
     ax[1].plot(xfeats["psd_hf"], np.arange(nc))
-    ax[1].plot(xfeats["psd_hf"][(iko := xfeats["psd_hf"] > psd_hf_threshold)], np.arange(nc)[iko], "r*")
+    ax[1].plot(
+        xfeats["psd_hf"][(iko := xfeats["psd_hf"] > psd_hf_threshold)],
+        np.arange(nc)[iko],
+        "r*",
+    )
     ax[1].plot(psd_hf_threshold * np.array([1, 1]), [0, nc], "r--")
     ax[1].set(yticklabels=[], xlabel="PSD", ylim=[0, nc], title="b) noisy channel")
     ax[1].sharey(ax[0])
@@ -51,7 +65,16 @@ def show_channels_labels(
     return fig, ax
 
 
-def voltageshow(raw, fs, cmap='PuOr', ax=None, cax=None, cbar_label='Voltage (uV)', scaling=1e6, vrange=None):
+def voltageshow(
+    raw,
+    fs,
+    cmap="PuOr",
+    ax=None,
+    cax=None,
+    cbar_label="Voltage (uV)",
+    scaling=1e6,
+    vrange=None,
+):
     """
     Visualizes electrophysiological voltage data as a heatmap.
 
@@ -83,7 +106,7 @@ def voltageshow(raw, fs, cmap='PuOr', ax=None, cax=None, cbar_label='Voltage (uV
         The image object created by imshow, which can be used for further customization.
     """
     if ax is None:
-        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [1, 0.05]})
+        fig, axs = plt.subplots(1, 2, gridspec_kw={"width_ratios": [1, 0.05]})
         ax, cax = axs
     nc, ns = raw.shape
     default_vrange = LF_RANGE_UV if fs < 2600 else AP_RANGE_UV

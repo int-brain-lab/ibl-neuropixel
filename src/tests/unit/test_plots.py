@@ -7,9 +7,10 @@ import ibldsp.voltage
 
 
 class TestPlots(unittest.TestCase):
-
     def test_voltage(self):
-        ibldsp.plots.voltageshow((np.random.rand(384, 2000) - .5) / 1e6 * 20, fs=30_000)
+        ibldsp.plots.voltageshow(
+            (np.random.rand(384, 2000) - 0.5) / 1e6 * 20, fs=30_000
+        )
 
     def test_bad_channels(self):
         np.random.seed(0)
