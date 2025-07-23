@@ -3,13 +3,16 @@
 ## [1.9.0] - Not released 
 
 ### added
-- ibldsp.plots.voltageshow: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
-
+- `ibldsp.plots.voltageshow`: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
+- new methods and documentation for the `ibldsp.util.WindowGenerator`: 
+  - `wg.slice` returns a straight slice to index the window
+  - `wg.slices_valid` returns 3 slices to index the full window, the valid window, and the valid window relative to the full windo
+  - `wg.splice`: splicing add a fade-in / fade-out in the overlap so that reconstruction has unit amplitude
 ### modified
-- ibldsp.voltage.csd: computations in SI to provide current flux in A.m-3 
+- `ibldsp.voltage.csd`: computations in SI to provide current flux in A.m-3 
 
 ### fixed
-- ibldsp.plots.show_channels_labels: noisy channels ambiguity resolved: offending channels are displayed with
+- `ibldsp.plots.show_channels_labels`: noisy channels ambiguity resolved: offending channels are displayed with
 their respective features
 
 
