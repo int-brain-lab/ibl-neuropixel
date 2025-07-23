@@ -368,6 +368,13 @@ class TestWindowGenerator(unittest.TestCase):
         for first, last, amp in wg.firstlast_splicing:
             sig_out[first:last] = sig_out[first:last] + amp * sig_in[first:last]
         np.testing.assert_allclose(sig_out, sig_in)
+        # now performs the same operation with the new interface
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
+        for slicewin, amp in wg.splice:
+            sig_out[slicewin] = sig_out[slicewin] + amp * sig_in[slicewin]
+        np.testing.assert_allclose(sig_out, sig_in)
 
     def test_firstlast_valid(self):
         sig_in = np.random.randn(600)
@@ -375,6 +382,15 @@ class TestWindowGenerator(unittest.TestCase):
         wg = utils.WindowGenerator(ns=600, nswin=100, overlap=20)
         for first, last, first_valid, last_valid in wg.firstlast_valid:
             sig_out[first_valid:last_valid] = sig_in[first_valid:last_valid]
+        np.testing.assert_array_equal(sig_out, sig_in)
+
+    def test_slices_valid(self):
+        sig_in = np.random.randn(600)
+        sig_out = np.zeros_like(sig_in)
+        wg = utils.WindowGenerator(ns=600, nswin=39, overlap=20)
+        for slice_win, slice_valid, slice_win_valid in wg.slices_valid:
+            win = sig_in[slice_win]
+            sig_out[slice_valid] = win[slice_win_valid]
         np.testing.assert_array_equal(sig_out, sig_in)
 
     def test_tscale(self):

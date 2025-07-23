@@ -66,9 +66,9 @@ def extract_wfs_array(
 
     # check that the spike window is included in the recording:
     last_idx = df["sample"].iloc[-1]
-    assert (
-        last_idx + (spike_length_samples - trough_offset) < arr.shape[1]
-    ), f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
+    assert last_idx + (spike_length_samples - trough_offset) < arr.shape[1], (
+        f"Spike index {last_idx} extends past end of recording ({arr.shape[1]} samples)."
+    )
 
     nwf = len(df)
 
@@ -596,9 +596,9 @@ class WaveformsLoader:
             indices = (
                 np.tile(indices, (labels.size, 1)) if indices.ndim < 2 else indices
             )
-            assert (
-                indices.shape[0] == labels.size
-            ), "If indices is a 2D-array, the second dimension must match the number of clusters."
+            assert indices.shape[0] == labels.size, (
+                "If indices is a 2D-array, the second dimension must match the number of clusters."
+            )
             _, iu, _ = np.intersect1d(
                 self.df_clusters.index, labels, return_indices=True
             )
@@ -656,9 +656,9 @@ class WaveformsLoader:
             else:
                 labels = rg.choice(self.labels, num_random_labels, replace=False)
         else:
-            assert (
-                num_random_labels is None
-            ), "labels and num_random_labels cannot both be set"
+            assert num_random_labels is None, (
+                "labels and num_random_labels cannot both be set"
+            )
 
         labels = np.array(labels)
         label_idx = np.array([np.where(self.labels == label)[0][0] for label in labels])
