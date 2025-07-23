@@ -436,12 +436,12 @@ class WindowGenerator(object):
     def slices_valid(self):
         """
         Generator that yields slices for windowed signal processing with valid regions.
-        
+
         This method generates tuples of slice objects that can be used to extract windows
         from a signal and identify the valid (non-overlapping) portions within each window.
         It's particularly useful for reconstruction operations where overlapping regions
         need special handling.
-        
+
         Yields
         ------
         tuple
@@ -449,16 +449,17 @@ class WindowGenerator(object):
             - slice(first, last): The full window slice
             - slice(first_valid, last_valid): The valid portion of the signal in absolute indices
             - slice_window_valid: The valid portion relative to the window (for use within the window)
-        
+
         Notes
         -----
         This generator relies on the firstlast_valid property which provides the
         indices for both the full windows and their valid regions.
         """
         for first, last, first_valid, last_valid in self.firstlast_valid:
-            slice_window_valid = slice(first_valid - first, None if (lv := -(last - last_valid)) == 0 else lv)
+            slice_window_valid = slice(
+                first_valid - first, None if (lv := -(last - last_valid)) == 0 else lv
+            )
             yield slice(first, last), slice(first_valid, last_valid), slice_window_valid
-
 
     def slice_array(self, sig, axis=-1):
         """
