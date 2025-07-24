@@ -16,6 +16,7 @@
 ### fixed
 - `ibldsp.plots.show_channels_labels`: noisy channels ambiguity resolved: offending channels are displayed with
 their respective features
+- `spikeglx.Reader`: the `ch_file` property was never labeled after having opened a bin file. 
 
 
 ## [1.8.1] - 2025-06-13
@@ -87,7 +88,7 @@ their respective features
 ## [1.4.0] - 2024-10-05
 - Waveform extraction:
   - Optimization of the waveform extractor, outputs flattened waveforms
-  - Refactoring ot the waveform loader with back compability
+  - Refactoring of the waveform loader with back compatibility
 - Bad channel detector:
   - The bad channel detector has a plot option to visualize the bad channels and thresholds
   - The default low-cut filters are set to 300Hz for AP band and 2 Hz for LF band
@@ -122,7 +123,7 @@ their respective features
 
 ## 1.0.1 2024-05-29: support for waveform extraction on non-standard electrode layouts
   - bugfix waveform extraction: the probe channel layout is inferred from the spikeglx metadata by default
-  - bugfix waveform extraction: the channel neighnourhood fill value is the last channel index + 1 by default instead of 384
+  - bugfix waveform extraction: the channel neighbourhood fill value is the last channel index + 1 by default instead of 384
 ## 1.0.0 2024-04-22
 - Functionalities to check and mitigate saturation in neuropixel recordings
   - `spikeglx.Reader` has a `range_volts` method to get the saturating voltage value for a given type of probe

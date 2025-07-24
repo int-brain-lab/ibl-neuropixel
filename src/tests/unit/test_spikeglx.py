@@ -243,6 +243,8 @@ class TestsSpikeGLX_compress(unittest.TestCase):
             with spikeglx.Reader(self.file_cbin, open=False) as sc:
                 self.assertTrue(sc.is_mtscomp)
                 compare_data(sr_ref, sc)
+                # here we make sure the chunks file has been registered as a property
+                self.assertEqual(sc.ch_file, self.file_cbin.with_suffix(".ch"))
 
             # test decompression in-place
             sc.decompress_file(keep_original=False, overwrite=True)
