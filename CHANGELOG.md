@@ -6,8 +6,10 @@
 - `ibldsp.plots.voltageshow`: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
 - new methods and documentation for the `ibldsp.util.WindowGenerator`: 
   - `wg.slice` returns a straight slice to index the window
-  - `wg.slices_valid` returns 3 slices to index the full window, the valid window, and the valid window relative to the full windo
+  - `wg.slices_valid` returns 3 slices to index the full window, the valid window, and the valid window relative to the full window
   - `wg.splice`: splicing add a fade-in / fade-out in the overlap so that reconstruction has unit amplitude
+- `ibldsp.voltage.saturation_cbin`: stand alone tool to compute the `_iblqc_ephysSaturation.samples.npy` file giving saturation intervals from a bin or cbin file
+
 ### modified
 - `ibldsp.voltage.csd`: computations in SI to provide current flux in A.m-3 
 

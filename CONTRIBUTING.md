@@ -6,10 +6,10 @@ The main branch is the trunk and features branches are squashed merge after a su
 
 - [X] make sure the tests pass locally
 - [X] use `ruff format` and `ruff check` to make sure the formatting is correct
-- [X] `CHANGELOG.md` documents the changes, references the PR, the date and the new version number in `setup.py`
+- [X] [CHANGELOG.md](CHANGELOG.md) documents the changes, references the PR, the date and the new version number in `setup.py`
 - [X] create a PR from your feature branch to main
 
-Reviewer steps for a feature PR
+### Reviewer steps for a feature PR
 - [X] the CI passes
 - [X] squash-merge upon a successful review
 
@@ -18,7 +18,6 @@ Reviewer steps for a feature PR
 - [X] create tag corresponding to the version number `X.Y.Z` on the `main` branch
 
 ```shell
-ruff format
 tag=X.Y.Z
 git tag -a $tag 
 git push origin $tag

@@ -3,6 +3,8 @@ Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
 
 import inspect
+import joblib
+import tqdm
 from pathlib import Path
 
 import numpy as np
@@ -264,6 +266,94 @@ def saturation(
     win = scipy.signal.windows.cosine(mute_window_samples)
     mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode="same"))
     return saturation, mute
+
+
+def saturation_cbin(
+    bin_file_path: Path,
+    file_saturation: Path = None,
+    max_voltage=None,
+    n_jobs=4,
+    v_per_sec=1e-8,
+    proportion=0.2,
+    mute_window_samples=7,
+) -> Path:
+    """
+    Detect saturation in a compressed binary (cbin) electrophysiology file and save the results.
+
+    This function processes a SpikeGLX binary file in chunks to identify saturated samples
+    and saves the results as a memory-mapped boolean array. Processing is parallelized
+    for improved performance.
+
+    Parameters
+    ----------
+    bin_file_path : Path | spikeglx.Reader
+        Path to the SpikeGLX binary file to be processed or spikeglx.Reader object
+    file_saturation : Path, optional
+        Path where the saturation data will be saved. If None, defaults to
+        "_iblqc_ephysSaturation.samples.npy" in the same directory as the input file
+    max_voltage : np.float, optional
+        one-sided maximum voltage range (V), if not provided will use the spikeglx metadata
+    n_jobs : int, optional
+        Number of parallel jobs to use for processing, defaults to 4
+    v_per_sec : float, optional
+        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8
+    proportion : float, optional
+        Threshold proportion (0-1) of channels that must be above threshold to consider
+        a sample as saturated, defaults to 0.2
+    mute_window_samples : int, optional
+        Number of samples for the cosine taper applied to the saturation, defaults to 7
+
+    Returns
+    -------
+    Path
+        Path to the file where the saturation data was saved
+    """
+    if isinstance(bin_file_path, spikeglx.Reader):
+        sr = bin_file_path
+        bin_file_path = sr.file_bin
+    else:
+        sr = spikeglx.Reader(bin_file_path)
+    file_saturation = (
+        file_saturation
+        if file_saturation is not None
+        else bin_file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+    )
+    max_voltage = max_voltage if max_voltage is not None else sr.range_volts[:-1]
+    # Create a memory-mapped array
+    _saturation = np.lib.format.open_memmap(
+        file_saturation, dtype=bool, mode="w+", shape=(sr.ns,)
+    )
+    _saturation[:] = False  # Initialize all values to False
+    _saturation.flush()  # Make sure to flush to disk
+
+    wg = ibldsp.utils.WindowGenerator(ns=sr.ns, nswin=2**17, overlap=16)
+
+    # we can parallelize this as there is no conflict on output
+    def _saturation_slice(slice_win, slice_valid, slice_relative_valid):
+        sr = spikeglx.Reader(bin_file_path)
+        data = sr[slice_win, : sr.nc - sr.nsync].T
+        satwin, _ = ibldsp.voltage.saturation(
+            data,
+            max_voltage=max_voltage,
+            fs=sr.fs,
+            v_per_sec=v_per_sec,
+            proportion=proportion,
+            mute_window_samples=mute_window_samples,
+        )
+        _saturation[slice_valid] = satwin[slice_relative_valid]
+        _saturation.flush()
+        # getting the list of jobs as a generator allows running tqdm to monitor progress
+
+    jobs = [
+        joblib.delayed(_saturation_slice)(slw, slv, slrv)
+        for (slw, slv, slrv) in wg.slices_valid
+    ]
+    list(
+        tqdm.tqdm(
+            joblib.Parallel(return_as="generator", n_jobs=n_jobs)(jobs), total=wg.nwin
+        )
+    )
+    return file_saturation
 
 
 def interpolate_bad_channels(
