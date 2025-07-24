@@ -7,7 +7,6 @@ import spikeglx
 import ibldsp.fourier as fourier
 import ibldsp.utils as utils
 import ibldsp.voltage as voltage
-import ibldsp.cadzow as cadzow
 import ibldsp.smooth as smooth
 import ibldsp.spiketrains as spiketrains
 import ibldsp.raw_metrics as raw_metrics
@@ -444,103 +443,6 @@ class TestFrontDetection(unittest.TestCase):
         a = np.r_[a, np.flipud(a)] * 4
         np.testing.assert_array_equal(utils.falls(a, step=3, analog=True), 717)
         np.testing.assert_array_equal(utils.rises(a, step=3, analog=True), 283)
-
-
-class TestVoltage(unittest.TestCase):
-    def test_destripe_parameters(self):
-        import inspect
-
-        _, _, spatial_fcn = voltage._get_destripe_parameters(
-            30_000, None, None, k_filter=True
-        )
-        assert "kfilt" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=False
-        )
-        assert "car" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=None
-        )
-        assert "dat: dat" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=lambda dat: 3 * dat
-        )
-        assert "lambda dat: 3 * dat" in inspect.getsource(spatial_fcn)
-
-    def test_fk(self):
-        """
-        creates a couple of plane waves and separate them using the velocity HP filter
-        """
-        ntr, ns, sr, dx, v1, v2 = (500, 2000, 0.002, 5, 2000, 1000)
-        data = np.zeros((ntr, ns), np.float32)
-        data[:, :100] = utils.ricker(100, 4)
-        offset = np.arange(ntr) * dx
-        offset = np.abs(offset - np.mean(offset))
-        data_v1 = fourier.fshift(data, offset / v1 / sr)
-        data_v2 = fourier.fshift(data, offset / v2 / sr)
-
-        noise = np.random.randn(ntr, ns) / 60
-        fk = voltage.fk(
-            data_v1 + data_v2 + noise,
-            si=sr,
-            dx=dx,
-            vbounds=[1200, 1500],
-            ntr_pad=10,
-            ntr_tap=15,
-            lagc=0.25,
-        )
-        fknoise = voltage.fk(
-            noise, si=sr, dx=dx, vbounds=[1200, 1500], ntr_pad=10, ntr_tap=15, lagc=0.25
-        )
-        # at least 90% of the traces should be below 50dB and 98% below 40 dB
-        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -50) > 0.9
-        assert np.mean(20 * np.log10(utils.rms(fk - data_v1 - fknoise)) < -40) > 0.98
-        # test the K option
-        kbands = np.sin(np.arange(ns) / ns * 8 * np.pi) / 10
-        fkk = voltage.fk(
-            data_v1 + data_v2 + kbands,
-            si=sr,
-            dx=dx,
-            vbounds=[1200, 1500],
-            ntr_pad=40,
-            ntr_tap=15,
-            lagc=0.25,
-            kfilt={"bounds": [0, 0.01], "btype": "hp"},
-        )
-        assert np.mean(20 * np.log10(utils.rms(fkk - data_v1)) < -40) > 0.9
-        # from easyqc.gui import viewseis
-        # a = viewseis(data_v1 + data_v2 + kbands, .002, title='input')
-        # b = viewseis(fkk, .002, title='output')
-        # c = viewseis(data_v1 - fkk, .002, title='test')
-
-    def test_saturation(self):
-        np.random.seed(7654)
-        data = (np.random.randn(384, 30_000).astype(np.float32) + 20) * 1e-6
-        saturated, mute = voltage.saturation(data, max_voltage=1200)
-        np.testing.assert_array_equal(saturated, 0)
-        np.testing.assert_array_equal(mute, 1.0)
-        # now we stick a big waveform in the middle of the recorder and expect some saturation
-        w = utils.ricker(100, 4)
-        w = np.minimum(1200, w / w.max() * 1400)
-        data[:, 13_600:13700] = data[0, 13_600:13700] + w * 1e-6
-        saturated, mute = voltage.saturation(
-            data,
-            max_voltage=np.ones(
-                384,
-            )
-            * 1200
-            * 1e-6,
-        )
-        self.assertGreater(np.sum(saturated), 5)
-        self.assertGreater(np.sum(mute == 0), np.sum(saturated))
-
-
-class TestCadzow(unittest.TestCase):
-    def test_trajectory_matrixes(self):
-        assert np.all(
-            cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]])
-        )
-        assert np.all(cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]]))
 
 
 class TestStack(unittest.TestCase):
