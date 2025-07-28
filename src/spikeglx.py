@@ -144,8 +144,12 @@ class Reader:
         sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
-            ch_file = self.ch_file or _get_companion_file(sglx_file, ".ch")
-            self._raw.open(self.file_bin, ch_file)
+            self.ch_file = (
+                _get_companion_file(sglx_file, ".ch")
+                if self.ch_file is None
+                else self.ch_file
+            )
+            self._raw.open(self.file_bin, self.ch_file)
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
                 if not self.ignore_warnings:  # avoid the checks for streaming data
@@ -411,7 +415,7 @@ class Reader:
         """
         if file_meta is None:
             file_meta = Path(self.file_bin).with_suffix(".meta")
-
+        file_ch = file_ch if file_ch is not None else self.ch_file
         if scratch_dir is None:
             bin_file = Path(self.file_bin).with_suffix(".bin")
         else:
