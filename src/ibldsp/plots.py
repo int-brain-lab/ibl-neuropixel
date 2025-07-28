@@ -74,6 +74,7 @@ def voltageshow(
     cbar_label="Voltage (uV)",
     scaling=1e6,
     vrange=None,
+    **axis_kwargs,
 ):
     """
     Visualizes electrophysiological voltage data as a heatmap.
@@ -100,6 +101,8 @@ def voltageshow(
         Voltage range for the colorbar. Defaults to +/- 75 uV for AP and +/- 250 uV for LF.
     scaling: float, optional
         Unit transform: default is 1e6: we expect Volts but plot uV.
+    **axis_kwargs: optional
+        Additional keyword arguments for the axis properties, fed to the ax.set() method.
     Returns
     -------
     matplotlib.image.AxesImage
@@ -120,9 +123,12 @@ def voltageshow(
         vmax=vrange,
         extent=[0, ns / fs, 0, nc],
     )
-    ax.set(yticklabels=[], title="d) Raw data", xlabel="Time (s)", ylim=[0, nc])
+    # set the axis properties: we use defaults values that can be overridden by user-provided ones
+    axis_kwargs = (
+        dict(ylim=[0, nc], xlabel="Time (s)", ylabel="Depth (μm)") | axis_kwargs
+    )
+    ax.set(**axis_kwargs)
     ax.grid(False)
-
     if cax is not None:
         plt.colorbar(im, cax=cax, shrink=0.8).ax.set(ylabel=cbar_label)
 

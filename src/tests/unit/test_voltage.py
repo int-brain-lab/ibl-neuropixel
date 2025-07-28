@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 import unittest
 
+import pandas as pd
+
 import spikeglx
 import ibldsp.voltage
 import ibldsp.fourier
@@ -105,8 +107,8 @@ class TestSaturation(unittest.TestCase):
             file_saturation = ibldsp.voltage.saturation_cbin(
                 _sr, max_voltage=range_volt, n_jobs=1
             )
-            sat_vector = np.load(file_saturation)
-            assert sat_vector.sum() == 67
+            df_sat = pd.read_parquet(file_saturation)
+            assert np.sum(df_sat["stop_sample"] - df_sat["start_sample"]) == 67
 
     def test_saturation(self):
         np.random.seed(7654)
