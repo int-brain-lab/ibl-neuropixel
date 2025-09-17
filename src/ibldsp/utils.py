@@ -268,12 +268,64 @@ def make_channel_index(geom, radius=200.0, pad_val=None):
 
 class WindowGenerator(object):
     """
-    `wg = WindowGenerator(ns, nswin, overlap)`
+    A utility class for generating sliding windows for signal processing applications.
 
-    Provide sliding windows indices generator for signal processing applications.
-    For straightforward spectrogram / periodogram implementation, prefer scipy methods !
+    WindowGenerator provides various methods to iterate through windows of a signal
+    with configurable window size and overlap. It's particularly useful for operations
+    like spectrograms, filtering, or any processing that requires windowed analysis.
 
-    Example of implementations in test_dsp.py.
+    Parameters
+    ----------
+    ns : int
+        Total number of samples in the signal to be windowed.
+    nswin : int
+        Number of samples in each window.
+    overlap : int
+        Number of samples that overlap between consecutive windows.
+
+    Attributes
+    ----------
+    ns : int
+        Total number of samples in the signal.
+    nswin : int
+        Number of samples in each window.
+    overlap : int
+        Number of samples that overlap between consecutive windows.
+    nwin : int
+        Total number of windows.
+    iw : int or None
+        Current window index during iteration.
+
+    Notes
+    -----
+    For straightforward spectrogram or periodogram implementation,
+    scipy methods are recommended over this class.
+
+    Examples
+    --------
+    # straight windowing without overlap
+    >>> wg = WindowGenerator(ns=1000, nwin=111)
+    >>> signal = np.random.randn(1000)
+    >>> for window_slice in wg.slice:
+    ...     window_data = signal[window_slice]
+    ...     # Process window_data
+
+    # windowing with overlap (ie. buffers for apodization)
+    >>> for win_slice, valid_slice, win_valid_slice in wg.slices_valid:
+    ...     window = signal[win_slice]
+    ...     # Process window
+    ...     processed = some_function_with_edge_effect(window)
+    ...     # Only use the valid portion for reconstruction
+    ...     recons[valid_slice] = processed[win_valid_slice]
+
+    # splicing add a fade-in / fade-out in the overlap so that reconstruction has unit amplitude
+    >>> recons = np.zeros_like(signal)
+    >>> for win_slice, amplitude in wg.splice:
+    ...     window = signal[win_slice]
+    ...     # Process window
+    ...     processed = some_function(window)
+    ...     # The processed windows is weighted with the amplitude and added to the reconstructed signal
+    ...     recons[win_slice] = recons[win_slice] + processed * amplitude
     """
 
     def __init__(self, ns, nswin, overlap):
@@ -289,14 +341,35 @@ class WindowGenerator(object):
         self.iw = None
 
     @property
+    def splice(self):
+        """
+        Generator that yields slices and amplitude arrays for windowed signal processing with splicing.
+
+        This property provides a convenient way to iterate through all windows with their
+        corresponding amplitude arrays for proper signal reconstruction. The amplitude arrays
+        contain tapering values (from a Hann window) at the overlapping regions to ensure
+        unit amplitude of all samples of the original signal
+
+        Yields
+        ------
+        tuple
+            A tuple containing:
+            - slice: A Python slice object representing the current window
+            - amp: A numpy array containing amplitude values for proper splicing/tapering
+              at overlap regions
+
+        Notes
+        -----
+        This is particularly useful for overlap-add methods where windows need to be
+        properly weighted before being combined in the reconstruction process.
+        """
+        for first, last, amp in self.firstlast_splicing:
+            yield slice(first, last), amp
+
+    @property
     def firstlast_splicing(self):
         """
-        Generator that yields the indices as well as an amplitude function that can be used
-        to splice the windows together.
-        In the overlap, the amplitude function gradually transitions the amplitude from one window
-        to the next. The amplitudes always sum to one (ie. windows are symmetrical)
-
-        :return: tuple of (first_index, last_index, amplitude_vector]
+        cf. self.splice
         """
         w = scipy.signal.windows.hann((self.overlap + 1) * 2 + 1, sym=True)[
             1 : self.overlap + 1
@@ -323,7 +396,7 @@ class WindowGenerator(object):
             yield (first, last, first_valid, last_valid)
 
     @property
-    def firstlast(self, return_valid=False):
+    def firstlast(self):
         """
         Generator that yields first and last index of windows
 
@@ -343,12 +416,50 @@ class WindowGenerator(object):
     @property
     def slice(self):
         """
-        Generator that yields slices of windows
+        Generator that yields slice objects for each window in the signal.
 
-        :return: a slice of the window
+        This property provides a convenient way to iterate through all windows
+        defined by the WindowGenerator parameters. Each yielded slice can be
+        used directly to index into the original signal array.
+
+        Yields
+        ------
+        slice
+            A Python slice object representing the current window, defined by
+            its first and last indices. The slice can be used to extract the
+            corresponding window from the original signal.
         """
         for first, last in self.firstlast:
             yield slice(first, last)
+
+    @property
+    def slices_valid(self):
+        """
+        Generator that yields slices for windowed signal processing with valid regions.
+
+        This method generates tuples of slice objects that can be used to extract windows
+        from a signal and identify the valid (non-overlapping) portions within each window.
+        It's particularly useful for reconstruction operations where overlapping regions
+        need special handling.
+
+        Yields
+        ------
+        tuple
+            A tuple containing three slice objects:
+            - slice(first, last): The full window slice
+            - slice(first_valid, last_valid): The valid portion of the signal in absolute indices
+            - slice_window_valid: The valid portion relative to the window (for use within the window)
+
+        Notes
+        -----
+        This generator relies on the firstlast_valid property which provides the
+        indices for both the full windows and their valid regions.
+        """
+        for first, last, first_valid, last_valid in self.firstlast_valid:
+            slice_window_valid = slice(
+                first_valid - first, None if (lv := -(last - last_valid)) == 0 else lv
+            )
+            yield slice(first, last), slice(first_valid, last_valid), slice_window_valid
 
     def slice_array(self, sig, axis=-1):
         """
