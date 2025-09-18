@@ -745,6 +745,9 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
+        # Save the rms data using the original channel index
+        unsort = np.argsort(sr.raw_channel_order)[:-sr.nsync]
+        rms_data = rms_data[:, unsort]
         output_qc_path = (
             output_file.parent if output_qc_path is None else output_qc_path
         )
