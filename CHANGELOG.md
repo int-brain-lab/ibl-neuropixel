@@ -17,6 +17,7 @@
 - `ibldsp.plots.show_channels_labels`: noisy channels ambiguity resolved: offending channels are displayed with
 their respective features
 - `spikeglx.Reader`: the `ch_file` property was never labeled after having opened a bin file. 
+- `ibldsp.voltage.decompress_destripe_cbin` saves the ephysTimeRmsAP.rms in the original channel order
 
 
 ## [1.8.1] - 2025-06-13
