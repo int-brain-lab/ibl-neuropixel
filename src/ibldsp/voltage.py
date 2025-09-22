@@ -219,6 +219,7 @@ def kfilt(
         xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu)
     if ntr_pad > 0:
         # pad the array with a mirrored version of itself and apply a cosine taper
+        ntr_pad = np.min([ntr_pad, xf.shape[0]])
         xf = gp.r_[gp.flipud(xf[:ntr_pad]), xf, gp.flipud(xf[-ntr_pad:])]
     if ntr_tap > 0:
         taper = fourier.fcn_cosine([0, ntr_tap], gpu=gpu)(gp.arange(nxp))  # taper up
