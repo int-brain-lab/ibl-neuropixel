@@ -269,6 +269,28 @@ def saturation(
     return saturation, mute
 
 
+def saturation_samples_to_intervals(
+    _saturation: np.ndarray, output_file: Path = None
+) -> pd.DataFrame:
+    """
+    Convert a flat npy file to a table with saturation intervals.
+    :param _saturation: np.ndarray: Boolean array with saturation samples set as True
+    :return:
+    """
+    assert not _saturation[0]
+    ind, pol = ibldsp.utils.fronts(_saturation.astype(np.int8))
+    # if the last sample is positive, make sure the interval is closed by providing an even number of events
+    if len(pol) > 0 and pol[-1] == 1:
+        pol = np.r_[pol, -1]
+        ind = np.r_[ind, _saturation.shape[0] - 1]
+    df_saturation = pd.DataFrame(
+        np.c_[ind[::2], ind[1::2]], columns=["start_sample", "stop_sample"]
+    )
+    if output_file is not None:
+        df_saturation.to_parquet(output_file)
+    return df_saturation
+
+
 def saturation_cbin(
     bin_file_path: Path,
     file_saturation: Path = None,
@@ -354,7 +376,11 @@ def saturation_cbin(
             joblib.Parallel(return_as="generator", n_jobs=n_jobs)(jobs), total=wg.nwin
         )
     )
-    return file_saturation
+
+    _ = saturation_samples_to_intervals(
+        _saturation, output_file=file_saturation.with_suffix(".pqt")
+    )
+    return file_saturation.with_suffix(".pqt")
 
 
 def interpolate_bad_channels(
