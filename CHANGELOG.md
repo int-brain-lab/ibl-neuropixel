@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.9.0] - Not released 
+## [1.9.0] - 2025-09-23
 
 ### added
 - `ibldsp.plots.voltageshow`: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
@@ -17,6 +17,8 @@
 - `ibldsp.plots.show_channels_labels`: noisy channels ambiguity resolved: offending channels are displayed with
 their respective features
 - `spikeglx.Reader`: the `ch_file` property was never labeled after having opened a bin file. 
+- `ibldsp.voltage.decompress_destripe_cbin` saves the ephysTimeRmsAP.rms in the original channel order
+- `ibldsp.voltage.kfilt` handles padding of channels when number of channels less than ntr_pd
 
 
 ## [1.8.1] - 2025-06-13

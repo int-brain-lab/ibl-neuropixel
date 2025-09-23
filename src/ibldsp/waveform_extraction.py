@@ -280,6 +280,7 @@ def extract_wfs_cbin(
     chunksize_samples=int(30_000),
     reader_kwargs=None,
     n_jobs=None,
+    wfs_dtype=np.float32,
     preprocess_steps=None,
     seed=None,
     scratch_dir=None,

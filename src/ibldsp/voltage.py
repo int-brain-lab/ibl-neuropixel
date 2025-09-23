@@ -219,6 +219,7 @@ def kfilt(
         xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu)
     if ntr_pad > 0:
         # pad the array with a mirrored version of itself and apply a cosine taper
+        ntr_pad = np.min([ntr_pad, xf.shape[0]])
         xf = gp.r_[gp.flipud(xf[:ntr_pad]), xf, gp.flipud(xf[-ntr_pad:])]
     if ntr_tap > 0:
         taper = fourier.fcn_cosine([0, ntr_tap], gpu=gpu)(gp.arange(nxp))  # taper up
@@ -745,6 +746,9 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
+        # Save the rms data using the original channel index
+        unsort = np.argsort(sr.raw_channel_order)[: -sr.nsync]
+        rms_data = rms_data[:, unsort]
         output_qc_path = (
             output_file.parent if output_qc_path is None else output_qc_path
         )
