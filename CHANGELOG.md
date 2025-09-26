@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.9.0] - 2025-09-23
+
+### added
+- `ibldsp.plots.voltageshow`: displays raw data snippets for LFP / AP / CSD with a matplotlib backend
+- new methods and documentation for the `ibldsp.util.WindowGenerator`: 
+  - `wg.slice` returns a straight slice to index the window
+  - `wg.slices_valid` returns 3 slices to index the full window, the valid window, and the valid window relative to the full window
+  - `wg.splice`: splicing add a fade-in / fade-out in the overlap so that reconstruction has unit amplitude
+- `ibldsp.voltage.saturation_cbin`: stand-alone tool to compute the `_iblqc_ephysSaturation.samples.pqt` file giving saturation intervals from a bin or cbin file
+
+### modified
+- `ibldsp.voltage.csd`: computations in SI to provide current flux in A.m-3 
+
+### fixed
+- `ibldsp.plots.show_channels_labels`: noisy channels ambiguity resolved: offending channels are displayed with
+their respective features
+- `spikeglx.Reader`: the `ch_file` property was never labeled after having opened a bin file. 
+- `ibldsp.voltage.decompress_destripe_cbin` saves the ephysTimeRmsAP.rms in the original channel order
+- `ibldsp.voltage.kfilt` handles padding of channels when number of channels less than ntr_pd
+
+
+## [1.8.1] - 2025-06-13
+
+### fixed
+- ibldsp.voltage.decompress_destripe_cbin: new option to provide a set of custom bad channel labels for the destriping 
+
+
+## [1.8.0] - 2025-06-13
+
+### changed
+- ibldsp.voltage.destripe: `k_filter` argument: feeding None to the kfilter does not apply any spatial filter. It is also possible give a function to apply to the data.
+- ibldsp.utils.make_channel_index: allow a dictionary as an input to compute neighbour distances 
+- ibldsp.cadzow.trajectory: allows defining dtype of trajectory for time domain applications
+
+### Added
+- waveforms.get_waveforms_coordinates(): allows finding the indices of raw traces from waveform datasets
+
+## [1.7.1] - 2025-05-22
+### fixed
+- remove the offset introduced to sync_timestamps that causes errors downstream due to in place assignment
+
+## [1.7.0] - 2025-05-20
+
+### changed
+- spikeglx.decompress_to_scratch: supports a custom ch file with a different naming convention (for SDSC datasets)
+
+### fixed
+- neuropixel.NP2Converter: keeps the original NP2 AP band samples in int16 instead of doing a round-trip via float32
+- ibldsp.voltage.destripe_lfp: accepts spurious arguments for back-compatibility
+
 ## [1.6.3] - 2025-01-15
 
 ### changed
@@ -40,7 +90,7 @@
 ## [1.4.0] - 2024-10-05
 - Waveform extraction:
   - Optimization of the waveform extractor, outputs flattened waveforms
-  - Refactoring ot the waveform loader with back compability
+  - Refactoring of the waveform loader with back compatibility
 - Bad channel detector:
   - The bad channel detector has a plot option to visualize the bad channels and thresholds
   - The default low-cut filters are set to 300Hz for AP band and 2 Hz for LF band
@@ -49,11 +99,11 @@
 
 - Hotfix for WaveformsLoader label ids
 
-## 1.3.1 2024-09-05
+## [1.3.1] 2024-09-05
 
 - Hotfix for running tests with PyPI install
 
-## 1.3.0 2024-09-05
+## [1.3.0] 2024-09-05
 
 - Add support for NPultra high-density probes
 - NumPy and SciPy version floors
@@ -75,7 +125,7 @@
 
 ## 1.0.1 2024-05-29: support for waveform extraction on non-standard electrode layouts
   - bugfix waveform extraction: the probe channel layout is inferred from the spikeglx metadata by default
-  - bugfix waveform extraction: the channel neighnourhood fill value is the last channel index + 1 by default instead of 384
+  - bugfix waveform extraction: the channel neighbourhood fill value is the last channel index + 1 by default instead of 384
 ## 1.0.0 2024-04-22
 - Functionalities to check and mitigate saturation in neuropixel recordings
   - `spikeglx.Reader` has a `range_volts` method to get the saturating voltage value for a given type of probe

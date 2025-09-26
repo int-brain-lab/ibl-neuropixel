@@ -2,6 +2,9 @@
 Module to work with raw voltage traces. Spike sorting pre-processing functions.
 """
 
+import inspect
+import joblib
+import tqdm
 from pathlib import Path
 
 import numpy as np
@@ -216,6 +219,7 @@ def kfilt(
         xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu)
     if ntr_pad > 0:
         # pad the array with a mirrored version of itself and apply a cosine taper
+        ntr_pad = np.min([ntr_pad, xf.shape[0]])
         xf = gp.r_[gp.flipud(xf[:ntr_pad]), xf, gp.flipud(xf[-ntr_pad:])]
     if ntr_tap > 0:
         taper = fourier.fcn_cosine([0, ntr_tap], gpu=gpu)(gp.arange(nxp))  # taper up
@@ -263,6 +267,120 @@ def saturation(
     win = scipy.signal.windows.cosine(mute_window_samples)
     mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode="same"))
     return saturation, mute
+
+
+def saturation_samples_to_intervals(
+    _saturation: np.ndarray, output_file: Path = None
+) -> pd.DataFrame:
+    """
+    Convert a flat npy file to a table with saturation intervals.
+    :param _saturation: np.ndarray: Boolean array with saturation samples set as True
+    :return:
+    """
+    assert not _saturation[0]
+    ind, pol = ibldsp.utils.fronts(_saturation.astype(np.int8))
+    # if the last sample is positive, make sure the interval is closed by providing an even number of events
+    if len(pol) > 0 and pol[-1] == 1:
+        pol = np.r_[pol, -1]
+        ind = np.r_[ind, _saturation.shape[0] - 1]
+    df_saturation = pd.DataFrame(
+        np.c_[ind[::2], ind[1::2]], columns=["start_sample", "stop_sample"]
+    )
+    if output_file is not None:
+        df_saturation.to_parquet(output_file)
+    return df_saturation
+
+
+def saturation_cbin(
+    bin_file_path: Path,
+    file_saturation: Path = None,
+    max_voltage=None,
+    n_jobs=4,
+    v_per_sec=1e-8,
+    proportion=0.2,
+    mute_window_samples=7,
+) -> Path:
+    """
+    Detect saturation in a compressed binary (cbin) electrophysiology file and save the results.
+
+    This function processes a SpikeGLX binary file in chunks to identify saturated samples
+    and saves the results as a memory-mapped boolean array. Processing is parallelized
+    for improved performance.
+
+    Parameters
+    ----------
+    bin_file_path : Path | spikeglx.Reader
+        Path to the SpikeGLX binary file to be processed or spikeglx.Reader object
+    file_saturation : Path, optional
+        Path where the saturation data will be saved. If None, defaults to
+        "_iblqc_ephysSaturation.samples.npy" in the same directory as the input file
+    max_voltage : np.float, optional
+        one-sided maximum voltage range (V), if not provided will use the spikeglx metadata
+    n_jobs : int, optional
+        Number of parallel jobs to use for processing, defaults to 4
+    v_per_sec : float, optional
+        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8
+    proportion : float, optional
+        Threshold proportion (0-1) of channels that must be above threshold to consider
+        a sample as saturated, defaults to 0.2
+    mute_window_samples : int, optional
+        Number of samples for the cosine taper applied to the saturation, defaults to 7
+
+    Returns
+    -------
+    Path
+        Path to the file where the saturation data was saved
+    """
+    if isinstance(bin_file_path, spikeglx.Reader):
+        sr = bin_file_path
+        bin_file_path = sr.file_bin
+    else:
+        sr = spikeglx.Reader(bin_file_path)
+    file_saturation = (
+        file_saturation
+        if file_saturation is not None
+        else bin_file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+    )
+    max_voltage = max_voltage if max_voltage is not None else sr.range_volts[:-1]
+    # Create a memory-mapped array
+    _saturation = np.lib.format.open_memmap(
+        file_saturation, dtype=bool, mode="w+", shape=(sr.ns,)
+    )
+    _saturation[:] = False  # Initialize all values to False
+    _saturation.flush()  # Make sure to flush to disk
+
+    wg = ibldsp.utils.WindowGenerator(ns=sr.ns, nswin=2**17, overlap=16)
+
+    # we can parallelize this as there is no conflict on output
+    def _saturation_slice(slice_win, slice_valid, slice_relative_valid):
+        sr = spikeglx.Reader(bin_file_path)
+        data = sr[slice_win, : sr.nc - sr.nsync].T
+        satwin, _ = ibldsp.voltage.saturation(
+            data,
+            max_voltage=max_voltage,
+            fs=sr.fs,
+            v_per_sec=v_per_sec,
+            proportion=proportion,
+            mute_window_samples=mute_window_samples,
+        )
+        _saturation[slice_valid] = satwin[slice_relative_valid]
+        _saturation.flush()
+        # getting the list of jobs as a generator allows running tqdm to monitor progress
+
+    jobs = [
+        joblib.delayed(_saturation_slice)(slw, slv, slrv)
+        for (slw, slv, slrv) in wg.slices_valid
+    ]
+    list(
+        tqdm.tqdm(
+            joblib.Parallel(return_as="generator", n_jobs=n_jobs)(jobs), total=wg.nwin
+        )
+    )
+
+    _ = saturation_samples_to_intervals(
+        _saturation, output_file=file_saturation.with_suffix(".pqt")
+    )
+    return file_saturation.with_suffix(".pqt")
 
 
 def interpolate_bad_channels(
@@ -320,8 +438,13 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
             "lagc": lagc,
             "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
         }
-    if k_filter:
+    # True: k-filter | None: nothing | function: apply function | otherwise: CAR
+    if k_filter is True:
         spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+    elif k_filter is None:
+        spatial_fcn = lambda dat: dat  # noqa
+    elif inspect.isfunction(k_filter):
+        spatial_fcn = k_filter
     else:
         spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
     return butter_kwargs, k_kwargs, spatial_fcn
@@ -382,7 +505,13 @@ def destripe(
 
 
 def destripe_lfp(
-    x, fs, h=None, channel_labels=None, butter_kwargs=None, k_filter=False
+    x,
+    fs,
+    h=None,
+    channel_labels=None,
+    butter_kwargs=None,
+    k_filter=False,
+    **kwargs,
 ):
     """
     Wrapper around the destripe function with some default parameters to destripe the LFP band
@@ -444,11 +573,16 @@ def decompress_destripe_cbin(
     :param nbatch: (optional) batch size
     :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
      interp 3:outside of brain and discard
-    :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
-     untouched
+    :param reject_channels: (True) True | False | np.array()
+      If True, detects noisy or bad channels and interpolate them, zero out the channels outside the brain.
+      If the labels are already computed, they can be provided as a numpy array.
     :param k_kwargs: (None) arguments for the kfilter function
     :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
-    :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
+    :param k_filter: (True) True | False | None | custom function.
+      If a function is provided (lambda or otherwise), apply the function to each batch (nc, ns)
+      True: Performs a k-filter
+      None: Do nothing
+      False and otherwise performs a median common average referencing
     :param output_qc_path: (None) if specified, will save the QC rms in a different location than the output
     :return:
     """
@@ -459,8 +593,11 @@ def decompress_destripe_cbin(
     # handles input parameters
     reader_kwargs = {} if reader_kwargs is None else reader_kwargs
     sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
-    if reject_channels:  # get bad channels if option is on
+    if reject_channels is True:  # get bad channels if option is on
         channel_labels = detect_bad_channels_cbin(sr)
+    elif isinstance(reject_channels, np.ndarray):
+        channel_labels = reject_channels
+        reject_channels = True
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
         sr.fs, butter_kwargs, k_kwargs, k_filter
@@ -486,7 +623,6 @@ def decompress_destripe_cbin(
     DEPHAS = np.exp(
         1j * np.angle(fft_object(dephas)) * h["sample_shift"][:, np.newaxis]
     )
-
     # if we want to compute the rms ap across the session as well as the saturation
     if compute_rms:
         # creates a saturation memmap, this is a nsamples vector of booleans
@@ -636,6 +772,9 @@ def decompress_destripe_cbin(
         saturation_data = np.load(file_saturation)
         assert rms_data.shape[0] == time_data.shape[0] * ncv
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
+        # Save the rms data using the original channel index
+        unsort = np.argsort(sr.raw_channel_order)[: -sr.nsync]
+        rms_data = rms_data[:, unsort]
         output_qc_path = (
             output_file.parent if output_qc_path is None else output_qc_path
         )
@@ -756,7 +895,23 @@ def detect_bad_channels(
         )
     )[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
-    ioutside = np.where(xfeats["xcor_lf"] < -0.75)[0]  # fixme: hardcoded threshold
+
+    signal_noisy = xfeats["xcor_lf"]
+    # Filter signal
+    window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
+    kernel = np.ones(window_size) / window_size
+    # Apply convolution
+    signal_filtered = np.convolve(signal_noisy, kernel, mode="same")
+
+    diff_x = np.diff(signal_filtered)
+    indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold
+    if indx.size > 0:
+        indx_threshold = np.floor(np.median(indx)).astype(int)
+        threshold = signal_noisy[indx_threshold]
+        ioutside = np.where(signal_noisy < threshold)[0]
+    else:
+        ioutside = np.array([])
+
     if ioutside.size > 0 and ioutside[-1] == (nc - 1):
         a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])
         ioutside = ioutside[a == np.max(a)]
@@ -899,16 +1054,39 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
 
 def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
     """
-    Compute the current source density (CSD) of a given LFP signal recorded on neuropixel 1 or 2
-    :param data: LFP signal (n_channels, n_samples)
-    :param h: trace header dictionary
-    :param n: the n derivative
-    :param method: diff (straight double difference) or kernel CSD (needs the KCSD python package)
-    :param sigma: conductivity, defaults to 1/3 S.m-1
-    :return:
+    Compute the current source density (CSD) of a given LFP signal recorded on Neuropixel probes.
+
+    The CSD estimates the location of current sources and sinks in neural tissue based on
+    the spatial distribution of local field potentials (LFPs). This implementation supports
+    both the standard double-derivative method and kernel CSD method.
+
+    The CSD is computed for each column of the Neuropixel probe layout separately.
+
+    Parameters
+    ----------
+    lfp : numpy.ndarray
+        LFP signal array with shape (n_channels, n_samples)
+    h : dict
+        Trace header dictionary containing probe geometry information with keys:
+        'x', 'y' for electrode coordinates, 'col' for column indices, and 'row' for row indices
+    n : int, optional
+        Order of the derivative for the 'diff' method, defaults to 2
+    method : str, optional
+        Method to compute CSD:
+        - 'diff': standard finite difference method (default)
+        - 'kcsd': kernel CSD method (requires the KCSD Python package)
+    sigma : float, optional
+        Tissue conductivity in Siemens per meter, defaults to 1/3 S.m-1
+
+    Returns
+    -------
+    numpy.ndarray
+        Current source density with the same shape as the input LFP array.
+        Positive values indicate current sources, negative values indicate sinks.
+        Units are in A.m-3 (amperes per cubic meter).
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
-    xy = h["x"] + 1j * h["y"]
+    xy = (h["x"] + 1j * h["y"]) / 1e6
     for col in np.unique(h["col"]):
         ind = np.where(h["col"] == col)[0]
         isort = np.argsort(h["row"][ind])
@@ -955,7 +1133,6 @@ def _svd_denoise(datr, rank):
 
 def svd_denoise_npx(datr, rank=None, collection=None):
     """
-
     :param datr: [nc, ns]
     :param rank:
     :param collection:

@@ -39,22 +39,4 @@ The following describes the methods implemented in this repository.
 https://doi.org/10.6084/m9.figshare.19705522
 
 ## Contribution
-Contribution checklist:
-- run tests
-- ruff format
-- PR to main
-
-
-Pypi Release checklist:
-- Edit the version number in `setup.py`
-- add release notes in `release_notes.md`
-
-
-```shell
-flake8
-tag=X.Y.Z
-git tag -a $tag 
-git push origin %tag
-```
-
-Create new release with tag X.Y.Z (will automatically publish to PyPI)
+Please see our [contribution guidelines](CONTRIBUTING.md) for details on how to contribute to this project.

@@ -266,6 +266,11 @@ class NP2Converter:
         self.np_version = spikeglx._get_neuropixel_version_from_meta(self.sr.meta)
         self.check_metadata()
         self.init_params()
+        self.n_shanks = len(
+            np.unique(spikeglx._map_channels_from_meta(self.sr.meta)["shank"]).astype(
+                np.int16
+            )
+        )
 
     def init_params(self, nsamples=None, nwindow=None, extra=None, nshank=None):
         """
@@ -283,17 +288,17 @@ class NP2Converter:
         self.ratio = int(self.fs_ap / self.fs_lf)
         self.nsamples = nsamples or self.sr.ns
         self.samples_window = nwindow or 2 * self.fs_ap
-        assert (
-            np.mod(self.samples_window, self.ratio) == 0
-        ), f"nwindow must be a factor or {self.ratio}"
+        assert np.mod(self.samples_window, self.ratio) == 0, (
+            f"nwindow must be a factor or {self.ratio}"
+        )
         self.samples_overlap = 576
-        assert (
-            np.mod(self.samples_overlap, self.ratio) == 0
-        ), f"samples_overlap must be a factor or {self.ratio}"
+        assert np.mod(self.samples_overlap, self.ratio) == 0, (
+            f"samples_overlap must be a factor or {self.ratio}"
+        )
         self.samples_taper = int(self.samples_overlap / 4)
-        assert (
-            np.mod(self.samples_taper, self.ratio) == 0
-        ), f"samples_taper must be a factor or {self.ratio}"
+        assert np.mod(self.samples_taper, self.ratio) == 0, (
+            f"samples_taper must be a factor or {self.ratio}"
+        )
         self.taper = np.r_[
             0, scipy.signal.windows.cosine((self.samples_taper - 1) * 2), 0
         ]
@@ -329,8 +334,13 @@ class NP2Converter:
         :param overwrite:
         :return:
         """
-        if self.np_version == "NP2.4":
+        if self.np_version == "NP2.4" and self.n_shanks > 1:
             status = self._process_NP24(overwrite=overwrite)
+        elif self.np_version == "NP2.4" and self.n_shanks == 1:
+            _logger.info(
+                f"Detected {self.np_version} but only 1 shank, will process as NP2.1"
+            )
+            status = self._process_NP21(overwrite=overwrite)
         elif self.np_version == "NP2.1":
             status = self._process_NP21(overwrite=overwrite)
         else:
@@ -366,8 +376,8 @@ class NP2Converter:
         wg = WindowGenerator(self.nsamples, self.samples_window, self.samples_overlap)
 
         for first, last in wg.firstlast:
-            chunk_ap = self.sr[first:last, : self.napch].T
-            chunk_ap_sync = self.sr[first:last, self.idxsyncch :].T
+            chunk_ap = self.sr._raw[first:last, : self.napch].T
+            chunk_ap_sync = self.sr._raw[first:last, self.idxsyncch :].T
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
             chunk_lf_sync = self.extract_lfp_sync(
                 self.sr[first:last, self.idxsyncch :].T
@@ -564,9 +574,9 @@ class NP2Converter:
                     chunk[:, self.shank_info[sh]["chns"]] = srs[first:last, :]
                 else:
                     chunk[:, self.shank_info[sh]["chns"][:-1]] = srs[first:last, :-1]
-            assert np.array_equal(
-                expected, chunk
-            ), "data in original file and split files do no match"
+            assert np.array_equal(expected, chunk), (
+                "data in original file and split files do no match"
+            )
 
         # close the sglx instances once we are done checking
         for sh in self.shank_info.keys():
@@ -584,7 +594,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["ap_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
 
             sr_ap = spikeglx.Reader(bin_file)
             cbin_file = sr_ap.compress_file(**kwargs)
@@ -595,7 +606,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["lf_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
             sr_lf = spikeglx.Reader(bin_file)
             cbin_file = sr_lf.compress_file(**kwargs)
             sr_lf.close()
@@ -618,7 +630,8 @@ class NP2Converter:
             bin_file = self.shank_info[sh]["lf_file"]
             if overwrite:
                 cbin_file = bin_file.with_suffix(".cbin")
-                cbin_file.unlink()
+                if cbin_file.exists():
+                    cbin_file.unlink()
             sr_lf = spikeglx.Reader(bin_file)
             cbin_file = sr_lf.compress_file()
             sr_lf.close()
@@ -672,14 +685,20 @@ class NP2Converter:
         if wg.iw == wg.nwin - 1:
             ind2save[1] = int(self.samples_window / ratio)
 
-        chunk2save = (
-            np.c_[
-                chunk[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][: self.napch],
-                chunk_sync[:, slice(*ind2save)].T
-                / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
+        if etype == "lf":
+            chunk2save = (
+                np.c_[
+                    chunk[:, slice(*ind2save)].T
+                    / self.sr.channel_conversion_sample2v[etype][: self.napch],
+                    chunk_sync[:, slice(*ind2save)].T
+                    / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
+                ]
+            ).astype(np.int16)
+        else:
+            chunk2save = np.c_[
+                chunk[:, slice(*ind2save)].T,
+                chunk_sync[:, slice(*ind2save)].T,
             ]
-        ).astype(np.int16)
 
         return chunk2save
 

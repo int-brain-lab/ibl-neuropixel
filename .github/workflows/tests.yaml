@@ -41,5 +41,5 @@ jobs:
       - name: CPU unit tests
         shell: bash -l {0}
         run: |
-          cd ibl-neuropixel/src/tests/unit/cpu
+          cd ibl-neuropixel/src/tests/unit
           python -m unittest discover
