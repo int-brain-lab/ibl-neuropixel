@@ -392,8 +392,9 @@ class Reader:
         if "out" not in kwargs:
             kwargs["out"] = self.file_bin.with_suffix(".bin")
         assert self.is_mtscomp
+        ch_file = self.file_bin.with_suffix(".ch") if self.ch_file is None else self.ch_file
         r = mtscomp.decompress(
-            self.file_bin, self.file_bin.with_suffix(".ch"), **kwargs
+            self.file_bin, ch_file, **kwargs
         )
         r.close()
         if not keep_original:
@@ -415,7 +416,7 @@ class Reader:
             bin_file = (
                 Path(scratch_dir).joinpath(self.file_bin.name).with_suffix(".bin")
             )
-            shutil.copy(self.file_meta_data, bin_file.with_suffix(".meta"))
+            shutil.copy(self.file_meta_data, bin_file.parent / self.file_meta_data.name)
         if not bin_file.exists():
             t0 = time.time()
             _logger.info("File is compressed, decompressing to a temporary file...")
