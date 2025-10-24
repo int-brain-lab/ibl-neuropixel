@@ -9,6 +9,53 @@ Minimum Python version supported is 3.10
 
 ## Destriping
 ### Getting started
+
+#### Compress a binary file losslessly using `mtscomp`
+
+The mtscomp util implements fast chunked compression for neurophysiology data in a single shard.
+Package repository is [here](https://github.com/int-brain-lab/mtscomp).
+
+
+```python
+from pathlib import Path
+import spikeglx
+file_spikeglx = Path('/datadisk/neuropixel/file.imec0.ap.bin')
+sr = spikeglx.Reader(file_spikeglx)
+sr.compress_file()
+# note: you can use sr.compress_file(keep_original=False) to also remove the orginal bin file
+```
+
+#### Reading raw spikeglx file and manipulating arrays
+
+The mtscomp util implements fast chunked compression for neurophysiology data in a single shard.
+Package repository is [here](https://github.com/int-brain-lab/mtscomp).
+
+```python
+from pathlib import Path
+import spikeglx
+
+import ibldsp.voltage
+
+file_spikeglx = Path('/datadisk/Data/neuropixel/human/Pt01.imec0.ap.bin')
+sr = spikeglx.Reader(file_spikeglx)
+
+# reads in 300ms of data
+raw = sr[10_300_000:10_310_000, :sr.nc - sr.nsync].T
+destripe = ibldsp.voltage.destripe(raw, fs=sr.fs, neuropixel_version=1)
+
+# display with matplotlib backend
+import ibldsp.plots
+ibldsp.plots.voltageshow(raw, fs=sr.fs, title='raw')
+ibldsp.plots.voltageshow(destripe, fs=sr.fs, title='destripe')
+
+# display with QT backend
+from viewephys.gui import viewephys
+eqc = {}
+eqc['raw'] = viewephys(raw, fs=sr.fs, title='raw')
+eqc['destripe'] = viewephys(destripe, fs=sr.fs, title='destripe')
+```
+
+#### Destripe a binary file
 This relies on a fast fourier transform external library: `pip install pyfftw`.
 
 Minimal working example to destripe a neuropixel binary file. 
