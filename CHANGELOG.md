@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1] - 2025-11-05
+
+### fixed
+- `ibldsp.voltage`: the decompress destripe cbin function returns saturation intervals in parquet format instead of a large boolean array
+- `spikeglx.Reader`: supports an explicit *.ch file argument
+= `ibldsp.utils`: parabolic max interpolation uses nanargmax instead of argmax
+
 ## [1.9.0] - 2025-09-23
 
 ### added

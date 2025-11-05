@@ -396,10 +396,10 @@ class Reader:
         if "out" not in kwargs:
             kwargs["out"] = self.file_bin.with_suffix(".bin")
         assert self.is_mtscomp
-        ch_file = self.file_bin.with_suffix(".ch") if self.ch_file is None else self.ch_file
-        r = mtscomp.decompress(
-            self.file_bin, ch_file, **kwargs
+        ch_file = (
+            self.file_bin.with_suffix(".ch") if self.ch_file is None else self.ch_file
         )
+        r = mtscomp.decompress(self.file_bin, ch_file, **kwargs)
         r.close()
         if not keep_original:
             self.close()

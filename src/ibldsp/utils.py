@@ -382,7 +382,6 @@ class WindowGenerator(object):
             amp[-self.overlap :] = 1 if last == self.ns else np.flipud(w)
             yield (first, last, amp)
 
-
     def firstlast_valid(self, discard_edges=False):
         """
         Generator that yields a tuple of first, last, first_valid, last_valid index of windows
@@ -391,8 +390,14 @@ class WindowGenerator(object):
         """
         assert self.overlap % 2 == 0, "Overlap must be even"
         for first, last in self.firstlast:
-            first_valid = 0 if first == 0 and not discard_edges else first + self.overlap // 2
-            last_valid = last if last == self.ns and not discard_edges else last - self.overlap // 2
+            first_valid = (
+                0 if first == 0 and not discard_edges else first + self.overlap // 2
+            )
+            last_valid = (
+                last
+                if last == self.ns and not discard_edges
+                else last - self.overlap // 2
+            )
             yield (first, last, first_valid, last_valid)
 
     @property
