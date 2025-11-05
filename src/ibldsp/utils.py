@@ -89,7 +89,7 @@ def parabolic_max(x):
     # for 2D arrays, operate along the last dimension
     ns = x.shape[-1]
     axis = -1
-    imax = np.argmax(x, axis=axis)
+    imax = np.nanargmax(x, axis=axis)
 
     if x.ndim == 1:
         v010 = x[np.maximum(np.minimum(imax + np.array([-1, 0, 1]), ns - 1), 0)]
