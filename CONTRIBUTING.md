@@ -5,6 +5,8 @@ The main branch is the trunk and features branches are squashed merge after a su
 ## Contributing a feature
 
 - [X] make sure the tests pass locally
+  - `pytest ./src/tests/unit`  (approx 1 min.)
+  - `pytest ./src/tests/integration` (approx 3 mins if data is available)
 - [X] use `ruff format` and `ruff check` to make sure the formatting is correct
 - [X] [CHANGELOG.md](CHANGELOG.md) documents the changes, references the PR, the date and the new version number in `setup.py`
 - [X] create a PR from your feature branch to main

@@ -2,6 +2,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+import uuid
 
 import numpy as np
 from iblutil.io import hashfile
@@ -671,9 +672,29 @@ class TestsBasicReader(unittest.TestCase):
     Tests the basic usage where there is a flat binary and no metadata associated
     """
 
-    def test_get_companion_file(self):
-        import uuid
+    def test_integration_companion_files_cbin(self):
+        with tempfile.TemporaryDirectory() as td:
+            bin_file_orig = Path(td) / "toto.ap.bin"
+            meta_file = Path(td) / f"toto.ap.{str(uuid.uuid4())}.meta"
+            ch_file = Path(td) / f"toto.ap.{str(uuid.uuid4())}.ch"
+            spikeglx._mock_spikeglx_file(
+                bin_file_orig,
+                meta_file=Path(TEST_PATH).joinpath("sample3B_g0_t0.imec1.ap.meta"),
+                ns=90_000,
+                nc=385,
+            )
+            sr = spikeglx.Reader(bin_file_orig)
+            sr.compress_file(keep_original=False)
+            cbin_file = Path(td) / f"toto.ap.{str(uuid.uuid4())}.cbin"
+            shutil.move(bin_file_orig.with_suffix(".cbin"), cbin_file)
+            shutil.move(bin_file_orig.with_suffix(".ch"), ch_file)
+            shutil.move(bin_file_orig.with_suffix(".meta"), meta_file)
+            sr = spikeglx.Reader(cbin_file)
+            self.assertEqual(sr.file_bin, cbin_file)
+            self.assertEqual(sr.file_meta_data, meta_file)
+            self.assertEqual(sr.ch_file, ch_file)
 
+    def test_get_companion_file(self):
         with tempfile.TemporaryDirectory() as td:
             sglx_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.bin"
             meta_file = Path(td) / f"sample3A_g0_t0.imec.ap.{str(uuid.uuid4())}.meta"
