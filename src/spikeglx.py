@@ -144,11 +144,7 @@ class Reader:
         sglx_file = str(self.file_bin)
         if self.is_mtscomp:
             self._raw = mtscomp.Reader()
-            self.ch_file = (
-                _get_companion_file(sglx_file, ".ch")
-                if self.ch_file is None
-                else self.ch_file
-            )
+            self.ch_file = self._parse_ch_file()
             self._raw.open(self.file_bin, self.ch_file)
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
@@ -396,10 +392,8 @@ class Reader:
         if "out" not in kwargs:
             kwargs["out"] = self.file_bin.with_suffix(".bin")
         assert self.is_mtscomp
-        ch_file = self.file_bin.with_suffix(".ch") if self.ch_file is None else self.ch_file
-        r = mtscomp.decompress(
-            self.file_bin, ch_file, **kwargs
-        )
+        ch_file = self._parse_ch_file(file_ch)
+        r = mtscomp.decompress(self.file_bin, ch_file, **kwargs)
         r.close()
         if not keep_original:
             self.close()
@@ -464,6 +458,12 @@ class Reader:
         log_func(f"SHA1 metadata: {sm}")
         log_func(f"SHA1 computed: {sc}")
         return sm == sc
+
+    def _parse_ch_file(self, ch_file=None):
+        ch_file = (
+            _get_companion_file(self.file_bin, ".ch") if ch_file is None else ch_file
+        )
+        return ch_file
 
 
 class OnlineReader(Reader):
@@ -1000,7 +1000,7 @@ def _mock_spikeglx_file(
     meta_file,
     ns,
     nc,
-    sync_depth,
+    sync_depth=16,
     random=False,
     int2volts=0.6 / 32768,
     corrupt=False,

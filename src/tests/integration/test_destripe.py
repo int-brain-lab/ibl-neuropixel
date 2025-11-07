@@ -4,6 +4,7 @@ import logging
 import shutil
 import unittest
 from pathlib import Path
+import pandas as pd
 
 import neuropixel
 import spikeglx
@@ -84,11 +85,11 @@ class TestEphysSpikeSortingMultiProcess(unittest.TestCase):
             shutil.rmtree(self.file_path.parent)
 
     def _assert_qc(self):
-        sr = spikeglx.Reader(self.file_path)
-        saturated = np.load(
-            self.file_path.parent.joinpath("_iblqc_ephysSaturation.samples.npy")
+        df_saturated = pd.read_parquet(
+            self.file_path.parent.joinpath("_iblqc_ephysSaturation.samples.pqt")
         )
-        self.assertEqual(sr.ns, saturated.size)
+        self.assertTrue(df_saturated.shape[1] == 2)
+
         self.assertTrue(
             self.file_path.parent.joinpath("_iblqc_ephysTimeRmsAP.rms.npy").exists()
         )

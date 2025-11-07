@@ -89,7 +89,7 @@ def parabolic_max(x):
     # for 2D arrays, operate along the last dimension
     ns = x.shape[-1]
     axis = -1
-    imax = np.argmax(x, axis=axis)
+    imax = np.nanargmax(x, axis=axis)
 
     if x.ndim == 1:
         v010 = x[np.maximum(np.minimum(imax + np.array([-1, 0, 1]), ns - 1), 0)]
@@ -383,7 +383,7 @@ class WindowGenerator(object):
             yield (first, last, amp)
 
     @property
-    def firstlast_valid(self):
+    def firstlast_valid(self, discard_edges=False):
         """
         Generator that yields a tuple of first, last, first_valid, last_valid index of windows
         The valid indices span up to half of the overlap
@@ -391,8 +391,14 @@ class WindowGenerator(object):
         """
         assert self.overlap % 2 == 0, "Overlap must be even"
         for first, last in self.firstlast:
-            first_valid = 0 if first == 0 else first + self.overlap // 2
-            last_valid = last if last == self.ns else last - self.overlap // 2
+            first_valid = (
+                0 if first == 0 and not discard_edges else first + self.overlap // 2
+            )
+            last_valid = (
+                last
+                if last == self.ns and not discard_edges
+                else last - self.overlap // 2
+            )
             yield (first, last, first_valid, last_valid)
 
     @property

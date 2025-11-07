@@ -131,6 +131,24 @@ class TestSaturation(unittest.TestCase):
         self.assertGreater(np.sum(saturated), 5)
         self.assertGreater(np.sum(mute == 0), np.sum(saturated))
 
+    def test_saturation_intervals_output(self):
+        saturation = np.zeros(50_000, dtype=bool)
+        # we test empty files, make sure we can read/write from empty parquet
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a file path within the temporary directory
+            temp_file = Path(temp_dir).joinpath("saturation.pqt")
+            df_nothing = ibldsp.voltage.saturation_samples_to_intervals(
+                saturation, output_file=Path(temp_dir).joinpath("saturation.pqt")
+            )
+            df_nothing2 = pd.read_parquet(temp_file)
+        self.assertEqual(df_nothing.shape[0], 0)
+        self.assertEqual(df_nothing2.shape[0], 0)
+        # for the case with saturation intervals, we simply test the number of rows correspond to the events
+        saturation[3441:3509] = True
+        saturation[45852:45865] = True
+        df_sat = ibldsp.voltage.saturation_samples_to_intervals(saturation)
+        self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
+
 
 class TestCadzow(unittest.TestCase):
     def test_trajectory_matrixes(self):

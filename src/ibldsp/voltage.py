@@ -782,10 +782,11 @@ def decompress_destripe_cbin(
         np.save(
             output_qc_path.joinpath("_iblqc_ephysTimeRmsAP.timestamps.npy"), time_data
         )
-        np.save(
-            output_qc_path.joinpath("_iblqc_ephysSaturation.samples.npy"),
+        saturation_samples_to_intervals(
             saturation_data,
+            output_file=output_qc_path.joinpath("_iblqc_ephysSaturation.samples.pqt"),
         )
+        file_saturation.unlink()
 
 
 def detect_bad_channels(
