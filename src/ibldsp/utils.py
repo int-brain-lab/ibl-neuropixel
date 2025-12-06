@@ -383,12 +383,20 @@ class WindowGenerator(object):
             yield (first, last, amp)
 
     @property
-    def firstlast_valid(self, discard_edges=False):
+    def first_last_valid_noedge(self):
+        return self._firstlast_valid(discard_edges=True)
+
+    @property
+    def firstlast_valid(self):
         """
         Generator that yields a tuple of first, last, first_valid, last_valid index of windows
         The valid indices span up to half of the overlap
         :return:
         """
+        return self._firstlast_valid(self)
+
+    def _firstlast_valid(self, discard_edges=False):
+
         assert self.overlap % 2 == 0, "Overlap must be even"
         for first, last in self.firstlast:
             first_valid = (
