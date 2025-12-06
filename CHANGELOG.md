@@ -1,5 +1,11 @@
 # Changelog
 
+## [UNRELEASED]
+
+### modified
+- `ibldsp.waveforms.double_wiggle`: add a title argument
+- `ibldsp.cadzow`: cache the trajectory matrix computation
+
 ## [1.9.1] - 2025-11-07
 
 ### fixed
