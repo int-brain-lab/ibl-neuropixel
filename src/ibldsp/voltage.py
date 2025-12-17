@@ -790,21 +790,59 @@ def decompress_destripe_cbin(
 
 
 def detect_bad_channels(
-    raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None, display=False
+    raw,
+    fs,
+    similarity_threshold=(-0.5, 1),
+    psd_hf_threshold=None,
+    display=False,
+    outside_threshold=-0.75,
 ):
     """
-    Bad channels detection for Neuropixel probes
-    Labels channels
-     0: all clear
-     1: dead low coherence / amplitude
-     2: noisy
-     3: outside of the brain
-    :param raw: [nc, ns]
-    :param fs: sampling frequency
-    :param similarity_threshold:
-    :param psd_hf_threshold:
-    :param display: optinal (False) will show a plot of features alongside a raw data snippet
-    :return: labels (numpy vector [nc]), xfeats: dictionary of features [nc]
+    Detect bad channels in Neuropixel probe recordings based on signal quality metrics.
+
+    This function analyzes raw electrophysiology data to identify and label problematic channels
+    using multiple criteria including cross-correlation with neighboring channels, power spectral
+    density analysis, and spatial coherence patterns. Channels are classified into four categories:
+    good (0), dead (1), noisy (2), or outside the brain (3).
+
+    Parameters
+    ----------
+    raw : numpy.ndarray
+        Raw voltage traces array with shape (nc, ns), where nc is the number of channels
+        and ns is the number of samples.
+    fs : float
+        Sampling frequency in Hz.
+    similarity_threshold : tuple of float, optional
+        Two-element tuple (lower, upper) defining the acceptable range for high-frequency
+        cross-correlation values. Channels outside this range are flagged as dead (below lower)
+        or noisy (above upper). Defaults to (-0.5, 1).
+    psd_hf_threshold : float, optional
+        Threshold for high-frequency power spectral density to identify noisy channels.
+        If None, defaults to 0.02 for AP band (fs > 2600 Hz) or 1.4 for LF band (fs <= 2600 Hz).
+        Units are µV²/Hz.
+    display : bool, optional
+        If True, displays a diagnostic plot showing channel features and a raw data snippet.
+        Defaults to False.
+    outside_threshold : float or str, optional
+        Threshold for low-frequency cross-correlation to identify channels outside the brain.
+        Can be a float value (default -0.75) or 'adaptive' for automatic threshold detection
+        based on signal gradient analysis.
+
+    Returns
+    -------
+    ichannels : numpy.ndarray
+        Integer array of shape (nc,) containing channel labels:
+        - 0: good channel
+        - 1: dead channel (low coherence/amplitude)
+        - 2: noisy channel (high noise or excessive correlation)
+        - 3: outside of the brain
+    xfeats : dict
+        Dictionary containing computed features for each channel:
+        - 'ind': channel indices
+        - 'rms_raw': RMS amplitude of raw signal
+        - 'xcor_hf': detrended high-frequency cross-correlation
+        - 'xcor_lf': low-frequency cross-correlation component
+        - 'psd_hf': mean power spectral density in high-frequency band
     """
 
     def rneighbours(raw, n=1):  # noqa
@@ -897,21 +935,28 @@ def detect_bad_channels(
     )[0]
     # the channels outside of the brains are the contiguous channels below the threshold on the trend coherency
 
-    signal_noisy = xfeats["xcor_lf"]
-    # Filter signal
-    window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
-    kernel = np.ones(window_size) / window_size
-    # Apply convolution
-    signal_filtered = np.convolve(signal_noisy, kernel, mode="same")
+    # deal with channels outside of the brain
+    if outside_threshold == "adaptive":
+        signal_noisy = xfeats["xcor_lf"]
+        # Filter signal
+        window_size = 25  # Choose based on desired smoothing (e.g., 25 samples)
+        kernel = np.ones(window_size) / window_size
+        # Apply convolution
+        signal_filtered = np.convolve(signal_noisy, kernel, mode="same")
 
-    diff_x = np.diff(signal_filtered)
-    indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold
-    if indx.size > 0:
-        indx_threshold = np.floor(np.median(indx)).astype(int)
-        threshold = signal_noisy[indx_threshold]
-        ioutside = np.where(signal_noisy < threshold)[0]
+        diff_x = np.diff(signal_filtered)
+        indx = np.where(diff_x < -0.02)[0]  # hardcoded threshold
+        if indx.size > 0:
+            indx_threshold = np.floor(np.median(indx)).astype(int)
+            threshold = signal_noisy[indx_threshold]
+            ioutside = np.where(signal_noisy < threshold)[0]
+        else:
+            ioutside = np.array([])
     else:
-        ioutside = np.array([])
+        assert np.isreal(outside_threshold) and np.isscalar(outside_threshold), (
+            "outside_threshold must be a real number or 'adaptive' for adaptive threshold"
+        )
+        ioutside = np.where(xfeats["xcor_lf"] < outside_threshold)[0]
 
     if ioutside.size > 0 and ioutside[-1] == (nc - 1):
         a = np.cumsum(np.r_[0, np.diff(ioutside) - 1])

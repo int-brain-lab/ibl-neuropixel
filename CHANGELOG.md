@@ -1,6 +1,10 @@
 # Changelog
 
-## [UNRELEASED]
+## [1.9.2] - 2025-12-17
+
+### fixed
+- `ibldsp.voltage.bad_channel_detection`: the adaptive threshold has too many false positives. Revert to the fixed threshold at -0.75
+and leave the adaptive threshold as an option.
 
 ### modified
 - `ibldsp.waveforms.double_wiggle`: add a title argument

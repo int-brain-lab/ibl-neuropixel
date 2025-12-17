@@ -384,28 +384,33 @@ class WindowGenerator(object):
 
     @property
     def first_last_valid_noedge(self):
+        """
+        Generator that yields a tuple of first, last, first_valid, last_valid index of windows
+        The valid indices span up to half of the overlap.
+        The first and last windows have respectively the beginning and end of the signal discarded.
+        :return:
+        """
         return self._firstlast_valid(discard_edges=True)
 
     @property
     def firstlast_valid(self):
         """
         Generator that yields a tuple of first, last, first_valid, last_valid index of windows
-        The valid indices span up to half of the overlap
+        The valid indices span up to half of the overlap.
+        The first and last windows have the full beginning and end of the signal respectively.
+        To discard the beginning and end edges, use firstlast_valid_noedge instead.
         :return:
         """
         return self._firstlast_valid(self)
 
     def _firstlast_valid(self, discard_edges=False):
-
         assert self.overlap % 2 == 0, "Overlap must be even"
         for first, last in self.firstlast:
             first_valid = (
-                0 if first == 0 and not discard_edges else first + self.overlap // 2
+                0 if first == 0 and discard_edges else first + self.overlap // 2
             )
             last_valid = (
-                last
-                if last == self.ns and not discard_edges
-                else last - self.overlap // 2
+                last if last == self.ns and discard_edges else last - self.overlap // 2
             )
             yield (first, last, first_valid, last_valid)
 

@@ -17,6 +17,8 @@ for N-spatial dimensions.
 }
 """
 
+from functools import lru_cache
+
 import numpy as np
 import scipy.fft
 from iblutil.numerical import ismember2d
@@ -45,7 +47,7 @@ def traj_matrix_indices(n):
     itraj = np.tile(np.arange(nrows), (ncols, 1)).T + np.flipud(np.arange(ncols))
     return itraj
 
-from functools import lru_cache
+
 @lru_cache(maxsize=24)
 def trajectory(x, y, dtype=np.complex128):
     """
