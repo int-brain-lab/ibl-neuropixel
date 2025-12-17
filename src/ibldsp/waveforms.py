@@ -297,7 +297,7 @@ def plot_wiggle(
     return ax
 
 
-def double_wiggle(wav, fs=1, ax=None, colors=None, **kwargs):
+def double_wiggle(wav, fs=1, ax=None, colors=None, title=None, **kwargs):
     """
     Double trouble: this wiggle colours both the negative and the postive values
     :param wav: (nchannels, nsamples)
@@ -308,6 +308,7 @@ def double_wiggle(wav, fs=1, ax=None, colors=None, **kwargs):
     :param fill_sign: -1 for negative (default for spikes), 1 for positive
     :param plot_kwargs: kwargs for the line plot
     :param fill_kwargs: kwargs for the fill
+    :param title: title for the axis (optional)
     :return:
     """
     if colors is None:
@@ -334,6 +335,8 @@ def double_wiggle(wav, fs=1, ax=None, colors=None, **kwargs):
         fill_kwargs={"color": colors[1]},
         **kwargs,
     )
+    if title is not None:
+        ax.set(title=title)
     return ax
 
 
