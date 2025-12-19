@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.3] - 2025-12-19
+
+### fixed
+- `ibldsp.cadzow.trajectory`: lru_cache throws error when using unhashable types, revert for now 
+
 ## [1.9.2] - 2025-12-17
 
 ### fixed

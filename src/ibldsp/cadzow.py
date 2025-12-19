@@ -17,8 +17,6 @@ for N-spatial dimensions.
 }
 """
 
-from functools import lru_cache
-
 import numpy as np
 import scipy.fft
 from iblutil.numerical import ismember2d
@@ -48,7 +46,6 @@ def traj_matrix_indices(n):
     return itraj
 
 
-@lru_cache(maxsize=24)
 def trajectory(x, y, dtype=np.complex128):
     """
     Computes the 2 spatial dimensions block-Toeplitz indices from x and y trace coordinates.

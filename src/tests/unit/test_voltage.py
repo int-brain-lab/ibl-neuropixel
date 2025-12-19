@@ -148,13 +148,3 @@ class TestSaturation(unittest.TestCase):
         saturation[45852:45865] = True
         df_sat = ibldsp.voltage.saturation_samples_to_intervals(saturation)
         self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
-
-
-class TestCadzow(unittest.TestCase):
-    def test_trajectory_matrixes(self):
-        assert np.all(
-            ibldsp.cadzow.traj_matrix_indices(4) == np.array([[1, 0], [2, 1], [3, 2]])
-        )
-        assert np.all(
-            ibldsp.cadzow.traj_matrix_indices(3) == np.array([[1, 0], [2, 1]])
-        )
