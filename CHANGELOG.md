@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.4] - 2025-12-31
+
+### fixed
+- `ibldsp.voltage.agc`: the epsilon is applied sparingly, and not absolute anymore by default (the current value matches the previous absolute epsilon for an average recording in V) 
+
+
 ## [1.9.3] - 2025-12-19
 
 ### fixed
