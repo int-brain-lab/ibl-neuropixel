@@ -1,5 +1,6 @@
 import neuropixel
 import numpy as np
+import re
 
 
 def test_sites_coordinates_deprecated():
@@ -82,3 +83,28 @@ def test_geom_npultra():
     h = neuropixel.trace_header("NPultra")
     for k, v in gt.items():
         np.testing.assert_equal(v, h[k])
+
+
+def test_get_probe_table():
+    df_tables, probe_table = neuropixel.load_spike_glx_probe_table()
+    df_tables = df_tables.loc[df_tables["is_commercial"] == "Y", :]
+    df_tables["mux_table_format_type"].unique()
+
+    # Get the the mux tables from the probe tables
+    def get_mux_table(mux_string):
+        groups = re.findall(r"\(([0-9\s]+)\)", mux_string)
+        mux = np.array([[int(x) for x in g.split()] for g in groups], dtype=np.int32)
+        adc_vector = np.zeros(mux.size)
+        for i in range(mux.shape[1]):
+            adc_vector[mux[:, i]] = i
+        return adc_vector
+
+    # Check neuropixel 1
+    th1 = neuropixel.trace_header(version=1)
+    mux1 = get_mux_table(probe_table["z_mux_tables"]["mux_np1000"])
+    np.testing.assert_allclose(np.diff(np.c_[th1["adc"], mux1], axis=1), 0)
+
+    # Check Neuropixel 2
+    th2 = neuropixel.trace_header(version=2)
+    mux2 = get_mux_table(probe_table["z_mux_tables"]["mux_np2000"])
+    np.testing.assert_allclose(np.diff(np.c_[th2["adc"], mux2], axis=1), 0)

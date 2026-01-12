@@ -5,12 +5,17 @@ from typing import Any
 import warnings
 import traceback
 import numbers
+import requests
+import json
+from functools import lru_cache
 
 import scipy.signal
 import numpy as np
+import pandas as pd
 
 import spikeglx
 from ibldsp.utils import WindowGenerator
+
 
 _logger = logging.getLogger("ibllib")
 
@@ -1024,3 +1029,37 @@ class NP2Reconstructor:
         sr.close()
         self.save_file.unlink()
         self.save_file = cbin_file
+
+
+@lru_cache(maxsize=1)
+def load_spike_glx_probe_table(force_download=False, cache_dir=None):
+    """
+    Load ProbeTable.json, downloading if necessary.
+
+    Parameters
+    ----------
+    force_download : bool, default: False
+        If True, download the file even if cached version exists
+
+    Returns
+    -------
+    dict
+        The probe table data
+    """
+    PROBE_TABLE_URL = "https://raw.githubusercontent.com/billkarsh/ProbeTable/refs/heads/main/Tables/probe_features.json"
+    cache_dir = Path.home().joinpath(".ibldsp") if cache_dir is None else cache_dir
+    cache_file = cache_dir / "ProbeTable.json"
+
+    if not cache_file.exists() or force_download:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        response = requests.get(PROBE_TABLE_URL)
+        response.raise_for_status()
+
+        with open(cache_file, "w") as f:
+            json.dump(response.json(), f, indent=2)
+
+    with open(cache_file, "r") as f:
+        probe_dict = json.load(f)
+
+    df_tables = pd.DataFrame(probe_dict["neuropixels_probes"]).T
+    return df_tables, probe_dict
