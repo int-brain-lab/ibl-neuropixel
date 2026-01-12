@@ -22,7 +22,7 @@ import ibldsp.utils as utils
 import ibldsp.plots
 
 
-def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
+def agc(x, wl=0.5, si=0.002, epsilon=None, gpu=False):
     """
     Automatic gain control
     w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
@@ -34,6 +34,9 @@ def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
     :param gpu: bool
     :return: AGC data array, gain applied to data
     """
+    # default value for epsilon is relative to the rms, loosely matching the previous 1e-8 for an input in Volts
+    if epsilon is None:
+        epsilon = np.std(x - np.mean(x)) * 0.003
     if gpu:
         import cupy as gp
     else:
@@ -42,9 +45,21 @@ def agc(x, wl=0.5, si=0.002, epsilon=1e-8, gpu=False):
     w = gp.hanning(ns_win)
     w /= gp.sum(w)
     gain = fourier.convolve(gp.abs(x), w, mode="same", gpu=gpu)
-    gain += (gp.sum(gain, axis=1) * epsilon / x.shape[-1])[:, gp.newaxis]
+    # gain += (gp.sum(gain, axis=1) * epsilon / x.shape[-1])[:, gp.newaxis]
     dead_channels = np.sum(gain, axis=1) == 0
-    x[~dead_channels, :] = x[~dead_channels, :] / gain[~dead_channels, :]
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
+    ns_win = int(gp.round(wl / si / 2) * 2 + 1)
+    w = gp.hanning(ns_win)
+    w /= gp.sum(w)
+    gain = fourier.convolve(gp.abs(x), w, mode="same", gpu=gpu)
+    # gain += (gp.sum(gain, axis=1) * epsilon / x.shape[-1])[:, gp.newaxis]
+    dead_channels = np.sum(gain, axis=1) == 0
+    x[~dead_channels, :] = x[~dead_channels, :] / np.maximum(
+        epsilon, gain[~dead_channels, :]
+    )
     if gpu:
         return (x * gain).astype("float32"), gain.astype("float32")
 
@@ -171,7 +186,14 @@ def car(x, collection=None, operator="median", **kwargs):
 
 
 def kfilt(
-    x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None, gpu=False
+    x,
+    collection=None,
+    ntr_pad=0,
+    ntr_tap=None,
+    lagc=300,
+    butter_kwargs=None,
+    gpu=False,
+    epsilon=None,
 ):
     """
     Applies a butterworth filter on the 0-axis with tapering / padding
@@ -182,6 +204,7 @@ def kfilt(
     :param ntr_tap: n traces for apodizatin on each side
     :param lagc: window size for time domain automatic gain control (no agc otherwise)
     :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :param epsilon: small value to avoid division by zero in the gain calculation (AGC)
     :param gpu: bool
     :return:
     """
@@ -216,7 +239,7 @@ def kfilt(
         xf = gp.copy(x)
         gain = 1
     else:
-        xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu)
+        xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu, epsilon=epsilon)
     if ntr_pad > 0:
         # pad the array with a mirrored version of itself and apply a cosine taper
         ntr_pad = np.min([ntr_pad, xf.shape[0]])
@@ -437,6 +460,7 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
             "ntr_tap": 0,
             "lagc": lagc,
             "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
+            "epsilon": 1e-8,
         }
     # True: k-filter | None: nothing | function: apply function | otherwise: CAR
     if k_filter is True:
