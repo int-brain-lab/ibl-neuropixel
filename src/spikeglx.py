@@ -567,6 +567,8 @@ def _get_neuropixel_major_version_from_meta(md):
         "NP2.1": 2,
         "NP2.4": 2.4,
         "NPultra": "NPultra",
+        "NP2QB": "NP2QB",
+        "NHPlong": "NHPlong",
     }
     version = _get_neuropixel_version_from_meta(md)
     if version is not None:
@@ -591,6 +593,19 @@ def _get_max_int_from_meta(md, neuropixel_version=None):
         return int(md.get("imMaxInt", 32768))
 
 
+def _get_gain_from_meta(md):
+    version = _get_neuropixel_version_from_meta(md)
+    if version == 1:
+        return 500
+    else:
+        if md.get("imChan0apGain"):
+            return float(md["imChan0apGain"])
+        elif md["imDatPrb_pn"] in ["NP2010", "NP2000"]:
+            return 80
+        else:
+            return 100
+
+
 def _get_neuropixel_version_from_meta(md):
     """
     Get neuropixel version tag (3A, 3B1, 3B2) from the metadata dictionary
@@ -607,13 +622,19 @@ def _get_neuropixel_version_from_meta(md):
         else:
             return "3B1"
     # Neuropixel 2.0 single shank
-    elif prb_type == 21 or prb_type == 1030:
+    elif prb_type in [21]:
         return "NP2.1"
     # Neuropixel 2.0 four shank
-    elif prb_type == 24 or prb_type == 2013:
+    elif prb_type in [24, 2013]:
         return "NP2.4"
-    elif prb_type == 1100:
+    elif prb_type in [1100]:
         return "NPultra"
+    elif prb_type in [2020]:
+        return "NP2QB"
+    elif prb_type in [1030]:
+        return "NHPlong"
+    else:
+        ValueError(f"Unknown neuropixel probe type {prb_type}")
 
 
 def _get_sync_trace_indices_from_meta(md):
@@ -722,12 +743,10 @@ def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
         th.update(neuropixel.xy2rc(th["x"], th["y"], version=major_version))
     else:
         # the spike sorting channel maps have a flipped version of the channel map
-        if major_version == 1:
+        if major_version in [1, "NHPlong"]:
             th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
-    th["sample_shift"], th["adc"] = neuropixel.adc_shifts(
-        version=major_version, nc=th["col"].size
-    )
+    th["sample_shift"], th["adc"] = neuropixel.adc_shifts(version=major_version)
     th = _split_geometry_into_shanks(th, meta_data)
     th["ind"] = np.arange(th["col"].size)
     if sort:
@@ -807,14 +826,15 @@ def _conversion_sample2v_from_meta(meta_data):
             _get_sync_trace_indices_from_meta(meta_data)
         )
         if "NP2" in version:
-            # NP 2.0; APGain = 80 for all AP
-            # return 0 for LFgain (no LF channels)
+            # NP 2010; APGain = 80 for all AP
+            # NP 2013, 2014, 2020, 2021; APGain = 100 for all AP
+            gain = _get_gain_from_meta(meta_data)
             out = {
                 "lf": np.hstack(
-                    (int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain)
+                    (int2volt / gain * np.ones(n_chn).astype(np.float32), sy_gain)
                 ),
                 "ap": np.hstack(
-                    (int2volt / 80 * np.ones(n_chn).astype(np.float32), sy_gain)
+                    (int2volt / gain * np.ones(n_chn).astype(np.float32), sy_gain)
                 ),
             }
         else:

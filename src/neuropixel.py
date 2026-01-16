@@ -62,7 +62,7 @@ SYNC_PIN_OUT = {
 # sample to volt conversion factors
 S2V_AP = 2.34375e-06
 S2V_LFP = 4.6875e-06
-TIP_SIZE_UM = 200
+TIP_SIZE_UM = 200  # 209 / 206 NP1 / NP2
 NC = 384
 SITES_COORDINATES: np.array
 # channel layouts for neuropixel probes as a function of the major version (1 or 2)
@@ -70,6 +70,8 @@ CHANNEL_GRID = {
     1: dict(DX=16, X0=11, DY=20, Y0=20),
     2: dict(DX=32, X0=27, DY=15, Y0=20),
     "NPultra": dict(DX=6, X0=0, DY=6, Y0=0),
+    "NP2QB": dict(DX=32, X0=27, DY=15, Y0=20),
+    "NHPlong": dict(DX=87 / 2, X0=27, DY=15, Y0=20),
 }
 
 
@@ -129,46 +131,62 @@ def rc2xy(row, col, version=1):
     return {"x": x, "y": y}
 
 
-def dense_layout(version=1, nshank=1):
+def dense_layout(version=1, nshank=1, nc=NC):
     """
     Returns a dense layout indices map for neuropixel, as used at IBL
     :param version: major version number: 1 or 2 or 2.4
     :return: dictionary with keys 'ind', 'col', 'row', 'x', 'y'
     """
     ch = {
-        "ind": np.arange(NC),
-        "row": np.floor(np.arange(NC) / 2),
-        "shank": np.zeros(NC),
+        "ind": np.arange(nc),
+        "row": np.floor(np.arange(nc) / 2),
+        "shank": np.zeros(nc),
     }
-
-    if version == 1:  # version 1 has a dense layout, checkerboard pattern
-        ch.update({"col": np.tile(np.array([2, 0, 3, 1]), int(NC / 4))})
+    if version in [1, "NHPlong"]:  # version 1 has a dense layout, checkerboard pattern
+        ch.update({"col": np.tile(np.array([2, 0, 3, 1]), int(nc / 4))})
     elif version == "NPultra":  # NPultra has 8 columns with square grid spacing
-        ch.update({"row": np.floor(np.arange(NC) / 8)})
-        ch.update({"col": np.tile(np.arange(8), int(NC / 8))})
+        ch.update({"row": np.floor(np.arange(nc) / 8)})
+        ch.update({"col": np.tile(np.arange(8), int(nc / 8))})
+    elif version == "NP2QB":
+        # each of the 4 Neuropixel quad shanks are built like individual NP2.1 probes
+        _ch = dense_layout(version=2, nshank=1)
+        ch = {k: [] for k in _ch.keys()}
+        # we concatenate the 4 shanks, only the shanks key is updated
+        for k in _ch.keys():
+            for s in range(4):
+                if k == "shank":
+                    _ch[k] = _ch[k] * 0 + s
+                ch[k].append([_ch[k]])
+        # output a dictionary with each key being the concatenated vector
+        ch = {k: np.squeeze(np.concatenate(ch[k], axis=1)) for k in ch.keys()}
+        return ch
     elif (
-        np.floor(version) == 2 and nshank == 1
-    ):  # single shank NP1 has 2 columns in a dense patter
-        ch.update({"col": np.tile(np.array([0, 1]), int(NC / 2))})
+        version in [2, 2.1, 2.4] and nshank == 1
+    ):  # single shank NP1 has 2 columns in a dense pattern
+        ch.update({"col": np.tile(np.array([0, 1]), int(nc / 2))})
     elif (
-        np.floor(version) == 2 and nshank == 4
+        version in [2, 2.1, 2.4] and nshank == 4
     ):  # the 4 shank version default is rather complicated
-        shank_row = np.tile(np.arange(NC / 16), (2, 1)).T[:, np.newaxis].flatten()
+        shank_row = np.tile(np.arange(nc / 16), (2, 1)).T[:, np.newaxis].flatten()
         shank_row = np.tile(shank_row, 8)
         shank_row += (
             np.tile(
-                np.array([0, 0, 1, 1, 0, 0, 1, 1])[:, np.newaxis], (1, int(NC / 8))
+                np.array([0, 0, 1, 1, 0, 0, 1, 1])[:, np.newaxis], (1, int(nc / 8))
             ).flatten()
             * 24
         )
         ch.update(
             {
-                "col": np.tile(np.array([0, 1]), int(NC / 2)),
+                "col": np.tile(np.array([0, 1]), int(nc / 2)),
                 "shank": np.tile(
-                    np.array([0, 1, 0, 1, 2, 3, 2, 3])[:, np.newaxis], (1, int(NC / 8))
+                    np.array([0, 1, 0, 1, 2, 3, 2, 3])[:, np.newaxis], (1, int(nc / 8))
                 ).flatten(),
                 "row": shank_row,
             }
+        )
+    else:
+        raise ValueError(
+            f"Invalid version {version}. Supported versions are 1, 2.X, NP2QB, NHPlong, NPultra."
         )
     # for all, get coordinates
     ch.update(rc2xy(ch["row"], ch["col"], version=version))
@@ -202,16 +220,22 @@ def adc_shifts(version=1, nc=NC):
       these are listed in the snsSaveChannelSubset field.
 
     :param version: neuropixel major version 1 or 2
-    :param nc: number of channels
     """
-    if version == 1 or version == "NPultra":
+    # version 1 uses 32 ADC that sample 12 channels each
+    if version in [1, "NPultra", "NHPlong"]:
         adc_channels = 12
         n_cycles = 13
-        # version 1 uses 32 ADC that sample 12 channels each
-    elif np.floor(version) == 2:
-        # version 2 uses 24 ADC that sample 16 channels each
+    # version 2 uses 24 ADC that sample 16 channels each
+    elif version == "NP2QB":
         adc_channels = n_cycles = 16
-    adc = np.floor(np.arange(NC) / (adc_channels * 2)) * 2 + np.mod(np.arange(NC), 2)
+        nc = 384 * 4
+    elif version in [2, 2.1, 2.4]:
+        adc_channels = n_cycles = 16
+    else:
+        raise ValueError(
+            f"Invalid version {version}. Supported versions are 1, 2.X, NP2QB, NHPlong, NPultra."
+        )
+    adc = np.floor(np.arange(nc) / (adc_channels * 2)) * 2 + np.mod(np.arange(nc), 2)
     sample_shift = np.zeros_like(adc)
     for a in adc:
         sample_shift[adc == a] = np.arange(adc_channels) / n_cycles

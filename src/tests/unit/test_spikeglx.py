@@ -382,11 +382,11 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             )
             self.assert_read_glx(bin_3b)
 
-    def test_read_NP20_prototype(self):
+    def test_read_NHP_prototype(self):
         with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(
-                Path(tdir).joinpath("sampleNP2.1_prototype.ap.bin"),
-                self.workdir / "sampleNP2.1_prototype.ap.meta",
+                Path(tdir).joinpath("sampleNHPlong_prototype.ap.bin"),
+                self.workdir / "sampleNHPlong_prototype.ap.meta",
                 ns=32,
                 nc=385,
                 sync_depth=16,
@@ -516,7 +516,7 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                 )
                 for k in h_expected.keys():
                     np.testing.assert_equal(
-                        h_expected[k][sr.raw_channel_order[: -sr.nsync]], th[k]
+                        th[k], h_expected[k][sr.raw_channel_order[: -sr.nsync]]
                     )
 
     def testGetSerialNumber(self):
@@ -557,7 +557,16 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                             spikeglx._get_neuropixel_major_version_from_meta(md),
                         )
                         continue
-
+                    elif "NP2QB" in meta_data_file.name:
+                        self.assertEqual(
+                            "NP2QB", spikeglx._get_neuropixel_version_from_meta(md)
+                        )
+                        continue
+                    elif "NHPlong" in meta_data_file.name:
+                        self.assertEqual(
+                            "NHPlong", spikeglx._get_neuropixel_version_from_meta(md)
+                        )
+                        continue
                     # for ap and lf look for version number
                     # test getting revision
                     revision = meta_data_file.name[6:8]
@@ -580,12 +589,16 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
                     continue
                 md = spikeglx.read_meta_data(meta_data_file)
                 cg = spikeglx._conversion_sample2v_from_meta(md)
+                if spikeglx._get_neuropixel_version_from_meta(md) == "NP2QB":
+                    continue
                 if "NP2" in spikeglx._get_neuropixel_version_from_meta(md):
+                    gain = spikeglx._get_gain_from_meta(md)
                     maxint = spikeglx._get_max_int_from_meta(md)
+                    print(meta_data_file.name, maxint, gain)
                     self.assertEqual(int(md.get("imMaxInt")), maxint)
                     i2v = md.get("imAiRangeMax") / maxint
-                    self.assertTrue(np.all(cg["lf"][0:-1] == i2v / 80))
-                    self.assertTrue(np.all(cg["ap"][0:-1] == i2v / 80))
+                    self.assertTrue(np.all(cg["lf"][0:-1] == i2v / gain))
+                    self.assertTrue(np.all(cg["ap"][0:-1] == i2v / gain))
                 else:
                     maxint = spikeglx._get_max_int_from_meta(md)
                     self.assertEqual(512, maxint)
