@@ -21,6 +21,10 @@ import ibldsp.fourier as fourier
 import ibldsp.utils as utils
 import ibldsp.plots
 
+import logging
+
+_logger = logging.getLogger("ibllib")
+
 
 def agc(x, wl=0.5, si=0.002, epsilon=None, gpu=False):
     """
@@ -479,6 +483,7 @@ def destripe(
     fs,
     h=None,
     neuropixel_version=1,
+    nshank=1,
     butter_kwargs=None,
     k_kwargs=None,
     channel_labels=None,
@@ -489,6 +494,7 @@ def destripe(
     :param fs: sampling frequency
     :param neuropixel_version (optional): 1 or 2. Useful for the ADC shift correction. If None,
      no correction is applied
+    :param nshank: number of shanks (1 or 4) corresponding to the neuropixel version
     :param channel_labels:
       None: (default) keep all channels
      OR (recommended to pre-compute)
@@ -508,7 +514,7 @@ def destripe(
         fs, butter_kwargs, k_kwargs, k_filter
     )
     if h is None:
-        h = neuropixel.trace_header(version=neuropixel_version)
+        h = neuropixel.trace_header(version=neuropixel_version, nshank=nshank)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
     # butterworth
@@ -516,8 +522,14 @@ def destripe(
     x = scipy.signal.sosfiltfilt(sos, x)
     # channel interpolation
     # apply ADC shift
-    if neuropixel_version is not None:
+    if "sample_shift" in h:
         x = fourier.fshift(x, h["sample_shift"], axis=1)
+    elif neuropixel_version is not None:
+        trace_header = neuropixel.trace_header(version=1, nshank=nshank)
+        x = fourier.fshift(x, trace_header["sample_shift"], axis=1)
+    else:
+        _logger.warning("No ADC shift applied as no sample shift info present.")
+
     # apply spatial filter only on channels that are inside of the brain
     if (channel_labels is not None) and (channel_labels is not False):
         x = interpolate_bad_channels(x, channel_labels, h["x"], h["y"])
@@ -535,6 +547,8 @@ def destripe_lfp(
     channel_labels=None,
     butter_kwargs=None,
     k_filter=False,
+    neuropixel_version=1,
+    nshank=1,
     **kwargs,
 ):
     """
@@ -558,6 +572,8 @@ def destripe_lfp(
         butter_kwargs=butter_kwargs,
         k_filter=k_filter,
         channel_labels=channel_labels,
+        neuropixel_version=neuropixel_version,
+        nshank=nshank,
     )
 
 
