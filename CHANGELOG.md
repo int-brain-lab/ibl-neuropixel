@@ -6,7 +6,9 @@
 - `neuropixel.load_spike_glx_probe_table`: read in the table from the Harris lab and makes sure in the unit tests that the ADC banks are correct #73.
 
 ### fixed
-- `ibldsp.voltage.agc`: the epsilon is applied sparingly, and not absolute anymore by default (the current value matches the previous absolute epsilon for an average recording in V) 
+- `ibldsp.voltage.agc`: the epsilon is applied sparingly, and not absolute anymore by default (the current value matches the previous absolute epsilon for an average recording in V)
+- `ibldsp.voltage.destirpe`: Now the sample shift information is first checked in the geometry metdata, then it tries to pull the sample shift info based on the neuropixel version and the number of shanks, else it does not apply any sample shifitng but simply raises a warning.
+-  `ibldsp.voltage.destripe_lfp`: Now uses the neuropixel version and the number of shanks information to do the destriping.
 
 
 
