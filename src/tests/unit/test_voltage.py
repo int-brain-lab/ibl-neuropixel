@@ -1,8 +1,9 @@
-import numpy as np
-import tempfile
 from pathlib import Path
+import tempfile
 import unittest
+import unittest.mock
 
+import numpy as np
 import pandas as pd
 
 import spikeglx
@@ -14,24 +15,27 @@ import ibldsp.cadzow
 
 class TestDestripe(unittest.TestCase):
     def test_destripe_parameters(self):
-        import inspect
+        # ibldsp.voltage.apply_spatial_filter(x, k_filter, **kwargs)
+        x = np.random.randn(100, 1000)
 
-        _, _, spatial_fcn = ibldsp.voltage._get_destripe_parameters(
+        # K-filter = True calls the spatial filter function
+        _, k_kwargs = ibldsp.voltage._get_destripe_parameters(
             30_000, None, None, k_filter=True
         )
-        assert "kfilt" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = ibldsp.voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=False
-        )
-        assert "car" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = ibldsp.voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=None
-        )
-        assert "dat: dat" in inspect.getsource(spatial_fcn)
-        _, _, spatial_fcn = ibldsp.voltage._get_destripe_parameters(
-            2_500, None, None, k_filter=lambda dat: 3 * dat
-        )
-        assert "lambda dat: 3 * dat" in inspect.getsource(spatial_fcn)
+        with unittest.mock.patch("ibldsp.voltage.kfilt") as mock_fcn_spatial_filter:
+            ibldsp.voltage.apply_spatial_filter(x, k_filter=True, **k_kwargs)
+            # Assert the function was called
+            mock_fcn_spatial_filter.assert_called_once()
+
+        # K-filter = False calls the CAR function
+        with unittest.mock.patch("ibldsp.voltage.car") as mock_fcn_spatial_filter:
+            ibldsp.voltage.apply_spatial_filter(x, k_filter=False, **k_kwargs)
+            # Assert the function was called
+            mock_fcn_spatial_filter.assert_called_once()
+
+        # K-filter = None does not apply any filtering
+        xx = ibldsp.voltage.apply_spatial_filter(x, k_filter=None, **k_kwargs)
+        np.testing.assert_array_equal(xx, x)
 
     def test_fk(self):
         """
@@ -93,9 +97,9 @@ class TestSaturation(unittest.TestCase):
         sat = ibldsp.utils.fcn_cosine([0, 100])(
             np.arange(nsat)
         ) - ibldsp.utils.fcn_cosine([150, 250])(np.arange(nsat))
+        n_expected_samples = np.sum(sat > 0.96)
         range_volt = 0.0012
         sat = (sat / s2v * 0.0012).astype(np.int16)
-
         with tempfile.TemporaryDirectory() as temp_dir:
             file_bin = Path(temp_dir) / "binary.bin"
             data = np.memmap(file_bin, dtype=np.int16, mode="w+", shape=(ns, nc))
@@ -108,7 +112,10 @@ class TestSaturation(unittest.TestCase):
                 _sr, max_voltage=range_volt, n_jobs=1
             )
             df_sat = pd.read_parquet(file_saturation)
-            assert np.sum(df_sat["stop_sample"] - df_sat["start_sample"]) == 67
+            assert (
+                np.sum(df_sat["stop_sample"] - df_sat["start_sample"])
+                == n_expected_samples
+            )
 
     def test_saturation(self):
         np.random.seed(7654)

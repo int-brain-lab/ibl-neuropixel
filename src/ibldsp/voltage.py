@@ -537,9 +537,11 @@ def destripe(
     if (channel_labels is not None) and (channel_labels is not False):
         x = interpolate_bad_channels(x, channel_labels, h["x"], h["y"])
         inside_brain = np.where(channel_labels != 3)[0]
-        x[inside_brain, :] = apply_spatial_filter(x[inside_brain, :], k_filter, collection=h['shank'][inside_brain])  # apply the k-filter
+        x[inside_brain, :] = apply_spatial_filter(
+            x[inside_brain, :], k_filter, collection=h["shank"][inside_brain]
+        )  # apply the k-filter
     else:
-        x = apply_spatial_filter(x, k_filter, collection=h['shank'], **k_kwargs)
+        x = apply_spatial_filter(x, k_filter, collection=h["shank"], **k_kwargs)
     return x
 
 
@@ -765,9 +767,12 @@ def decompress_destripe_cbin(
                 inside_brain = np.where(channel_labels != 3)[0]
                 # this applies either the k-filter or CAR
                 chunk[inside_brain, :] = apply_spatial_filter(
-                    chunk[inside_brain, :], k_filter, collection=h['shank'], **k_kwargs)
+                    chunk[inside_brain, :], k_filter, collection=h["shank"], **k_kwargs
+                )
             else:
-                chunk = apply_spatial_filter(chunk, k_filter, collection=h['shank'], **k_kwargs)
+                chunk = apply_spatial_filter(
+                    chunk, k_filter, collection=h["shank"], **k_kwargs
+                )
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
             chunk = chunk * mute_saturation[:, np.newaxis]
