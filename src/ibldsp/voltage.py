@@ -284,7 +284,7 @@ def saturation(
     """
     # first computes the saturated samples
     max_voltage = np.atleast_1d(max_voltage)[:, np.newaxis]
-    saturation = np.mean(np.abs(data) > max_voltage * 0.98, axis=0)
+    saturation = np.mean(np.abs(data) > max_voltage * 0.96, axis=0)
     # then compute the derivative of the voltage saturation
     n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
     n_diff_saturated = np.r_[n_diff_saturated, 0]
@@ -466,16 +466,19 @@ def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
             "butter_kwargs": {"N": 3, "Wn": 0.01, "btype": "highpass"},
             "epsilon": 1e-8,
         }
+    return butter_kwargs, k_kwargs
+
+
+def apply_spatial_filter(x, k_filter, **kwargs):
     # True: k-filter | None: nothing | function: apply function | otherwise: CAR
     if k_filter is True:
-        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+        return kfilt(x, **kwargs)
     elif k_filter is None:
-        spatial_fcn = lambda dat: dat  # noqa
+        return x
     elif inspect.isfunction(k_filter):
-        spatial_fcn = k_filter
+        return k_filter(x, **kwargs)
     else:
-        spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
-    return butter_kwargs, k_kwargs, spatial_fcn
+        return car(x, **kwargs)
 
 
 def destripe(
@@ -510,7 +513,7 @@ def destripe(
     :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
     :return: x, filtered array
     """
-    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
+    butter_kwargs, k_kwargs = _get_destripe_parameters(
         fs, butter_kwargs, k_kwargs, k_filter
     )
     if h is None:
@@ -534,9 +537,9 @@ def destripe(
     if (channel_labels is not None) and (channel_labels is not False):
         x = interpolate_bad_channels(x, channel_labels, h["x"], h["y"])
         inside_brain = np.where(channel_labels != 3)[0]
-        x[inside_brain, :] = spatial_fcn(x[inside_brain, :])  # apply the k-filter
+        x[inside_brain, :] = apply_spatial_filter(x[inside_brain, :], k_filter, collection=h['shank'][inside_brain])  # apply the k-filter
     else:
-        x = spatial_fcn(x)
+        x = apply_spatial_filter(x, k_filter, collection=h['shank'], **k_kwargs)
     return x
 
 
@@ -639,7 +642,7 @@ def decompress_destripe_cbin(
         channel_labels = reject_channels
         reject_channels = True
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(
+    butter_kwargs, k_kwargs = _get_destripe_parameters(
         sr.fs, butter_kwargs, k_kwargs, k_filter
     )
     h = sr.geometry if h is None else h
@@ -761,10 +764,10 @@ def decompress_destripe_cbin(
                 chunk = interpolate_bad_channels(chunk, channel_labels, h["x"], h["y"])
                 inside_brain = np.where(channel_labels != 3)[0]
                 # this applies either the k-filter or CAR
-                chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])
+                chunk[inside_brain, :] = apply_spatial_filter(
+                    chunk[inside_brain, :], k_filter, collection=h['shank'], **k_kwargs)
             else:
-                chunk = spatial_fcn(chunk)  # apply the k-filter / CAR
-
+                chunk = apply_spatial_filter(chunk, k_filter, collection=h['shank'], **k_kwargs)
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
             chunk = chunk * mute_saturation[:, np.newaxis]
