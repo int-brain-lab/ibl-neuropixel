@@ -68,22 +68,12 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
     nc = 385
     folder_test_case = "NP24_meta"
 
-    def tearDown_(self):
-        _ = [sglx.close() for sglx in self.sglx_instances]
-        # here should look for any directories with test in it and delete
-        test_dir = list(self.file_path.parent.parent.glob("*test*"))
-        _ = [shutil.rmtree(test) for test in test_dir]
-        # For case where we have deleted already as part of test
-        if self.file_path.parent.exists():
-            shutil.rmtree(self.file_path.parent)
-
     def testDecimate(self):
         """
         Check integrity of windowing and downsampling by comparing results when using different
         window lengths for iterating through data
         :return:
         """
-
         FS = 30000
         np_a = NP2Converter(self.file_path, post_check=False, compress=False)
         np_a.init_params(nwindow=0.3 * FS, extra="_0_5s_test", nshank=[0])
@@ -352,9 +342,26 @@ class TestNeuropixelReconstructor(BaseEphysNP2):
 
 
 class TestNeuropixel2ConverterNP2QB(BaseEphysNP2):
-    """
-    Check NP2 converter with NP1 type probes
-    """
-
     nc = 385 * 4
     folder_test_case = "NP2QB_meta"
+
+    def testProcessNP2QB(self):
+        # Make sure normal workflow runs without problems
+        np_conv = NP2Converter(self.file_path)
+        np_conv.init_params(extra="_test")
+        status = np_conv.process()
+        self.assertFalse(np_conv.already_exists)
+        self.assertTrue(status)
+
+        # Test a random ap metadata file and make sure it all makes sense
+        shank_n = random.randint(0, 3)
+        sr_ap = spikeglx.Reader(
+            np_conv.shank_info[f"shank{shank_n}"]["ap_file"], sort=False
+        )
+        np.testing.assert_array_equal(sr_ap.meta["acqApLfSy"], [384, 0, 1])
+        np.testing.assert_array_equal(sr_ap.meta["snsApLfSy"], [384, 0, 1])
+        self.assertEqual(sr_ap.meta["nSavedChans"], 385)
+        self.assertEqual(sr_ap.meta["snsSaveChanSubset"], "0:384")
+        self.assertEqual(sr_ap.meta["NP2.4_shank"], shank_n)
+        self.assertEqual(sr_ap.meta["original_meta"], "False")
+        sr_ap.close()

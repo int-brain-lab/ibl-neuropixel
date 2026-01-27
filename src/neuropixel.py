@@ -373,7 +373,7 @@ class NP2Converter:
         elif self.np_version == "NP2.1":
             status = self._process_NP21(overwrite=overwrite)
         elif self.np_version == "NP2QB":
-            status = self._process_NP2QB(overwrite=overwrite)
+            status = self._process_NP24(overwrite=overwrite)
         else:
             _logger.warning(
                 f"Probe version {self.np_version} unknown. Should be NP2.1, NP2.4 or NP2QB."
@@ -427,8 +427,8 @@ class NP2Converter:
         self._closefiles(etype="ap")
         self._closefiles(etype="lf")
 
-        self._writemetadata_ap()
-        self._writemetadata_lf()
+        self._writemetadata(etype="ap")
+        self._writemetadata(etype="lf")
 
         if self.post_check:
             self.check_NP24()
@@ -455,14 +455,23 @@ class NP2Converter:
         shank_info = {}
         self.already_exists = False
 
-        for sh in n_shanks:
+        for i, sh in enumerate(n_shanks):
             _shank_info = {}
             # channels for individual shank + sync channel
+            # NP2QB has a sync channel per shank
+            if self.np_version == "NP2.4":
+                isync = self.idxsyncch
+            elif self.np_version == "NP2QB":
+                isync = self.idxsyncch[i]
+            else:
+                raise ValueError(
+                    f"Probe version {self.np_version} should be 'NP2.4' or 'NP2QB'"
+                )
             _shank_info["chns"] = np.r_[
                 np.where(chn_info["shank"] == sh)[0],
-                np.array(spikeglx._get_sync_trace_indices_from_meta(self.sr.meta)),
+                isync,
             ]
-
+            # we name the probe folder by appending a, b, c etc..
             probe_path = self.ap_file.parent.parent.joinpath(
                 label + chr(97 + int(sh)) + self.extra
             )
@@ -599,19 +608,12 @@ class NP2Converter:
             chunk = np.zeros_like(expected)
             for ish, sh in enumerate(self.shank_info.keys()):
                 srs = self.shank_info[sh]["sr"]
-                if ish == 0:
-                    chunk[:, self.shank_info[sh]["chns"]] = srs[first:last, :]
-                else:
-                    chunk[:, self.shank_info[sh]["chns"][:-1]] = srs[first:last, :-1]
-            assert np.array_equal(expected, chunk), (
-                "data in original file and split files do no match"
-            )
-
+                chunk[:, self.shank_info[sh]["chns"]] = srs[first:last, :]
+            np.testing.assert_array_equal(expected, chunk)
         # close the sglx instances once we are done checking
         for sh in self.shank_info.keys():
             sr = self.shank_info[sh].pop("sr")
             sr.close()
-
         self.check_completed = True
 
     def compress_NP24(self, overwrite=False, **kwargs):
@@ -681,7 +683,7 @@ class NP2Converter:
 
     def _split2shanks(self, chunk, etype="ap"):
         """
-        Splits the signal on the 384 channels into the individual shanks and saves to file
+        Splits the signal on the full 384 / 1536 channels into the individual shanks and saves to file
 
         :param chunk: portion of signal with all 384 channels
         :param type: ephys type, either 'ap' or 'lf'
@@ -769,33 +771,7 @@ class NP2Converter:
             open = self.shank_info[sh].pop(f"{etype}_open_file")
             open.close()
 
-    def _writemetadata_ap(self):
-        """
-        Function to create ap meta data file. Adapts the relevant keys in the spikeglx meta file
-        to contain the correct number of channels. Also adds key to indicate that this is not an
-        original meta data file, but one that has been adapted
-
-        :return:
-        """
-
-        for sh in self.shank_info.keys():
-            n_chns = len(self.shank_info[sh]["chns"])
-            # First for the ap file
-            meta_shank = copy.deepcopy(self.sr.meta)
-            meta_shank["acqApLfSy"][0] = n_chns - 1
-            meta_shank["snsApLfSy"][0] = n_chns - 1
-            meta_shank["nSavedChans"] = n_chns
-            meta_shank["fileSizeBytes"] = self.shank_info[sh]["ap_file"].stat().st_size
-            meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
-                self.shank_info[sh]["chns"]
-            )
-            meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
-            meta_shank["original_meta"] = False
-            meta_shank[f"{self.np_version}_shank"] = int(sh[-1])
-            meta_file = self.shank_info[sh]["ap_file"].with_suffix(".meta")
-            spikeglx.write_meta_data(meta_shank, meta_file)
-
-    def _writemetadata_lf(self):
+    def _writemetadata(self, etype="ap"):
         """
         Function to create lf meta data file. Adapts the relevant keys in the spikeglx meta file
         to contain the correct number of channels. Also adds key to indicate that this is not an
@@ -803,25 +779,32 @@ class NP2Converter:
 
         :return:
         """
-
+        if etype == "ap":
+            ifull, iempty, fkey = (0, 1, "ap_file")  # ap
+        elif etype == "lf":
+            ifull, iempty, fkey = (1, 0, "lf_file")  # lf
+        else:
+            ValueError(f"Unsupported etype: {etype}")
         for sh in self.shank_info.keys():
             n_chns = len(self.shank_info[sh]["chns"])
             meta_shank = copy.deepcopy(self.sr.meta)
-            meta_shank["acqApLfSy"][0] = 0
-            meta_shank["acqApLfSy"][1] = n_chns - 1
-            meta_shank["snsApLfSy"][0] = 0
-            meta_shank["snsApLfSy"][1] = n_chns - 1
-            meta_shank["fileSizeBytes"] = self.shank_info[sh]["lf_file"].stat().st_size
+            meta_shank["acqApLfSy"][iempty] = 0
+            meta_shank["acqApLfSy"][ifull] = n_chns - 1
+            meta_shank["acqApLfSy"][2] = 1  # for NP2QB this goes from 4 to 1
+            meta_shank["snsApLfSy"][iempty] = 0
+            meta_shank["snsApLfSy"][ifull] = n_chns - 1
+            meta_shank["snsApLfSy"][2] = 1  # for NP2QB this goes from 4 to 1
+            meta_shank["fileSizeBytes"] = self.shank_info[sh][fkey].stat().st_size
             meta_shank["imSampRate"] = self.fs_lf
-            if self.np_version == "NP2.4":
+            if self.np_version in ["NP2.4", "NP2QB"]:
                 meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
                     self.shank_info[sh]["chns"]
                 )
                 meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
                 meta_shank["nSavedChans"] = n_chns
             meta_shank["original_meta"] = False
-            meta_shank[f"{self.np_version}_shank"] = int(sh[-1])
-            meta_file = self.shank_info[sh]["lf_file"].with_suffix(".meta")
+            meta_shank[f"NP2.4_shank"] = int(sh[-1])
+            meta_file = self.shank_info[sh][fkey].with_suffix(".meta")
             spikeglx.write_meta_data(meta_shank, meta_file)
 
     def get_processed_files_NP24(self):
