@@ -534,7 +534,7 @@ class NP2Converter:
 
         self._closefiles(etype="lf")
 
-        self._writemetadata_lf()
+        self._writemetadata(etype="lf")
 
         if self.compress:
             self.compress_NP21(overwrite=overwrite)
@@ -780,9 +780,9 @@ class NP2Converter:
         :return:
         """
         if etype == "ap":
-            ifull, iempty, fkey = (0, 1, "ap_file")  # ap
+            ifull, iempty, fkey, fs = (0, 1, "ap_file", self.sr.fs)  # ap
         elif etype == "lf":
-            ifull, iempty, fkey = (1, 0, "lf_file")  # lf
+            ifull, iempty, fkey, fs = (1, 0, "lf_file", self.fs_lf)  # lf
         else:
             ValueError(f"Unsupported etype: {etype}")
         for sh in self.shank_info.keys():
@@ -795,15 +795,17 @@ class NP2Converter:
             meta_shank["snsApLfSy"][ifull] = n_chns - 1
             meta_shank["snsApLfSy"][2] = 1  # for NP2QB this goes from 4 to 1
             meta_shank["fileSizeBytes"] = self.shank_info[sh][fkey].stat().st_size
-            meta_shank["imSampRate"] = self.fs_lf
+            meta_shank["imSampRate"] = fs
             if self.np_version in ["NP2.4", "NP2QB"]:
                 meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
                     self.shank_info[sh]["chns"]
                 )
                 meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
                 meta_shank["nSavedChans"] = n_chns
+                meta_shank["NP2.4_shank"] = int(sh[-1])
+            else:
+                meta_shank[f"{self.np_version}_shank"] = int(sh[-1])
             meta_shank["original_meta"] = False
-            meta_shank["NP2.4_shank"] = int(sh[-1])
             meta_file = self.shank_info[sh][fkey].with_suffix(".meta")
             spikeglx.write_meta_data(meta_shank, meta_file)
 

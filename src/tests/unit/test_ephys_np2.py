@@ -214,10 +214,7 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
         # Now that we have changed the file we expect an assertion error when we do the check
         with self.assertRaises(AssertionError) as context:
             np_conv.check_NP24()
-        self.assertTrue(
-            "data in original file and split files do no match"
-            in str(context.exception)
-        )
+        self.assertTrue("Arrays are not equal" in str(context.exception))
 
     def testFromCompressed(self):
         """
