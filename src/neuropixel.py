@@ -337,9 +337,9 @@ class NP2Converter:
         self.sos_lp = scipy.signal.butter(**butter_lp_kwargs, output="sos")
 
         # Number of ap channels
-        self.napch = int(self.sr.meta["snsApLfSy"][0])
+        self.napch = self.sr.nc - self.sr.nsync
         # Position of start of sync channels in the raw data
-        self.idxsyncch = int(self.sr.meta["snsApLfSy"][0])
+        self.idxsyncch = np.arange(self.sr.nsync) + self.sr.nc - self.sr.nsync
 
         self.extra = extra or ""
         self.nshank = nshank or None
@@ -375,7 +375,9 @@ class NP2Converter:
         elif self.np_version == "NP2QB":
             status = self._process_NP2QB(overwrite=overwrite)
         else:
-            _logger.warning(f"Probe version {self.np_version} unknown. Should be NP2.1, NP2.4 or NP2QB.")
+            _logger.warning(
+                f"Probe version {self.np_version} unknown. Should be NP2.1, NP2.4 or NP2QB."
+            )
             status = -1
         return status
 
@@ -408,11 +410,9 @@ class NP2Converter:
 
         for first, last in wg.firstlast:
             chunk_ap = self.sr._raw[first:last, : self.napch].T
-            chunk_ap_sync = self.sr._raw[first:last, self.idxsyncch :].T
+            chunk_ap_sync = self.sr._raw[first:last, self.idxsyncch].T
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
-            chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch :].T
-            )
+            chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch].T)
 
             chunk_ap2save = self._ind2save(
                 chunk_ap, chunk_ap_sync, wg, ratio=1, etype="ap"
@@ -515,9 +515,7 @@ class NP2Converter:
             last = last + offset
 
             chunk_lf = self.extract_lfp(self.sr[first:last, : self.napch].T)
-            chunk_lf_sync = self.extract_lfp_sync(
-                self.sr[first:last, self.idxsyncch :].T
-            )
+            chunk_lf_sync = self.extract_lfp_sync(self.sr[first:last, self.idxsyncch].T)
 
             chunk_lf2save = self._ind2save(
                 chunk_lf, chunk_lf_sync, wg, ratio=self.ratio, etype="lf"
@@ -722,7 +720,7 @@ class NP2Converter:
                     chunk[:, slice(*ind2save)].T
                     / self.sr.channel_conversion_sample2v[etype][: self.napch],
                     chunk_sync[:, slice(*ind2save)].T
-                    / self.sr.channel_conversion_sample2v[etype][self.idxsyncch :],
+                    / self.sr.channel_conversion_sample2v[etype][self.idxsyncch],
                 ]
             ).astype(np.int16)
         else:
