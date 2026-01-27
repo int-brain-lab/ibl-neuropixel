@@ -1,16 +1,18 @@
 # Changelog
 
-## [1.9.4] - UNRELEASED
+## [1.10.0] - UNRELEASED
 
 ### added
+- `spikeglx.Reader`: support for reading Quad Probes 
 - `neuropixel.load_spike_glx_probe_table`: read in the table from the Harris lab and makes sure in the unit tests that the ADC banks are correct #73.
 
 ### fixed
+- gain read from meta-data for NP2 commercial probes
 - `ibldsp.voltage.agc`: the epsilon is applied sparingly, and not absolute anymore by default (the current value matches the previous absolute epsilon for an average recording in V)
-- `ibldsp.voltage.destirpe`: Now the sample shift information is first checked in the geometry metdata, then it tries to pull the sample shift info based on the neuropixel version and the number of shanks, else it does not apply any sample shifitng but simply raises a warning.
--  `ibldsp.voltage.destripe_lfp`: Now uses the neuropixel version and the number of shanks information to do the destriping.
-
-
+- `ibldsp.voltage.destripe`:
+  - Now the sample shift information is first checked in the geometry metdata, then it tries to pull the sample shift info based on the neuropixel version and the number of shanks, else it does not apply any sample shifitng but simply raises a warning.
+- `ibldsp.voltage.destripe_lfp`: NP2 probe versions do not rephase channels for LFP band
+- `ibldsp.voltage.saturation`: Given some recent experience with noise records, saturation seems to appear at 96% of the neuropixel voltage range.
 
 ## [1.9.3] - 2025-12-19
 

@@ -85,6 +85,12 @@ def test_geom_npultra():
         np.testing.assert_equal(v, h[k])
 
 
+def test_geom_quad():
+    assert "NP2QB" in neuropixel.CHANNEL_GRID.keys()
+    neuropixel.adc_shifts(version="NP2QB")
+    pass
+
+
 def test_get_probe_table():
     df_tables, probe_table = neuropixel.load_spike_glx_probe_table()
     df_tables = df_tables.loc[df_tables["is_commercial"] == "Y", :]
@@ -108,3 +114,8 @@ def test_get_probe_table():
     th2 = neuropixel.trace_header(version=2)
     mux2 = get_mux_table(probe_table["z_mux_tables"]["mux_np2000"])
     np.testing.assert_allclose(np.diff(np.c_[th2["adc"], mux2], axis=1), 0)
+
+    # Check Neuropixel 2 Quadbase
+    thqb = neuropixel.trace_header(version="NP2QB")
+    muxqb = get_mux_table(probe_table["z_mux_tables"]["mux_np2020"])
+    np.testing.assert_allclose(np.diff(np.c_[thqb["adc"], muxqb], axis=1), 0)
