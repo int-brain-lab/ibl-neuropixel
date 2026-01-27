@@ -803,7 +803,7 @@ class NP2Converter:
                 meta_shank["snsSaveChanSubset"] = f"0:{n_chns - 1}"
                 meta_shank["nSavedChans"] = n_chns
             meta_shank["original_meta"] = False
-            meta_shank[f"NP2.4_shank"] = int(sh[-1])
+            meta_shank["NP2.4_shank"] = int(sh[-1])
             meta_file = self.shank_info[sh][fkey].with_suffix(".meta")
             spikeglx.write_meta_data(meta_shank, meta_file)
 
