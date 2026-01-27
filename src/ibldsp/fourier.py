@@ -224,6 +224,8 @@ def fshift(w, s, axis=-1, ns=None):
     :return: w
     """
     # create a vector that contains a 1 sample shift on the axis
+    if np.all(s == 0):
+        return w
     ns = ns or w.shape[axis]
     shape = np.array(w.shape) * 0 + 1
     shape[axis] = ns

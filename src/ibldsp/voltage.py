@@ -570,6 +570,13 @@ def destripe_lfp(
     )
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    # here we get the sample shifts, and make sure they are set to 0 (no shift) for NP2 and higher
+    # for NP2 the shift is in 30_000kHz which represents 1/12/12 increments. At this level we
+    # consider the shift negligible and avoid doing the shift correction
+    if h is None:
+        h = neuropixel.trace_header(version=neuropixel_version, nshank=nshank)
+    if neuropixel_version >= 2:
+        h["sample_shift"] = h["sample_shift"] * 0
     return destripe(
         x,
         fs,
