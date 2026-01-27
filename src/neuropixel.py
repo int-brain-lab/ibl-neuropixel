@@ -372,8 +372,10 @@ class NP2Converter:
             status = self._process_NP21(overwrite=overwrite)
         elif self.np_version == "NP2.1":
             status = self._process_NP21(overwrite=overwrite)
+        elif self.np_version == "NP2QB":
+            status = self._process_NP2QB(overwrite=overwrite)
         else:
-            _logger.warning("Meta file is not of type NP2.1 or NP2.4, cannot process")
+            _logger.warning(f"Probe version {self.np_version} unknown. Should be NP2.1, NP2.4 or NP2QB.")
             status = -1
         return status
 
