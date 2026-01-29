@@ -3,6 +3,7 @@
 ## [1.10.0] - UNRELEASED
 
 ### added
+- `neuropixel.NP2Converter`: support splitting Quad Probes
 - `spikeglx.Reader`: support for reading Quad Probes 
 - `neuropixel.load_spike_glx_probe_table`: read in the table from the Harris lab and makes sure in the unit tests that the ADC banks are correct #73.
 

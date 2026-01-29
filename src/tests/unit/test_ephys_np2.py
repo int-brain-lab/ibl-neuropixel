@@ -1,29 +1,63 @@
 import random
 import shutil
 import unittest
+import tempfile
 from pathlib import Path
 
 import numpy as np
 from neuropixel import NP2Converter, NP2Reconstructor
 import spikeglx
 
+FIXTURE_PATH = Path(__file__).parents[1].joinpath("fixtures", "np2split")
+
 
 class BaseEphysNP2(unittest.TestCase):
-    data_path = Path(__file__).parents[1].joinpath("fixtures", "np2split")
+    nc = None
+    folder_test_case = None
 
     @classmethod
     def setUpClass(cls):
-        dat = np.tile(np.arange(385)[np.newaxis, :] + 10000, [30000, 1]).astype(
+        # create a temporary directory for the test
+        cls._temp_dir_obj = tempfile.TemporaryDirectory(prefix="test_np2_")
+        cls.data_path = Path(cls._temp_dir_obj.name)
+        # we create a small dummy spikeglx file for testing
+        cls.orig_file = cls.data_path.joinpath("_spikeglx_ephysData_g0_t0.imec0.ap.bin")
+        # the metadata file is copied from fixtures
+        cls.orig_meta_file = cls.orig_file.with_suffix(".meta")
+        shutil.copy(
+            FIXTURE_PATH.joinpath(
+                cls.folder_test_case, "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
+            ),
+            cls.orig_meta_file,
+        )
+        # generation of a dummy binary file for testing
+        dat = np.tile(np.arange(cls.nc)[np.newaxis, :] + 10000, [30000, 1]).astype(
             np.int16
         )
-        with open(
-            cls.data_path.joinpath("_spikeglx_ephysData_g0_t0.imec0.ap.bin"), "bw+"
-        ) as fid:
+        with open(cls.orig_file, "bw+") as fid:
             dat.tofile(fid)
 
     @classmethod
     def tearDownClass(cls):
-        cls.data_path.joinpath("_spikeglx_ephysData_g0_t0.imec0.ap.bin").unlink()
+        cls._temp_dir_obj.cleanup()
+
+    def setUp(self):
+        """
+        :param folder_test_case: NP1_meta | NP21_meta | NP24_meta
+        :return:
+        """
+        self._temp_dir_obj_case = tempfile.TemporaryDirectory(prefix="test_np2_case_")
+        current_case_path = Path(self._temp_dir_obj_case.name).joinpath("probe00")
+        current_case_path.mkdir(parents=True, exist_ok=True)
+        self.file_path = current_case_path.joinpath(self.orig_file.name)
+        self.meta_file = self.file_path.with_suffix(".meta")
+        shutil.copy(self.orig_file, self.file_path)
+        shutil.copy(self.orig_meta_file, self.meta_file)
+        self.sglx_instances = []
+
+    def tearDown(self):
+        self._temp_dir_obj_case.cleanup()
+        _ = [sglx.close() for sglx in self.sglx_instances]
 
 
 class TestNeuropixel2ConverterNP24(BaseEphysNP2):
@@ -31,30 +65,8 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
     Check NP2 converter with NP2.4 type probes
     """
 
-    def setUp(self) -> None:
-        file_path = self.data_path.joinpath("_spikeglx_ephysData_g0_t0.imec0.ap.bin")
-        self.file_path = file_path.parent.parent.joinpath(
-            "probe00_temp", file_path.name
-        )
-        self.file_path.parent.mkdir(exist_ok=True, parents=True)
-        meta_file = file_path.parent.joinpath(
-            "NP24_meta", "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        self.meta_file = self.file_path.parent.joinpath(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        shutil.copy(file_path, self.file_path)
-        shutil.copy(meta_file, self.meta_file)
-        self.sglx_instances = []
-
-    def tearDown(self):
-        _ = [sglx.close() for sglx in self.sglx_instances]
-        # here should look for any directories with test in it and delete
-        test_dir = list(self.file_path.parent.parent.glob("*test*"))
-        _ = [shutil.rmtree(test) for test in test_dir]
-        # For case where we have deleted already as part of test
-        if self.file_path.parent.exists():
-            shutil.rmtree(self.file_path.parent)
+    nc = 385
+    folder_test_case = "NP24_meta"
 
     def testDecimate(self):
         """
@@ -62,7 +74,6 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
         window lengths for iterating through data
         :return:
         """
-
         FS = 30000
         np_a = NP2Converter(self.file_path, post_check=False, compress=False)
         np_a.init_params(nwindow=0.3 * FS, extra="_0_5s_test", nshank=[0])
@@ -189,7 +200,6 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
         Check that if the data has been incorrectly split we get a warning error
         :return:
         """
-
         np_conv = NP2Converter(self.file_path, compress=False)
         np_conv.init_params(extra="_test")
         status = np_conv.process()
@@ -204,10 +214,7 @@ class TestNeuropixel2ConverterNP24(BaseEphysNP2):
         # Now that we have changed the file we expect an assertion error when we do the check
         with self.assertRaises(AssertionError) as context:
             np_conv.check_NP24()
-        self.assertTrue(
-            "data in original file and split files do no match"
-            in str(context.exception)
-        )
+        self.assertTrue("Arrays are not equal" in str(context.exception))
 
     def testFromCompressed(self):
         """
@@ -232,26 +239,8 @@ class TestNeuropixel2ConverterNP21(BaseEphysNP2):
     Check NP2 converter with NP2.1 type probes
     """
 
-    def setUp(self) -> None:
-        file_path = self.data_path.joinpath("_spikeglx_ephysData_g0_t0.imec0.ap.bin")
-        self.file_path = file_path.parent.parent.joinpath(
-            "probe00_temp", file_path.name
-        )
-        self.file_path.parent.mkdir(exist_ok=True, parents=True)
-        meta_file = file_path.parent.joinpath(
-            "NP21_meta", "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        self.meta_file = self.file_path.parent.joinpath(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        shutil.copy(file_path, self.file_path)
-        shutil.copy(meta_file, self.meta_file)
-        self.sglx_instances = []
-
-    def tearDown(self):
-        _ = [sglx.close() for sglx in self.sglx_instances]
-        # here should look for anything with test in it and delete
-        shutil.rmtree(self.file_path.parent)
+    nc = 385
+    folder_test_case = "NP21_meta"
 
     def testProcessNP21(self):
         """
@@ -293,29 +282,13 @@ class TestNeuropixel2ConverterNP21(BaseEphysNP2):
         np_conv.sr.close()
 
 
-class TestNeuropixel2ConverterNP1(NP2Converter):
+class TestNeuropixel2ConverterNP1(BaseEphysNP2):
     """
     Check NP2 converter with NP1 type probes
     """
 
-    def setUp(self) -> None:
-        self.file_path = self.data_path.joinpath(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.bin"
-        )
-        meta_file = self.file_path.parent.joinpath(
-            "NP1_meta", "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        self.meta_file = self.file_path.with_suffix(".meta")
-        # Back up current meta file
-        shutil.move(self.meta_file, self.meta_file.with_suffix(".meta.bk"))
-        # Copy the neuropixels v1 meta file into the probe00 folder
-        shutil.copy(meta_file, self.meta_file)
-        self.sglx_instances = []
-        self.temp_directories = []
-
-    def tearDown(self):
-        # replace meta file with backup
-        shutil.move(self.meta_file.with_suffix(".meta.bk"), self.meta_file)
+    nc = 385
+    folder_test_case = "NP1_meta"
 
     def testProcessNP1(self):
         """
@@ -327,38 +300,15 @@ class TestNeuropixel2ConverterNP1(NP2Converter):
 
 
 class TestNeuropixelReconstructor(BaseEphysNP2):
-    def setUp(self) -> None:
-        self.orig_file = self.data_path.joinpath(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.bin"
-        )
-        self.file_path = self.orig_file.parent.parent.joinpath(
-            "probe00_temp", self.orig_file.name
-        )
-        self.file_path.parent.mkdir(exist_ok=True, parents=True)
-        self.orig_meta_file = self.orig_file.parent.joinpath(
-            "NP24_meta", "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        self.meta_file = self.file_path.parent.joinpath(
-            "_spikeglx_ephysData_g0_t0.imec0.ap.meta"
-        )
-        shutil.copy(self.orig_file, self.file_path)
-        shutil.copy(self.orig_meta_file, self.meta_file)
-        self.sglx_instances = []
-
-    def tearDown(self):
-        _ = [sglx.close() for sglx in self.sglx_instances]
-        # here should look for any directories with test in it and delete
-        test_dir = list(self.file_path.parent.parent.glob("*test*"))
-        _ = [shutil.rmtree(test) for test in test_dir]
-        # For case where we have deleted already as part of test
-        if self.file_path.parent.exists():
-            shutil.rmtree(self.file_path.parent)
+    nc = 385
+    folder_test_case = "NP24_meta"
 
     def test_reconstruction(self):
         # First split the probes
         np_conv = NP2Converter(self.file_path)
         np_conv.init_params(extra="_test")
-        _ = np_conv.process()
+        status = np_conv.process()
+        self.assertTrue(status)
         np_conv.sr.close()
 
         # Delete the original file
@@ -367,7 +317,7 @@ class TestNeuropixelReconstructor(BaseEphysNP2):
 
         # Now reconstruct
         np_recon = NP2Reconstructor(
-            self.file_path.parent.parent, pname="probe00_temp", compress=True
+            self.file_path.parents[1], pname="probe00", compress=True
         )
         status = np_recon.process()
 
@@ -388,7 +338,27 @@ class TestNeuropixelReconstructor(BaseEphysNP2):
         self.assertEqual(orig_meta, recon_meta)
 
 
-if __name__ == "__main__":
-    import unittest
+class TestNeuropixel2ConverterNP2QB(BaseEphysNP2):
+    nc = 385 * 4
+    folder_test_case = "NP2QB_meta"
 
-    unittest.main(exit=False)
+    def testProcessNP2QB(self):
+        # Make sure normal workflow runs without problems
+        np_conv = NP2Converter(self.file_path)
+        np_conv.init_params(extra="_test")
+        status = np_conv.process()
+        self.assertFalse(np_conv.already_exists)
+        self.assertTrue(status)
+
+        # Test a random ap metadata file and make sure it all makes sense
+        shank_n = random.randint(0, 3)
+        sr_ap = spikeglx.Reader(
+            np_conv.shank_info[f"shank{shank_n}"]["ap_file"], sort=False
+        )
+        np.testing.assert_array_equal(sr_ap.meta["acqApLfSy"], [384, 0, 1])
+        np.testing.assert_array_equal(sr_ap.meta["snsApLfSy"], [384, 0, 1])
+        self.assertEqual(sr_ap.meta["nSavedChans"], 385)
+        self.assertEqual(sr_ap.meta["snsSaveChanSubset"], "0:384")
+        self.assertEqual(sr_ap.meta["NP2.4_shank"], shank_n)
+        self.assertEqual(sr_ap.meta["original_meta"], "False")
+        sr_ap.close()
