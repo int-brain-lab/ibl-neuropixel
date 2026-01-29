@@ -155,3 +155,36 @@ class TestSaturation(unittest.TestCase):
         saturation[45852:45865] = True
         df_sat = ibldsp.voltage.saturation_samples_to_intervals(saturation)
         self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
+
+
+class TestLFP(unittest.TestCase):
+    def test_rsamp_cbin(self):
+        """
+        Resamples a binary file by a factor of 5
+        :return:
+        """
+        ns = int(125.83948 * 2500) + 3
+        nc = 12
+        fs = 2500
+        resamp_factor_q = 5
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            out_file = Path(temp_dir).joinpath("test_rs.dat")
+            # testfile = Path.home().joinpath('lfp', 'test.dat')
+            # out_file = Path.home().joinpath('lfp', 'test_rs.dat')
+            testfile.parent.mkdir(exist_ok=True, parents=True)
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                freq = 10 + ic * 4
+                print(freq)
+                d[:, ic] = np.sin(2 * np.pi * freq * np.arange(ns) / fs) * 1000
+
+            with open(testfile, "wb+") as f:
+                d.tofile(f)
+
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=2500, dtype=np.float32)
+            ibldsp.voltage.resample_denoise_lfp_cbin(sr, output=out_file)
+            za = spikeglx.Reader(out_file, ns=ns // 5, nc=nc, fs=500, dtype=np.float32)
+
+            diff = d[0:-1:resamp_factor_q, :] - za[:]
+            np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)

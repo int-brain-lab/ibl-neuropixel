@@ -1035,18 +1035,52 @@ def detect_bad_channels(
     return ichannels, xfeats
 
 
-def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display=False):
+def detect_bad_channels_cbin(
+    bin_file: Path | str | spikeglx.Reader,
+    n_batches: int = 10,
+    batch_duration: float = None,
+    display: bool = False,
+) -> np.ndarray:
     """
-    Runs a ap-binary file scan to automatically detect faulty channels
-    :param bin_file: full file path to the binary or compressed binary file from spikeglx
-    :param n_batches: number of batches throughout the file (defaults to 10)
-    :param batch_duration: batch length in seconds, defaults to 0.3
-    :param display: if True will return a figure with features and an excerpt of the raw data
-    :return: channel_labels: nc int array with 0:ok, 1:dead, 2:high noise, 3:outside of the brain
+    Detect faulty channels in a SpikeGLX binary or compressed binary file.
+
+    This function scans an electrophysiology recording file in multiple batches throughout
+    its duration to identify problematic channels. It uses the `detect_bad_channels` function
+    on each batch and takes the mode of the detections across all batches to produce a robust
+    channel quality assessment.
+
+    Parameters
+    ----------
+    bin_file : Path | str | spikeglx.Reader
+        Full file path to the binary or compressed binary file from SpikeGLX, or an existing
+        spikeglx.Reader object. If a path is provided, a Reader will be created automatically.
+    n_batches : int, optional
+        Number of batches to sample throughout the file for channel quality assessment.
+        Defaults to 10. More batches provide more robust detection but increase computation time.
+    batch_duration : float, optional
+        Duration of each batch in seconds. If None, defaults to 0.33 seconds for AP band
+        recordings (fs ~ 30 kHz) or 4 seconds for LF band recordings (fs <= 2500 Hz).
+    display : bool, optional
+        If True, displays a diagnostic figure showing channel features and an excerpt of the
+        raw data using the `ephys_bad_channels` plotting function. Defaults to False.
+
+    Returns
+    -------
+    numpy.ndarray
+        Integer array of shape (nc,) containing channel quality labels, where nc is the number
+        of channels (excluding sync channels):
+        - 0: good/ok channel
+        - 1: dead channel (low coherence/amplitude)
+        - 2: high noise channel
+        - 3: outside of the brain
     """
     sr = (
         bin_file if isinstance(bin_file, spikeglx.Reader) else spikeglx.Reader(bin_file)
     )
+    # this is 0.33s for AP and 4s for LF
+    if batch_duration is None:
+        batch_duration = 1e4 / sr.fs
+
     nc = sr.nc - sr.nsync
     channel_labels = np.zeros((nc, n_batches))
     # loop over the file and take the mode of detections
@@ -1069,56 +1103,87 @@ def detect_bad_channels_cbin(bin_file, n_batches=10, batch_duration=0.3, display
     return channel_flags
 
 
-def resample_denoise_lfp_cbin(lf_file, RESAMPLE_FACTOR=10, output=None):
+def resample_denoise_lfp_cbin(
+    lf_file: spikeglx.Reader | Path | str,
+    q: int = 5,
+    output: Path = None,
+    channel_labels: np.ndarray = None,
+) -> Path:
     """
-    Downsamples an LFP file and apply dstriping
-    ```
-    nc = 384
-    ns = int(lf_file_out.stat().st_size / nc / 4)
-    sr_ = spikeglx.Reader(lf_file_out, nc=nc, fs=sr.fs / RESAMPLE_FACTOR, ns=ns,  dtype=np.float32)
-    ```
-    :param lf_file:
-    :param RESAMPLE_FACTOR:
-    :param output: Path
-    :return: None
+    Resample and denoise local field potential (LFP) data from a SpikeGLX compressed binary file.
+
+    This function processes LFP recordings by downsampling them by a factor of q using
+    decimation with a finite impulse response (FIR) filter. The processing is performed
+    in overlapping chunks to avoid edge effects, with the overlapping regions properly
+    weighted and combined in the output.
+
+    Parameters
+    ----------
+    lf_file : spikeglx.Reader | Path | str
+        Input LFP file, either as a SpikeGLX Reader object or a path (string or Path object)
+        to a SpikeGLX binary or compressed binary file.
+    q : int, optional
+        Downsampling factor (decimation ratio). The output sampling rate will be the input
+        sampling rate divided by q. Defaults to 5.
+    output : Path, optional
+        Path where the resampled data will be saved as a memory-mapped file. If None,
+        defaults to "lf_resampled.cbin" in the same directory as the input file.
+    channel_labels : np.ndarray, optional
+        Array of channel quality labels (not currently used in the implementation but
+        reserved for future bad channel handling). Defaults to None.
+
+    Returns
+    -------
+    Path
+        Path to the output file containing the resampled LFP data as a float32 memory-mapped
+        array with shape (ns // q, nc), where ns is the number of samples and nc is the
+        number of channels (excluding sync channels).
     """
+    CHUNK_SIZE = 2048 * 8
+    sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
+    # channel_labels = detect_bad_channels_cbin(lf_file)
+    output = output or Path(lf_file).parent.joinpath("lf_resampled.cbin")
 
-    output = output or Path(lf_file).parent.joinpath("lf_resampled.bin")
-    sr = spikeglx.Reader(lf_file)
-    wg = utils.WindowGenerator(ns=sr.ns, nswin=65536, overlap=1024)
-    cflags = detect_bad_channels_cbin(lf_file)
+    ns, nc = (sr.ns, sr.nc - sr.nsync)
+    # here we create a memmap upfront to pre-allocate and allow multi-processing
+    za = np.memmap(
+        filename=output,
+        dtype="float32",
+        mode="w+",  # if not out_file.exists() else 'r+',
+        shape=(ns // q, nc),
+    )
+    # channel_labels = ibldsp.voltage.detect_bad_channels_cbin(sr)
+    wg = ibldsp.utils.WindowGenerator(
+        ns=sr.ns, nswin=(CHUNK_SIZE + 2) * q, overlap=q * 128
+    )
+    wg_rsamp = ibldsp.utils.WindowGenerator(
+        ns=sr.ns // q, nswin=(CHUNK_SIZE + 2), overlap=128
+    )
 
-    c = 0
-    with open(output, "wb") as f:
-        for first, last in wg.firstlast:
-            butter_kwargs = {
-                "N": 3,
-                "Wn": np.array([2, 200]) / sr.fs * 2,
-                "btype": "bandpass",
-            }
-            sos = scipy.signal.butter(**butter_kwargs, output="sos")
-            raw = sr[first:last, : -sr.nsync]
-            raw = scipy.signal.sosfiltfilt(sos, raw, axis=0)
-            destripe = destripe_lfp(raw.T, fs=sr.fs, channel_labels=cflags)
-            # viewephys(raw.T, fs=sr.fs, title='raw')
-            # viewephys(destripe, fs=sr.fs, title='destripe')
-            rsamp = scipy.signal.decimate(
-                destripe, RESAMPLE_FACTOR, axis=1, ftype="fir"
-            ).T
-            # viewephys(rsamp, fs=sr.fs / RESAMPLE_FACTOR, title='rsamp')
-            first_valid = 0 if first == 0 else int(wg.overlap / 2 / RESAMPLE_FACTOR)
-            last_valid = (
-                rsamp.shape[0]
-                if last == sr.ns
-                else int(rsamp.shape[0] - wg.overlap / 2 / RESAMPLE_FACTOR)
-            )
-            rsamp = rsamp[first_valid:last_valid, :]
-            c += rsamp.shape[0]
-            print(first, last, last - first, first_valid, last_valid, c)
-            rsamp.astype(np.float32).tofile(f)
-    # first, last = (500, 550)
-    # viewephys(sr[int(first * sr.fs) : int(last * sr.fs), :-sr.nsync].T, sr.fs, title='orig')
-    # viewephys(sr_[int(first * sr_.fs):int(last * sr_.fs), :].T, sr_.fs, title='rsamp')
+    # the indexing is really complicated as we want to only populate the valid part of the windows to avoid edges effects
+    # while also being able to transpose this overlap in the resampled space index
+    # to do so we zip together two window generators
+    for sl, slr in zip(wg.firstlast, wg_rsamp.firstlast_splicing):
+        first_rs, last_rs, amp_rs = slr
+        first, last = sl
+        raw = sr[first:last, :nc].T
+        # raw = ibldsp.fourier.fshift(raw, h['sample_shift'], axis=1)
+        # raw = ibldsp.voltage.interpolate_bad_channels(raw, channel_labels, h["x"], h["y"])
+        # butter_kwargs = {
+        #     "N": 3,
+        #     "Wn": np.array([2, 200]) / sr.fs * 2,
+        #     "btype": "bandpass",
+        # }
+        # sos = scipy.signal.butter(**butter_kwargs, output="sos")
+        # raw = sr[first:last, : -sr.nsync]
+        # raw = scipy.signal.sosfiltfilt(sos, raw, axis=0)
+        rsamp = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)[
+            :, : raw.shape[1] // q
+        ].T
+        # rsamp = raw[:, ::5][:, :raw.shape[1] // resamp_factor_q].T
+        za[first_rs:last_rs, :] += np.astype(rsamp * amp_rs[:, np.newaxis], np.float32)
+
+    return output
 
 
 def stack(data, word, fcn_agg=np.nanmean, header=None):
