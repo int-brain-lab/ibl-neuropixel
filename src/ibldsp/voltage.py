@@ -1107,6 +1107,7 @@ def resample_denoise_lfp_cbin(
     lf_file: spikeglx.Reader | Path | str,
     q: int = 5,
     output: Path = None,
+    dtype: "np.typing.DTypeLike" = np.float16,
     channel_labels: np.ndarray = None,
 ) -> Path:
     """
@@ -1128,6 +1129,7 @@ def resample_denoise_lfp_cbin(
     output : Path, optional
         Path where the resampled data will be saved as a memory-mapped file. If None,
         defaults to "lf_resampled.cbin" in the same directory as the input file.
+    dtype : str, optional # Data type of the output file. Defaults to "float16".
     channel_labels : np.ndarray, optional
         Array of channel quality labels (not currently used in the implementation but
         reserved for future bad channel handling). Defaults to None.
@@ -1145,10 +1147,11 @@ def resample_denoise_lfp_cbin(
     output = output or Path(lf_file).parent.joinpath("lf_resampled.cbin")
 
     ns, nc = (sr.ns, sr.nc - sr.nsync)
+
     # here we create a memmap upfront to pre-allocate and allow multi-processing
     za = np.memmap(
         filename=output,
-        dtype="float32",
+        dtype=dtype,
         mode="w+",  # if not out_file.exists() else 'r+',
         shape=(ns // q, nc),
     )

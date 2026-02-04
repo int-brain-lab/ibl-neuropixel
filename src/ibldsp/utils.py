@@ -2,13 +2,21 @@
 Window generator, front detections, rms
 """
 
+import warnings
+
 import numpy as np
 import scipy
 
 
 def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
     """
+    .. deprecated:: X.Y.Z
+        `sync_timestamps` has been moved to `ibldsp.sync` module.
+        Use `from ibldsp.sync import sync_timestamps` instead.
+        This function will be removed in version X.Y.Z.
+
     Sync two arrays of time stamps
+
     :param tsa: vector of timestamps
     :param tsb: vector of timestamps
     :param tbin: time bin length
@@ -18,66 +26,23 @@ def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
     :return:
      function: interpolation function such as fnc(tsa) = tsb
      float: drift in ppm
-     numpy array: of indices ia
-     numpy array: of indices ib
+     numpy array: of indices ia (if return_indices=True)
+     numpy array: of indices ib (if return_indices=True)
     """
+    warnings.warn(
+        "sync_timestamps has been moved to ibldsp.sync module and will be removed "
+        "from ibldsp.utils in version X.Y.Z. "
+        "Please use 'from ibldsp.sync import sync_timestamps' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
-    def _interp_fcn(tsa, tsb, ib, linear=linear):
-        # now compute the bpod/fpga drift and precise time shift
-        ab = np.polyfit(tsa[ib >= 0], tsb[ib[ib >= 0]] - tsa[ib >= 0], 1)
-        drift_ppm = ab[0] * 1e6
-        if linear:
-            fcn_a2b = lambda x: x * (1 + ab[0]) + ab[1]  # noqa
-        else:
-            fcn_a2b = scipy.interpolate.interp1d(
-                tsa[ib >= 0], tsb[ib[ib >= 0]], fill_value="extrapolate"
-            )
-        return fcn_a2b, drift_ppm
+    # Import and delegate to the new location
+    from ibldsp.sync import sync_timestamps as _sync_timestamps
 
-    # assert sorted inputs
-    tmin = np.min([np.min(tsa), np.min(tsb)])
-    tmax = np.max([np.max(tsa), np.max(tsb)])
-    # brute force correlation to get an estimate of the delta_t between series
-    x = np.zeros(int(np.ceil(tmax - tmin) / tbin))
-    y = np.zeros_like(x)
-    x[np.int32(np.floor((tsa - tmin) / tbin))] = 1
-    y[np.int32(np.floor((tsb - tmin) / tbin))] = 1
-    delta_t = (
-        parabolic_max(scipy.signal.correlate(x, y, mode="full"))[0] - x.shape[0] + 1
-    ) * tbin
-    # do a first assignment at a DT threshold
-    ib = np.zeros(tsa.shape, dtype=np.int32) - 1
-    threshold = tbin
-    for m in np.arange(tsa.shape[0]):
-        dt = np.abs(tsa[m] - delta_t - tsb)
-        inds = np.where(dt < threshold)[0]
-        if inds.size == 1:
-            ib[m] = inds[0]
-        elif inds.size > 1:
-            candidates = inds[~np.isin(inds, ib[:m])]
-            if candidates.size == 1:
-                ib[m] = candidates[0]
-            elif candidates.size > 1:
-                ib[m] = inds[np.argmin(dt[inds])]
-
-    fcn_a2b, _ = _interp_fcn(tsa, tsb, ib)
-    # do a second assignment - this time a full matrix of candidate matches is computed
-    # the most obvious matches are assigned first and then one by one
-    iamiss = np.where(ib < 0)[0]
-    ibmiss = np.setxor1d(np.arange(tsb.size), ib[ib >= 0])
-    dt = np.abs(fcn_a2b(tsa[iamiss]) - tsb[ibmiss][:, np.newaxis])
-    dt[dt > tbin] = np.nan
-    while ~np.all(np.isnan(dt)):
-        _b, _a = np.unravel_index(np.nanargmin(dt), dt.shape)
-        ib[iamiss[_a]] = ibmiss[_b]
-        dt[:, _a] = np.nan
-        dt[_b, :] = np.nan
-    fcn_a2b, drift_ppm = _interp_fcn(tsa, tsb, ib, linear=linear)
-
-    if return_indices:
-        return fcn_a2b, drift_ppm, np.where(ib >= 0)[0], ib[ib >= 0]
-    else:
-        return fcn_a2b, drift_ppm
+    return _sync_timestamps(
+        tsa, tsb, tbin=tbin, return_indices=return_indices, linear=linear
+    )
 
 
 def parabolic_max(x):
