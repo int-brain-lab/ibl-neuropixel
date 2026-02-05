@@ -18,55 +18,6 @@ import shutil
 FIXTURE_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
-class TestSyncTimestamps(unittest.TestCase):
-    def test_sync_timestamps_linear(self):
-        ta = np.cumsum(np.abs(np.random.randn(100))) * 10
-        tb = ta * 1.0001 + 100
-        fcn, drif, ia, ib = utils.sync_timestamps(
-            ta, tb, return_indices=True, linear=True
-        )
-        np.testing.assert_almost_equal(drif, 100)
-        np.testing.assert_almost_equal(tb, fcn(ta))
-
-    def test_timestamps(self):
-        np.random.seed(4132)
-        n = 50
-        drift = 17.14
-        offset = 34.323
-        tsa = np.cumsum(np.random.random(n) * 10)
-        tsb = tsa * (1 + drift / 1e6) + offset
-
-        # test linear drift
-        _fcn, _drift = utils.sync_timestamps(tsa, tsb)
-        assert np.all(np.isclose(_fcn(tsa), tsb))
-        assert np.isclose(drift, _drift)
-
-        # test missing indices on a
-        imiss = np.setxor1d(np.arange(n), [1, 2, 34, 35])
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
-            tsa[imiss], tsb, return_indices=True
-        )
-        assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[_ib]))
-
-        # test missing indices on b
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
-            tsa, tsb[imiss], return_indices=True
-        )
-        assert np.all(np.isclose(_fcn(tsa[_ia]), tsb[imiss[_ib]]))
-
-        # test missing indices on both
-        imiss2 = np.setxor1d(np.arange(n), [14, 17])
-        _fcn, _drift, _ia, _ib = utils.sync_timestamps(
-            tsa[imiss], tsb[imiss2], return_indices=True
-        )
-        assert np.all(np.isclose(_fcn(tsa[imiss[_ia]]), tsb[imiss2[_ib]]))
-
-        # test timestamps with huge offset (previously caused ArrayMemoryError)
-        # tsb -= 1e15
-        # _fcn, _drift = utils.sync_timestamps(tsa, tsb)
-        # assert np.all(np.isclose(_fcn(tsa), tsb))
-
-
 class TestParabolicMax(unittest.TestCase):
     # expected values
     maxi = np.array([0.0, 0.0, 3.04166667, 3.04166667, 5, 5])

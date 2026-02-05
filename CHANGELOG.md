@@ -1,8 +1,9 @@
 # Changelog
 
-## [1.10.0] - UNRELEASED
+## [1.10.0] - 2026-02-05
 
 ### added
+- `ibldsp.sync`: synchronisation specific module
 - `neuropixel.NP2Converter`: support splitting Quad Probes
 - `spikeglx.Reader`: support for reading Quad Probes 
 - `neuropixel.load_spike_glx_probe_table`: read in the table from the Harris lab and makes sure in the unit tests that the ADC banks are correct #73.

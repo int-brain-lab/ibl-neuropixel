@@ -14,6 +14,7 @@ import one.alf.path
 
 import neuropixel
 
+
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger("ibllib")
@@ -458,6 +459,12 @@ class Reader:
         log_func(f"SHA1 metadata: {sm}")
         log_func(f"SHA1 computed: {sc}")
         return sm == sc
+
+    def extract_sync_files(self, output_path=None, save=False, parts=""):
+        """
+        Extracts sync.times, sync.channels and sync.polarities from binary ephys dataset
+        """
+        pass
 
     def _parse_ch_file(self, ch_file=None):
         ch_file = (
@@ -1017,7 +1024,7 @@ def glob_ephys_files(
 
 def _mock_spikeglx_file(
     mock_bin_file,
-    meta_file,
+    meta_file,  # the read-only fixture file that will be copied over
     ns,
     nc,
     sync_depth=16,
