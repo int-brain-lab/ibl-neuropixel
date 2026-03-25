@@ -546,5 +546,33 @@ class TestRawDataFeatures(unittest.TestCase):
         self.assertEqual(num_snippets * (self.nc - 1), len(df))
 
 
+class TestComputePsdLog(unittest.TestCase):
+
+    def test_compute_psd_log_small_synthetic(self):
+        fs = 100.0
+        t = np.arange(200) / fs
+
+        data = np.vstack([
+            np.sin(2 * np.pi * 5 * t),
+            np.sin(2 * np.pi * 20 * t),
+        ])
+
+        fscale_log, psd_log = fourier.compute_psd_log(
+            data,
+            fs,
+            welch_kwargs=dict(
+                nperseg=64,
+                noverlap=32,
+                nfft=64,
+            ),
+        )
+        self.assertEqual(fscale_log.ndim, 1)
+        self.assertEqual(psd_log.shape[0], 2)
+        self.assertEqual(psd_log.shape[1], fscale_log.size)
+        self.assertTrue(np.all(psd_log >= 0))
+        self.assertGreater(np.max(psd_log[0]), 0)
+        self.assertGreater(np.max(psd_log[1]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
