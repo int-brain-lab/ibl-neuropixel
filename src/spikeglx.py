@@ -101,7 +101,11 @@ class Reader:
         if not meta_file.exists():
             # if no meta-data file is provided, try to get critical info from the binary file
             # by seeing if filesize checks out with neuropixel 384 channels
-            if self.file_bin.stat().st_size / 384 % 2 == 0:
+            if self.file_bin.suffix == ".npy":
+                _raw = np.load(self.file_bin, mmap_mode="r")
+                self.dtype = _raw.dtype
+                ns, nc = _raw.shape
+            elif self.file_bin.stat().st_size / 384 % 2 == 0:
                 nc = nc or 384
                 ns = ns or self.file_bin.stat().st_size / 2 / 384
                 fs = fs or 30000
@@ -157,6 +161,10 @@ class Reader:
                         f"Will attempt to fudge the meta-data information."
                     )
                 self.meta["fileTimeSecs"] = ftsec
+        elif self.file_bin.suffix == ".npy":
+            self._raw = np.lib.format.open_memmap(filename=sglx_file, mode="r")
+            self.dtype = self._raw.dtype
+            (self._ns, self._nc) = self._raw.shape
         else:
             if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
                 ftsec = (
@@ -177,7 +185,11 @@ class Reader:
                         )
                     self.meta["fileTimeSecs"] = ftsec
             self._raw = np.memmap(
-                sglx_file, dtype=self.dtype, mode="r", shape=(self.ns, self.nc)
+                sglx_file,
+                dtype=self.dtype,
+                mode="r",
+                shape=(self.ns, self.nc),
+                offset=0,
             )
 
     def close(self):

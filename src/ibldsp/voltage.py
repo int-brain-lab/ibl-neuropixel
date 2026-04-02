@@ -1109,6 +1109,7 @@ def resample_denoise_lfp_cbin(
     output: Path = None,
     dtype: "np.typing.DTypeLike" = np.float16,
     channel_labels: np.ndarray = None,
+    highpass_cutoff: float | None = 2,
 ) -> Path:
     """
     Resample and denoise local field potential (LFP) data from a SpikeGLX compressed binary file.
@@ -1143,6 +1144,15 @@ def resample_denoise_lfp_cbin(
     """
     CHUNK_SIZE = 2048 * 8
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
+    if highpass_cutoff is not None:
+        butter_kwargs = {
+            "N": 3,
+            "Wn": highpass_cutoff,
+            "btype": "highpass",
+            "fs": sr.fs,
+        }
+    else:
+        butter_kwargs = None
     # channel_labels = detect_bad_channels_cbin(lf_file)
     output = output or Path(lf_file).parent.joinpath("lf_resampled.bin")
     if not output.parent.exists():
@@ -1150,12 +1160,20 @@ def resample_denoise_lfp_cbin(
     ns, nc = (sr.ns, sr.nc - sr.nsync)
 
     # here we create a memmap upfront to pre-allocate and allow multi-processing
-    za = np.memmap(
+    # za = np.memmap(
+    #     filename=output,
+    #     dtype=dtype,
+    #     mode="w+",  # if not out_file.exists() else 'r+',
+    #     shape=(ns // q, nc),
+    # )
+    za = np.lib.format.open_memmap(
         filename=output,
+        mode="w+",
         dtype=dtype,
-        mode="w+",  # if not out_file.exists() else 'r+',
         shape=(ns // q, nc),
+        fortran_order=False,
     )
+
     # channel_labels = ibldsp.voltage.detect_bad_channels_cbin(sr)
     wg = ibldsp.utils.WindowGenerator(
         ns=sr.ns, nswin=(CHUNK_SIZE + 2) * q, overlap=q * 128
@@ -1173,23 +1191,21 @@ def resample_denoise_lfp_cbin(
         raw = sr[first:last, :nc].T
         # we only apply the sample shift to NP1 LFP data, not NP2
         if sr.major_version == 1:
-            raw = ibldsp.fourier.fshift(raw, sr.geometry['sample_shift'], axis=1)
+            raw = ibldsp.fourier.fshift(raw, sr.geometry["sample_shift"], axis=1)
         # apply DC offset and anti-aliasing filter
-        butter_kwargs = {
-            "N": 3,
-            "Wn": 2,
-            "btype": "highpass",
-            "fs": sr.fs,
-        }
-        sos = scipy.signal.butter(**butter_kwargs, output="sos")
-        raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
+        if butter_kwargs is not None:
+            sos = scipy.signal.butter(**butter_kwargs, output="sos")
+            raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
         # bad channel interpolation if the bad channels are provided
         if channel_labels is not None:
-            raw = ibldsp.voltage.interpolate_bad_channels(raw, channel_labels, sr.geometry["x"], sr.geometry["y"])
+            raw = ibldsp.voltage.interpolate_bad_channels(
+                raw, channel_labels, sr.geometry["x"], sr.geometry["y"]
+            )
         rsamp = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)[
             :, : raw.shape[1] // q
         ].T
         za[first_rs:last_rs, :] += np.astype(rsamp * amp_rs[:, np.newaxis], np.float32)
+        za.flush()
     return output
 
 

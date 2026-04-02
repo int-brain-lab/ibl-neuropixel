@@ -133,4 +133,3 @@ def voltageshow(
         plt.colorbar(im, cax=cax, shrink=0.8).ax.set(ylabel=cbar_label)
 
     return im
-

@@ -547,15 +547,16 @@ class TestRawDataFeatures(unittest.TestCase):
 
 
 class TestComputePsdLog(unittest.TestCase):
-
     def test_compute_psd_log_small_synthetic(self):
         fs = 100.0
         t = np.arange(200) / fs
 
-        data = np.vstack([
-            np.sin(2 * np.pi * 5 * t),
-            np.sin(2 * np.pi * 20 * t),
-        ])
+        data = np.vstack(
+            [
+                np.sin(2 * np.pi * 5 * t),
+                np.sin(2 * np.pi * 20 * t),
+            ]
+        )
 
         fscale_log, psd_log = fourier.compute_psd_log(
             data,

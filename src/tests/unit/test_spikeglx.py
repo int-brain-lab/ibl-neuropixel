@@ -789,6 +789,21 @@ class TestsBasicReader(unittest.TestCase):
                         assert sr.nsync == 0
                         np.testing.assert_array_equal(sr.sample2volts, s2v)
 
+    def test_read_npy(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_npy = Path(tmpdir) / "sample.npy"
+            dat = np.random.randn(65536, 64).astype(np.float32)
+            np.save(temp_npy, dat)
+            sr = spikeglx.Reader(temp_npy, fs=2500)
+            np.testing.assert_allclose(sr[:, :], dat)
+            self.assertEqual(sr.dtype, np.dtype("float32"))
+            self.assertEqual(sr[:, :].dtype, np.dtype("float32"))
+            np.save(temp_npy, dat.astype(np.float16))
+            sr = spikeglx.Reader(temp_npy, fs=2500)
+            self.assertEqual(sr.dtype, np.dtype("float16"))
+            # the reader casets as float32 by default
+            self.assertEqual(sr[:, :].dtype, np.dtype("float32"))
+
     def test_load_meta_file_only(self):
         # here we load only a meta-file
         meta_file = Path(TEST_PATH).joinpath("sample3B_g0_t0.imec1.ap.meta")

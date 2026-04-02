@@ -335,10 +335,7 @@ def dft2(x, r, c, nk, nl):
     return np.matmul(exp, x).reshape((nk, nl, nt))
 
 
-def compute_psd_log(
-    data: np.ndarray,
-    fs: float,
-    welch_kwargs: dict | None = None):
+def compute_psd_log(data: np.ndarray, fs: float, welch_kwargs: dict | None = None):
     """Compute a log-binned power spectral density (PSD) for each channel.
 
     This function estimates the PSD of each input channel using Welch's method,
@@ -363,22 +360,25 @@ def compute_psd_log(
     nc = data.shape[0]
     # handle input arguments for the welch function
     welch_kwargs = {} if welch_kwargs is None else welch_kwargs
-    welch_kwargs = dict(
-        nperseg=2 ** 16,  # Segment length
-        noverlap=2 ** 15,  # Overlap between segments
-        nfft=2 ** 16,  # FFT length
-    ) | welch_kwargs
+    welch_kwargs = (
+        dict(
+            nperseg=2**16,  # Segment length
+            noverlap=2**15,  # Overlap between segments
+            nfft=2**16,  # FFT length
+        )
+        | welch_kwargs
+    )
     # Compute Welch's PSD for each channel
     fscale, psd_array = scipy.signal.welch(
         data,
         fs=fs,
         axis=1,  # Compute along time axis (columns)
-        **welch_kwargs
+        **welch_kwargs,
     )
     bin_edges = np.logspace(np.log2(1), np.log2(fs / 2), 128, base=2)
     fscale_log = 2 ** np.cumsum((np.diff(np.log2(bin_edges)) + np.log2(bin_edges[0])))
-    ibins = np.searchsorted(fscale, bin_edges, side='right') - 1
+    ibins = np.searchsorted(fscale, bin_edges, side="right") - 1
     psd_log = np.zeros((nc, bin_edges.size - 1))
     for i in np.arange(bin_edges.size - 1):
-        psd_log[:, i] = np.mean(psd_array[:, ibins[i]:ibins[i + 1] + 1], axis=-1)
+        psd_log[:, i] = np.mean(psd_array[:, ibins[i] : ibins[i + 1] + 1], axis=-1)
     return fscale_log, psd_log

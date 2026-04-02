@@ -1,5 +1,12 @@
 # Changelog
 
+## [UNRELEASED]
+
+### added
+- `spikeglx.Reader` supports reading from npy files.
+- `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files.
+- `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
+
 ## [1.10.0] - 2026-02-05
 
 ### added

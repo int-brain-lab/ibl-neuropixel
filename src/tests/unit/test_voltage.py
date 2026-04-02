@@ -171,7 +171,7 @@ class TestLFP(unittest.TestCase):
         resamp_factor_q = 5
         with tempfile.TemporaryDirectory() as temp_dir:
             testfile = Path(temp_dir).joinpath("test.dat")
-            out_file = Path(temp_dir).joinpath("test_rs.dat")
+            out_file = Path(temp_dir).joinpath("test_rs.npy")
             # testfile = Path.home().joinpath('lfp', 'test.dat')
             # out_file = Path.home().joinpath('lfp', 'test_rs.dat')
             testfile.parent.mkdir(exist_ok=True, parents=True)
@@ -186,10 +186,12 @@ class TestLFP(unittest.TestCase):
 
             sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=2500, dtype=np.float32)
             ibldsp.voltage.resample_denoise_lfp_cbin(
-                sr, output=out_file, dtype=np.float32
+                sr,
+                output=out_file,
+                dtype=np.float32,
+                highpass_cutoff=None,
             )
             za = spikeglx.Reader(out_file, ns=ns // 5, nc=nc, fs=500, dtype=np.float32)
-
             diff = d[0:-1:resamp_factor_q, :] - za[:]
             np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)
 
