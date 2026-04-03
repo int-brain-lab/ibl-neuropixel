@@ -1154,18 +1154,12 @@ def resample_denoise_lfp_cbin(
     else:
         butter_kwargs = None
     # channel_labels = detect_bad_channels_cbin(lf_file)
-    output = output or Path(lf_file).parent.joinpath("lf_resampled.bin")
+    output = output or Path(lf_file).parent.joinpath("lf_resampled.npy")
     if not output.parent.exists():
         output.parent.mkdir(parents=True, exist_ok=True)
     ns, nc = (sr.ns, sr.nc - sr.nsync)
 
     # here we create a memmap upfront to pre-allocate and allow multi-processing
-    # za = np.memmap(
-    #     filename=output,
-    #     dtype=dtype,
-    #     mode="w+",  # if not out_file.exists() else 'r+',
-    #     shape=(ns // q, nc),
-    # )
     za = np.lib.format.open_memmap(
         filename=output,
         mode="w+",
