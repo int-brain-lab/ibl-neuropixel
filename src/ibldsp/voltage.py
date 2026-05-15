@@ -1238,7 +1238,7 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
     return stack, hstack
 
 
-def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
+def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3, scale=True):
     """
     Compute the current source density (CSD) of a given LFP signal recorded on Neuropixel probes.
 
@@ -1263,13 +1263,17 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
         - 'kcsd': kernel CSD method (requires the KCSD Python package)
     sigma : float, optional
         Tissue conductivity in Siemens per meter, defaults to 1/3 S.m-1
+    scale : bool, optional
+        If True, scale the finite difference by the intercontact distance and tissue conductivity.
+        If False, return the raw numerical finite difference without spatial/conductivity scaling.
 
     Returns
     -------
     numpy.ndarray
         Current source density with the same shape as the input LFP array.
         Positive values indicate current sources, negative values indicate sinks.
-        Units are in A.m-3 (amperes per cubic meter).
+        With scale=True, units are in A.m-3 (amperes per cubic meter).
+        With scale=False, values are the unscaled numerical finite difference.
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
     xy = (h["x"] + 1j * h["y"]) / 1e6
@@ -1280,9 +1284,10 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
         dx = np.median(np.diff(np.abs(xy[itr])))
         if method == "diff":
             sl = slice(1, -1) if n == 2 else slice(0, -1)
-            csd[itr[sl], :] = (
-                np.diff(lfp[itr, :].astype(np.float64), n=n, axis=0) / dx**n * sigma
-            )
+            diff = np.diff(lfp[itr, :].astype(np.float64), n=n, axis=0)
+            if scale:
+                diff = diff / dx**n * sigma
+            csd[itr[sl], :] = diff
             csd[itr[0], :] = csd[itr[1], :]
             csd[itr[-1], :] = csd[itr[-2], :]
         elif method == "kcsd":
