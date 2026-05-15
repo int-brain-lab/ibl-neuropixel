@@ -510,7 +510,10 @@ def destripe(
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
         can also be set to 'car', in which case the median accross channels will be subtracted
-    :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
+    :param k_filter: controls the spatial filter applied after bandpass and ADC correction.
+        True  (default for AP): applies the k-filter (wavenumber / spatial frequency filter).
+        False: applies Common Average Reference (CAR) — median subtraction across channels.
+        None : skips spatial filtering entirely; only bandpass and ADC shift are applied.
     :return: x, filtered array
     """
     butter_kwargs, k_kwargs = _get_destripe_parameters(
