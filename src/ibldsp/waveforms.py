@@ -11,7 +11,7 @@ import matplotlib as mpl
 import scipy
 
 import neuropixel
-from ibldsp.utils import parabolic_max, make_channel_index
+from ibldsp.utils import parabolic_max, make_channel_index, fcn_cosine
 from ibldsp.fourier import fshift
 
 EXTRACT_RADIUS_UM = 200
@@ -652,6 +652,12 @@ def compute_spike_features(
     :return: dataframe of spikes with all features,
     Returns:
     """
+    arr_in = _validate_arr_in(arr_in)
+    n_taper = 5
+    n_samples = arr_in.shape[1]
+    t = np.arange(n_samples)
+    taper = fcn_cosine([0, n_taper])(t) * (1 - fcn_cosine([n_samples - n_taper, n_samples])(t))
+    arr_in = arr_in * taper[np.newaxis, :, np.newaxis]
     df = find_peak(arr_in)
     # Per waveform, keep only trace that contains the peak
     arr_peak_real = get_array_peak(arr_in, df)

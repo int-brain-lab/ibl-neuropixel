@@ -4,6 +4,7 @@
 
 ### fixed
 - `ibldsp.waveforms.recovery_point`: off-by-one in boundary clipping (`>` → `>=`) caused `IndexError` when the trough sits exactly `idx_from_trough` samples from the end of the waveform.
+- `ibldsp.waveforms.compute_spike_features`: apply a 5-sample cosine taper to the time axis before peak detection to prevent `ValueError: All-NaN slice encountered` when a waveform peak falls at sample 0.
 
 ### added
 - `spikeglx.Reader` supports reading from npy files.
