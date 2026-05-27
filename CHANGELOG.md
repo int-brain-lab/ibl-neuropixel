@@ -2,6 +2,9 @@
 
 ## [UNRELEASED]
 
+### fixed
+- `ibldsp.waveforms.recovery_point`: off-by-one in boundary clipping (`>` → `>=`) caused `IndexError` when the trough sits exactly `idx_from_trough` samples from the end of the waveform.
+
 ### added
 - `spikeglx.Reader` supports reading from npy files.
 - `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files.

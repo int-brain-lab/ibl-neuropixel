@@ -122,6 +122,20 @@ def test_halfpeak_slopes():
     pd.testing.assert_frame_equal(df.astype(float), test_df.astype(float))
 
 
+def test_recovery_point_trough_at_boundary():
+    """Regression: IndexError when trough_time_idx + idx_from_trough == ns (off-by-one in clipping)."""
+    ns = 128
+    idx_from_trough = 5  # default for fs=30000, recovery_duration_ms=0.16
+    n_units = 3
+    arr_peak = np.ones((n_units, ns), dtype=np.float32)
+    df = pd.DataFrame({
+        'trough_time_idx': [ns - idx_from_trough] * n_units,  # idx_all == ns → out-of-bounds before fix
+        'invert_sign_peak': [1] * n_units,
+    })
+    result = waveforms.recovery_point(arr_peak, df, idx_from_trough=idx_from_trough)
+    assert (result['recovery_time_idx'].to_numpy() < ns).all()
+
+
 def test_dist_chanel_from_peak():
     # Distance test
     xyz_testd = np.stack(

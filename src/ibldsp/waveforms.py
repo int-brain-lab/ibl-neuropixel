@@ -510,7 +510,7 @@ def recovery_point(arr_peak, df, idx_from_trough=5):
     # Check df['peak_time_idx'] + pt_idx is not out of bound
     idx_all = df["trough_time_idx"].to_numpy() + idx_from_trough
     # Find waveform(s) for which the second point is outside matrix boundary range
-    idx_over = np.where(idx_all > arr_peak.shape[1])[0]
+    idx_over = np.where(idx_all >= arr_peak.shape[1])[0]
     if len(idx_over) > 0:
         # Todo should this raise a warning ?
         idx_all[idx_over] = arr_peak.shape[1] - 1  # Take the last value of the waveform
