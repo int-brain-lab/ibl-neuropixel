@@ -629,7 +629,7 @@ def _get_neuropixel_version_from_meta(md):
         else:
             return "3B1"
     # Neuropixel 2.0 single shank
-    elif prb_type in [21]:
+    elif prb_type in [21, 2003]:
         return "NP2.1"
     # Neuropixel 2.0 four shank
     elif prb_type in [24, 2013]:
