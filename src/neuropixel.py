@@ -372,8 +372,13 @@ class NP2Converter:
             status = self._process_NP21(overwrite=overwrite)
         elif self.np_version == "NP2.1":
             status = self._process_NP21(overwrite=overwrite)
-        elif self.np_version == "NP2QB":
+        elif self.np_version == "NP2QB" and self.n_shanks > 1:
             status = self._process_NP24(overwrite=overwrite)
+        elif self.np_version == "NP2QB" and self.n_shanks == 1:
+            _logger.info(
+                f"Detected {self.np_version} but only 1 shank, will process as NP2.1"
+            )
+            status = self._process_NP21(overwrite=overwrite)
         else:
             _logger.warning(
                 f"Probe version {self.np_version} unknown. Should be NP2.1, NP2.4 or NP2QB."
@@ -787,16 +792,17 @@ class NP2Converter:
             ValueError(f"Unsupported etype: {etype}")
         for sh in self.shank_info.keys():
             n_chns = len(self.shank_info[sh]["chns"])
+            n_sync_out = int(np.sum(np.array(self.shank_info[sh]["chns"]) >= self.napch))
             meta_shank = copy.deepcopy(self.sr.meta)
             meta_shank["acqApLfSy"][iempty] = 0
-            meta_shank["acqApLfSy"][ifull] = n_chns - 1
-            meta_shank["acqApLfSy"][2] = 1  # for NP2QB this goes from 4 to 1
+            meta_shank["acqApLfSy"][ifull] = n_chns - n_sync_out
+            meta_shank["acqApLfSy"][2] = n_sync_out
             meta_shank["snsApLfSy"][iempty] = 0
-            meta_shank["snsApLfSy"][ifull] = n_chns - 1
-            meta_shank["snsApLfSy"][2] = 1  # for NP2QB this goes from 4 to 1
+            meta_shank["snsApLfSy"][ifull] = n_chns - n_sync_out
+            meta_shank["snsApLfSy"][2] = n_sync_out
             meta_shank["fileSizeBytes"] = self.shank_info[sh][fkey].stat().st_size
             meta_shank["imSampRate"] = fs
-            if self.np_version in ["NP2.4", "NP2QB"]:
+            if self.np_version in ["NP2.4", "NP2QB"] and self.n_shanks > 1:
                 meta_shank["snsSaveChanSubset_orig"] = spikeglx._get_savedChans_subset(
                     self.shank_info[sh]["chns"]
                 )
