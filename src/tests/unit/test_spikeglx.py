@@ -6,6 +6,7 @@ import uuid
 
 import numpy as np
 from iblutil.io import hashfile
+import spikeinterface.core as si
 
 import neuropixel
 import spikeglx
@@ -809,3 +810,36 @@ class TestOnlineSpikeGlxReader(unittest.TestCase):
             sr = spikeglx.OnlineReader(file_ap)
             # just try to read the last sample of the bunch
             assert np.all(sr[299_999, :] == 0)
+
+
+class TestSpikeinterfaceRecording(unittest.TestCase):
+    """Tests for spikeinterface_recording() with .bin and .cbin inputs."""
+
+    META_FILE = TEST_PATH / "sample3B_g0_t0.imec1.ap.meta"
+    NS = 3000
+    NC = 385
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.workdir = Path(self._tempdir.name)
+        self._bin_file = spikeglx._mock_spikeglx_file(
+            self.workdir / "sample3B_g0_t0.imec1.ap.bin",
+            self.META_FILE,
+            ns=self.NS,
+            nc=self.NC,
+        )["bin_file"]
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def test_bin(self):
+        rec = spikeglx.spikeinterface_recording(self._bin_file)
+        self.assertIsInstance(rec, si.BaseRecording)
+        self.assertAlmostEqual(rec.get_sampling_frequency(), 30000, delta=1)
+
+    def test_cbin(self):
+        with spikeglx.Reader(self._bin_file) as sr:
+            cbin_file = sr.compress_file()
+        rec = spikeglx.spikeinterface_recording(cbin_file)
+        self.assertIsInstance(rec, si.BaseRecording)
+        self.assertAlmostEqual(rec.get_sampling_frequency(), 30000, delta=1)

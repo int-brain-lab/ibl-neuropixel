@@ -13,6 +13,8 @@ from iblutil.util import Bunch
 import one.alf.path
 
 import neuropixel
+import spikeinterface.extractors as se
+from spikeinterface.extractors.extractor_classes import SpikeGLXRecordingExtractor
 
 
 SAMPLE_SIZE = 2  # int16
@@ -1123,3 +1125,27 @@ def get_sync_map(folder_ephys):
         return None
     else:
         return _sync_map_from_hardware_config(hc)
+
+
+def spikeinterface_recording(file_path: Path):
+    """Load a SpikeGLX AP recording from a .cbin or .bin file.
+
+    Parameters
+    ----------
+    file_path : Path
+        Path to a compressed `.ap.cbin` or uncompressed `.ap.bin` file.
+
+    Returns
+    -------
+    spikeinterface.core.BaseRecording
+        SpikeInterface recording loaded with the appropriate extractor.
+    """
+    file_path = Path(file_path)
+    folder_path = file_path.parent
+    if file_path.suffix == ".cbin":
+        return se.read_cbin_ibl(
+            folder_path=folder_path, cbin_file_path=file_path, stream_name="ap"
+        )
+    stream_names, _ = SpikeGLXRecordingExtractor.get_streams(folder_path=folder_path)
+    ap_stream = next(s for s in stream_names if s.endswith(".ap"))
+    return se.read_spikeglx(folder_path=folder_path, stream_name=ap_stream)

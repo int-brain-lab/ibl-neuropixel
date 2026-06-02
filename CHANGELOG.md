@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.0] - 2026-06-01
+
+### added
+- `spikeglx.spikeinterface_recording`: load a SpikeGLX AP recording from a `.cbin` or `.bin` file, returning a SpikeInterface `BaseRecording`
+- `spikeinterface` added to dependencies
+
 ## [1.10.0] - 2026-02-05
 
 ### added
