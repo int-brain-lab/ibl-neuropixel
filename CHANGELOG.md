@@ -11,6 +11,11 @@
 - `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files.
 - `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
 
+
+### added
+- `spikeglx.spikeinterface_recording`: load a SpikeGLX AP recording from a `.cbin` or `.bin` file, returning a SpikeInterface `BaseRecording`
+- `spikeinterface` added to dependencies
+
 ## [1.10.0] - 2026-02-05
 
 ### added

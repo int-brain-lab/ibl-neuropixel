@@ -1101,7 +1101,6 @@ def detect_bad_channels_cbin(
     if display:
         raw = sr[sl, :nc].T
         from ibllib.plots.figures import ephys_bad_channels
-
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     return channel_flags
 
