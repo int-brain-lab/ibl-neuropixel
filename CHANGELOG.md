@@ -2,19 +2,19 @@
 
 ## [UNRELEASED]
 
-### fixed
-- `ibldsp.waveforms.recovery_point`: off-by-one in boundary clipping (`>` → `>=`) caused `IndexError` when the trough sits exactly `idx_from_trough` samples from the end of the waveform.
-- `ibldsp.waveforms.compute_spike_features`: apply a 5-sample cosine taper to the time axis before peak detection to prevent `ValueError: All-NaN slice encountered` when a waveform peak falls at sample 0.
-
 ### added
 - `spikeglx.Reader` supports reading from npy files.
 - `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files.
 - `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
-
-
-### added
 - `spikeglx.spikeinterface_recording`: load a SpikeGLX AP recording from a `.cbin` or `.bin` file, returning a SpikeInterface `BaseRecording`
 - `spikeinterface` added to dependencies
+- `neuropixel.NP2Converter`: support for NP2QB probes with a single active shank (routed as NP2.1)
+
+### fixed
+- `ibldsp.waveforms.recovery_point`: off-by-one in boundary clipping (`>` → `>=`) caused `IndexError` when the trough sits exactly `idx_from_trough` samples from the end of the waveform.
+- `ibldsp.waveforms.compute_spike_features`: apply a 5-sample cosine taper to the time axis before peak detection to prevent `ValueError: All-NaN slice encountered` when a waveform peak falls at sample 0.
+- `spikeglx._get_neuropixel_version_from_meta`: add probe type `2003` as NP2.1 variant
+- `neuropixel.NP2Converter._writemetadata`: sync channel count is now computed from channel indices rather than hard-coded to 1
 
 ## [1.10.0] - 2026-02-05
 
