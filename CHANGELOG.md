@@ -1,5 +1,14 @@
 # Changelog
 
+## [UNRELEASED]
+
+### added
+- `neuropixel.NP2Converter`: support for NP2QB probes with a single active shank (routed as NP2.1)
+
+### fixed
+- `spikeglx._get_neuropixel_version_from_meta`: add probe type `2003` as NP2.1 variant
+- `neuropixel.NP2Converter._writemetadata`: sync channel count is now computed from channel indices rather than hard-coded to 1
+
 ## [1.11.0] - 2026-06-01
 
 ### added

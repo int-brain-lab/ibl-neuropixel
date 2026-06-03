@@ -338,6 +338,42 @@ class TestNeuropixelReconstructor(BaseEphysNP2):
         self.assertEqual(orig_meta, recon_meta)
 
 
+class TestNeuropixel2ConverterNP2QBSingleShank(BaseEphysNP2):
+    """Check NP2 converter with NP2QB probes that have only a single active bank"""
+
+    nc = 384 + 4  # 384 AP channels + 4 sync channels
+    folder_test_case = "NP2QB_single_shank_meta"
+
+    def testProcessNP2QBSingleShank(self):
+        # Make sure it runs and routes to the NP21 path (LFP only, no shank split)
+        np_conv = NP2Converter(self.file_path, compress=False)
+        status = np_conv.process()
+        self.assertFalse(np_conv.already_exists)
+        self.assertTrue(status)
+
+        # LF file must exist in the same folder as the AP file (NP21 behaviour)
+        lf_file = np_conv.shank_info["shank0"]["lf_file"]
+        self.assertEqual(lf_file.parent, self.file_path.parent)
+
+        # Check LF metadata: 384 LF channels + 4 sync channels preserved
+        sr_lf = spikeglx.Reader(lf_file)
+        self.sglx_instances.append(sr_lf)
+        np.testing.assert_array_equal(sr_lf.meta["acqApLfSy"], [0, 384, 4])
+        np.testing.assert_array_equal(sr_lf.meta["snsApLfSy"], [0, 384, 4])
+        self.assertEqual(sr_lf.meta["NP2QB_shank"], 0)
+        self.assertEqual(sr_lf.meta["original_meta"], "False")
+        self.assertEqual(sr_lf.meta["imSampRate"], 2500)
+        sr_lf.close()
+
+        # Rerun: already_exists should be True and nothing processed
+        np_conv2 = NP2Converter(self.file_path, compress=False)
+        status2 = np_conv2.process()
+        self.assertTrue(np_conv2.already_exists)
+        self.assertFalse(status2)
+        np_conv2.sr.close()
+        np_conv.sr.close()
+
+
 class TestNeuropixel2ConverterNP2QB(BaseEphysNP2):
     nc = 385 * 4
     folder_test_case = "NP2QB_meta"
