@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## [1.11.0] - 2026-06-01
 
 ### added
 - `spikeglx.Reader` supports reading from npy files.
