@@ -4,7 +4,7 @@
 
 ### added
 - `spikeglx.Reader` supports reading from npy files.
-- `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files.
+- `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files. Now uses out-of-core multiprocessing (non-overlapping chunks, `PAD_OUT=512` output-sample warmup, `n_jobs` parameter).
 - `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
 - `spikeglx.spikeinterface_recording`: load a SpikeGLX AP recording from a `.cbin` or `.bin` file, returning a SpikeInterface `BaseRecording`
 - `spikeinterface` added to dependencies

@@ -4,6 +4,7 @@ Module to work with raw voltage traces. Spike sorting pre-processing functions.
 
 import inspect
 import joblib
+import multiprocessing
 import tqdm
 from pathlib import Path
 
@@ -1105,6 +1106,45 @@ def detect_bad_channels_cbin(
     return channel_flags
 
 
+def _resample_lfp_chunk(args):
+    """
+    Worker for resample_denoise_lfp_cbin.
+
+    Reads one padded input slice, applies the preprocessing pipeline, discards the padded
+    edges, and writes the valid output directly to the pre-allocated memmap.
+    All state is passed through *args* so the function is pickle-safe.
+    """
+    (file_bin, out_file, out_shape, out_dtype_str,
+     first_out, last_out, first_in, last_in, pad_left_out,
+     q, highpass_cutoff, nc, major_version, sample_shift, fs,
+     channel_labels, geom_x, geom_y, reader_kwargs) = args
+
+    out_dtype = np.dtype(out_dtype_str)
+    # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
+    sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
+    raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)   # (nc, L_in)
+
+    if major_version == 1:
+        raw = fourier.fshift(raw, sample_shift, axis=1)
+
+    if highpass_cutoff is not None:
+        sos = scipy.signal.butter(3, highpass_cutoff, btype="highpass", fs=fs, output="sos")
+        raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
+
+    if channel_labels is not None:
+        raw = interpolate_bad_channels(raw, channel_labels, geom_x, geom_y)
+
+    dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)   # (nc, ≈L_in//q)
+
+    n_out = last_out - first_out
+    valid = dec[:, pad_left_out:pad_left_out + n_out]
+    actual_n = valid.shape[1]   # may be < n_out at the end of the file
+
+    za = np.lib.format.open_memmap(out_file, mode="r+", dtype=out_dtype, shape=out_shape)
+    za[first_out:first_out + actual_n, :] = valid[:, :actual_n].T.astype(out_dtype)
+    za.flush()
+
+
 def resample_denoise_lfp_cbin(
     lf_file: spikeglx.Reader | Path | str,
     q: int = 5,
@@ -1112,96 +1152,80 @@ def resample_denoise_lfp_cbin(
     dtype: "np.typing.DTypeLike" = np.float16,
     channel_labels: np.ndarray = None,
     highpass_cutoff: float | None = 2,
+    n_jobs: int = 1,
 ) -> Path:
     """
-    Resample and denoise local field potential (LFP) data from a SpikeGLX compressed binary file.
+    Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
 
-    This function processes LFP recordings by downsampling them by a factor of q using
-    decimation with a finite impulse response (FIR) filter. The processing is performed
-    in overlapping chunks to avoid edge effects, with the overlapping regions properly
-    weighted and combined in the output.
+    Processes LFP recordings out-of-core: the output is pre-allocated as a memory-mapped
+    .npy file and filled by n_jobs parallel workers, each handling a non-overlapping slice
+    of the output with PAD_OUT extra samples on each side for filter warmup.
 
     Parameters
     ----------
     lf_file : spikeglx.Reader | Path | str
-        Input LFP file, either as a SpikeGLX Reader object or a path (string or Path object)
-        to a SpikeGLX binary or compressed binary file.
-    q : int, optional
-        Downsampling factor (decimation ratio). The output sampling rate will be the input
-        sampling rate divided by q. Defaults to 5.
+        Input LFP file as a SpikeGLX Reader or path to a binary/compressed binary file.
+    q : int
+        Downsampling factor; output sampling rate = input rate / q.  Defaults to 5.
     output : Path, optional
-        Path where the resampled data will be saved as a memory-mapped file. If None,
-        defaults to "lf_resampled.cbin" in the same directory as the input file.
-    dtype : str, optional # Data type of the output file. Defaults to "float16".
+        Output .npy path.  Defaults to ``lf_resampled.npy`` next to the input file.
+    dtype : np.dtype
+        Storage dtype for the output memmap.  Defaults to float16.
     channel_labels : np.ndarray, optional
-        Array of channel quality labels (not currently used in the implementation but
-        reserved for future bad channel handling). Defaults to None.
+        Per-channel quality labels passed to ``interpolate_bad_channels``.  None to skip.
+    highpass_cutoff : float or None
+        3rd-order Butterworth zero-phase highpass corner [Hz].  None to skip.
+    n_jobs : int
+        Number of parallel worker processes.  Defaults to 1 (sequential).
 
     Returns
     -------
     Path
-        Path to the output file containing the resampled LFP data as a float32 memory-mapped
-        array with shape (ns // q, nc), where ns is the number of samples and nc is the
-        number of channels (excluding sync channels).
+        Path to the completed output .npy file, shape (ns // q, nc).
     """
-    CHUNK_SIZE = 2048 * 8
+    PAD_OUT = 512        # output-samples of filter warmup on each side of every chunk
+    CHUNK_SIZE_OUT = 8192
+
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
-    if highpass_cutoff is not None:
-        butter_kwargs = {
-            "N": 3,
-            "Wn": highpass_cutoff,
-            "btype": "highpass",
-            "fs": sr.fs,
-        }
-    else:
-        butter_kwargs = None
-    # channel_labels = detect_bad_channels_cbin(lf_file)
-    output = output or Path(lf_file).parent.joinpath("lf_resampled.npy")
-    if not output.parent.exists():
-        output.parent.mkdir(parents=True, exist_ok=True)
-    ns, nc = (sr.ns, sr.nc - sr.nsync)
+    output = output or Path(sr.file_bin).parent.joinpath("lf_resampled.npy")
+    output.parent.mkdir(parents=True, exist_ok=True)
 
-    # here we create a memmap upfront to pre-allocate and allow multi-processing
-    za = np.lib.format.open_memmap(
-        filename=output,
-        mode="w+",
-        dtype=dtype,
-        shape=(ns // q, nc),
-        fortran_order=False,
-    )
+    ns, nc = sr.ns, sr.nc - sr.nsync
+    ns_out = ns // q
+    out_shape = (ns_out, nc)
+    out_dtype_str = np.dtype(dtype).str
 
-    # channel_labels = ibldsp.voltage.detect_bad_channels_cbin(sr)
-    wg = ibldsp.utils.WindowGenerator(
-        ns=sr.ns, nswin=(CHUNK_SIZE + 2) * q, overlap=q * 128
-    )
-    wg_rsamp = ibldsp.utils.WindowGenerator(
-        ns=sr.ns // q, nswin=(CHUNK_SIZE + 2), overlap=128
-    )
+    major_version = int(sr.major_version) if sr.major_version is not None else 0
+    geo = sr.geometry
+    sample_shift = np.array(geo["sample_shift"][:nc]) if (major_version == 1 and geo is not None) else np.zeros(nc)
+    geom_x = np.array(geo["x"][:nc]) if geo is not None else None
+    geom_y = np.array(geo["y"][:nc]) if geo is not None else None
+    fs = float(sr.fs)
+    # Pass raw Reader metadata so workers can reconstruct it for files without a .meta.
+    reader_kwargs = {"nc": sr.nc, "ns": sr.ns, "fs": sr.fs, "dtype": np.dtype(sr.dtype).str}
 
-    # the indexing is really complicated as we want to only populate the valid part of the windows to avoid edges effects
-    # while also being able to transpose this overlap in the resampled space index
-    # to do so we zip together two window generators
-    for sl, slr in zip(wg.firstlast, wg_rsamp.firstlast_splicing):
-        first_rs, last_rs, amp_rs = slr
-        first, last = sl
-        raw = sr[first:last, :nc].T
-        # we only apply the sample shift to NP1 LFP data, not NP2
-        if sr.major_version == 1:
-            raw = ibldsp.fourier.fshift(raw, sr.geometry["sample_shift"], axis=1)
-        # apply DC offset and anti-aliasing filter
-        if butter_kwargs is not None:
-            sos = scipy.signal.butter(**butter_kwargs, output="sos")
-            raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
-        # bad channel interpolation if the bad channels are provided
-        if channel_labels is not None:
-            raw = ibldsp.voltage.interpolate_bad_channels(
-                raw, channel_labels, sr.geometry["x"], sr.geometry["y"]
-            )
-        rsamp = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)[
-            :, : raw.shape[1] // q
-        ].T
-        za[first_rs:last_rs, :] += np.astype(rsamp * amp_rs[:, np.newaxis], np.float32)
-        za.flush()
+    # Pre-allocate; workers open their own 'r+' handles — no shared file object.
+    _ = np.lib.format.open_memmap(output, mode="w+", dtype=dtype, shape=out_shape)
+
+    wg = utils.WindowGenerator(ns=ns_out, nswin=CHUNK_SIZE_OUT + 2 * PAD_OUT, overlap=2 * PAD_OUT)
+    chunk_args = []
+    for win_first, win_last, first_valid, last_valid in wg.firstlast_valid:
+        first_in = win_first * q
+        last_in = min(ns, win_last * q)
+        pad_left_out = first_valid - win_first
+        chunk_args.append((
+            str(sr.file_bin), str(output), out_shape, out_dtype_str,
+            first_valid, last_valid, first_in, last_in, pad_left_out,
+            q, highpass_cutoff, nc, major_version, sample_shift, fs,
+            channel_labels, geom_x, geom_y, reader_kwargs,
+        ))
+
+    # fork avoids re-importing the module in every worker on macOS (default: spawn).
+    ctx = multiprocessing.get_context("fork")
+    with ctx.Pool(n_jobs) as pool:
+        for _ in tqdm.tqdm(pool.imap_unordered(_resample_lfp_chunk, chunk_args),
+                           total=len(chunk_args), desc="resampling", unit="chunk"):
+            pass
     return output
 
 
