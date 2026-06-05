@@ -190,6 +190,7 @@ class TestLFP(unittest.TestCase):
                 output=out_file,
                 dtype=np.float32,
                 highpass_cutoff=None,
+                car=False,
             )
             za = spikeglx.Reader(out_file, ns=ns // 5, nc=nc, fs=500, dtype=np.float32)
             diff = d[0:-1:resamp_factor_q, :] - za[:]

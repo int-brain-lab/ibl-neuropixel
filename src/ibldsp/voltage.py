@@ -1117,7 +1117,7 @@ def _resample_lfp_chunk(args):
     (file_bin, out_file, out_shape, out_dtype_str,
      first_out, last_out, first_in, last_in, pad_left_out,
      q, highpass_cutoff, nc, major_version, sample_shift, fs,
-     channel_labels, geom_x, geom_y, reader_kwargs) = args
+     channel_labels, geom_x, geom_y, reader_kwargs, car, car_file) = args
 
     out_dtype = np.dtype(out_dtype_str)
     # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
@@ -1140,6 +1140,14 @@ def _resample_lfp_chunk(args):
     valid = dec[:, pad_left_out:pad_left_out + n_out]
     actual_n = valid.shape[1]   # may be < n_out at the end of the file
 
+    if car:
+        good_chans = np.where(channel_labels == 0)[0] if channel_labels is not None else np.arange(nc)
+        car_trace = np.median(valid[good_chans, :actual_n], axis=0).astype(np.float32)  # (actual_n,)
+        valid = valid - car_trace[np.newaxis, :]
+        car_map = np.lib.format.open_memmap(car_file, mode="r+", dtype=np.float32, shape=(out_shape[0],))
+        car_map[first_out:first_out + actual_n] = car_trace
+        car_map.flush()
+
     za = np.lib.format.open_memmap(out_file, mode="r+", dtype=out_dtype, shape=out_shape)
     za[first_out:first_out + actual_n, :] = valid[:, :actual_n].T.astype(out_dtype)
     za.flush()
@@ -1153,6 +1161,7 @@ def resample_denoise_lfp_cbin(
     channel_labels: np.ndarray = None,
     highpass_cutoff: float | None = 2,
     n_jobs: int = 1,
+    car: bool = True,
 ) -> Path:
     """
     Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
@@ -1177,6 +1186,9 @@ def resample_denoise_lfp_cbin(
         3rd-order Butterworth zero-phase highpass corner [Hz].  None to skip.
     n_jobs : int
         Number of parallel worker processes.  Defaults to 1 (sequential).
+    car : bool
+        Apply median common-average reference after resampling.  The removed trace is saved
+        alongside the output as ``<stem>_car.npy``.  Defaults to True.
 
     Returns
     -------
@@ -1206,6 +1218,9 @@ def resample_denoise_lfp_cbin(
 
     # Pre-allocate; workers open their own 'r+' handles — no shared file object.
     _ = np.lib.format.open_memmap(output, mode="w+", dtype=dtype, shape=out_shape)
+    car_path = output.with_name(output.stem + '_car.npy') if car else None
+    if car:
+        _ = np.lib.format.open_memmap(car_path, mode="w+", dtype=np.float32, shape=(ns_out,))
 
     wg = utils.WindowGenerator(ns=ns_out, nswin=CHUNK_SIZE_OUT + 2 * PAD_OUT, overlap=2 * PAD_OUT)
     chunk_args = []
@@ -1217,7 +1232,7 @@ def resample_denoise_lfp_cbin(
             str(sr.file_bin), str(output), out_shape, out_dtype_str,
             first_valid, last_valid, first_in, last_in, pad_left_out,
             q, highpass_cutoff, nc, major_version, sample_shift, fs,
-            channel_labels, geom_x, geom_y, reader_kwargs,
+            channel_labels, geom_x, geom_y, reader_kwargs, car, str(car_path) if car else None,
         ))
 
     # fork avoids re-importing the module in every worker on macOS (default: spawn).
