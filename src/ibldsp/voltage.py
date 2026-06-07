@@ -1134,6 +1134,12 @@ def _resample_lfp_chunk(args):
     if channel_labels is not None:
         raw = interpolate_bad_channels(raw, channel_labels, geom_x, geom_y)
 
+    # CAR before decimation: median computed on the full-bandwidth LFP, then downsampled for storage
+    if car:
+        good_chans = np.where(channel_labels == 0)[0] if channel_labels is not None else np.arange(nc)
+        car_trace = np.median(raw[good_chans, :], axis=0).astype(np.float32)   # (L_in,)
+        raw = raw - car_trace[np.newaxis, :]
+
     dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)   # (nc, ≈L_in//q)
 
     n_out = last_out - first_out
@@ -1141,11 +1147,9 @@ def _resample_lfp_chunk(args):
     actual_n = valid.shape[1]   # may be < n_out at the end of the file
 
     if car:
-        good_chans = np.where(channel_labels == 0)[0] if channel_labels is not None else np.arange(nc)
-        car_trace = np.median(valid[good_chans, :actual_n], axis=0).astype(np.float32)  # (actual_n,)
-        valid = valid - car_trace[np.newaxis, :]
+        car_trace_dec = scipy.signal.decimate(car_trace, q, ftype="fir", n=256)
         car_map = np.lib.format.open_memmap(car_file, mode="r+", dtype=np.float32, shape=(out_shape[0],))
-        car_map[first_out:first_out + actual_n] = car_trace
+        car_map[first_out:first_out + actual_n] = car_trace_dec[pad_left_out:pad_left_out + actual_n]
         car_map.flush()
 
     za = np.lib.format.open_memmap(out_file, mode="r+", dtype=out_dtype, shape=out_shape)
