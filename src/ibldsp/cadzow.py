@@ -17,11 +17,39 @@ for N-spatial dimensions.
 }
 """
 
+import warnings
+
 import numpy as np
 import scipy.fft
+import scipy.signal
 from iblutil.numerical import ismember2d
 
 import neuropixel
+
+
+def _apply_rank_threshold(s, r, gap_threshold=None):
+    """Zero singular values beyond the adaptive rank for each frequency bin.
+
+    Parameters
+    ----------
+    s : ndarray (nbins, k)
+        Singular values sorted descending per row, modified in-place.
+    r : int
+        Hard upper bound on rank; fallback when no gap qualifies.
+    gap_threshold : float or None
+        Minimum s[i]/s[i+1] ratio to count as a dominant spectral gap.
+        The rank per bin is the position of the largest such ratio, clamped
+        to [1, r].  None disables adaptive selection (fixed rank r).
+    """
+    if gap_threshold is None:
+        s[:, r:] = 0.0
+        return
+    ratios = s[:, :-1] / (s[:, 1:] + 1e-10)
+    has_gap = ratios.max(axis=1) >= gap_threshold
+    r_adapt = np.where(has_gap, np.argmax(ratios, axis=1) + 1, r)
+    r_adapt = np.clip(r_adapt, 1, r)
+    idx = np.arange(s.shape[1])[np.newaxis, :]
+    s[idx >= r_adapt[:, np.newaxis]] = 0.0
 
 
 def derank(T, r):
@@ -110,7 +138,12 @@ def trajectory(x, y, dtype=np.complex128):
 
 def denoise(WAV, x, y, r, imax=None, niter=1):
     """
-    Applies cadzow denoising by de-ranking spatial matrices in frequency domain
+    Applies cadzow denoising by de-ranking spatial matrices in frequency domain.
+
+    .. deprecated::
+        Use `denoise_fxy` instead — it replaces the per-bin Python loop with a
+        single batched SVD call, giving a large speed improvement.
+
     :param WAV: np array (nc, ns) in frequency domain
     :param x: trace spatial coordinate np.array (nc)
     :param y: trace spatial coordinate np.array (nc)
@@ -119,6 +152,11 @@ def denoise(WAV, x, y, r, imax=None, niter=1):
     :param niter: number of iterations (1)
     :return: WAV_: np array nc / ns in frequency domain
     """
+    warnings.warn(
+        "denoise() is deprecated; use denoise_fxy() for the same result with batched SVD.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     WAV_ = np.zeros_like(WAV)
     WAV0 = np.copy(WAV)
     imax = np.minimum(WAV.shape[-1], imax) if imax else WAV.shape[-1]
@@ -134,6 +172,110 @@ def denoise(WAV, x, y, r, imax=None, niter=1):
     return WAV_
 
 
+def _process_window(
+    WAV_sl, it, ic, T_shape, scatter, r, imax, niter, gap_threshold, ppca_k
+):
+    """SVD rank reduction for one spatial window with precomputed trajectory geometry.
+
+    Parameters
+    ----------
+    WAV_sl : ndarray (nc_w, nf), complex
+        Frequency-domain data for this window.
+    it : tuple of ndarray
+        Row/col indices into the trajectory matrix (from ``trajectory()``).
+    ic : ndarray
+        Channel indices mapping trajectory entries to channels.
+    T_shape : tuple
+        Shape of the trajectory matrix ``(nrows, ncols)``.
+    scatter : ndarray (n_entries, nc_w)
+        Precomputed scatter matrix: maps trajectory entries back to channels.
+    r, imax, niter, gap_threshold, ppca_k
+        Algorithm parameters (see ``denoise_fxy``).
+
+    Returns
+    -------
+    WAV_ : ndarray (nc_w, nf), complex
+    """
+    WAV_ = WAV_sl.copy()
+    for _ in range(niter):
+        T_batch = np.zeros((imax, *T_shape), dtype=complex)
+        T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
+        U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
+        _apply_rank_threshold(s, r, gap_threshold)
+        T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
+
+        if ppca_k is not None:
+            WAV_rec = (T_batch_[:, it[0], it[1]] @ scatter).T
+            residual = np.abs(WAV_[:, :imax] - WAV_rec)
+            med = np.median(residual, axis=0)
+            mad = np.median(np.abs(residual - med[np.newaxis, :]), axis=0)
+            mask = residual > (med + ppca_k * mad)
+            WAV_clean = WAV_[:, :imax].copy()
+            WAV_clean[mask] = WAV_rec[mask]
+            T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
+            U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
+            _apply_rank_threshold(s, r, gap_threshold)
+            T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
+
+        vals = T_batch_[:, it[0], it[1]]
+        WAV_new = WAV_.copy()
+        WAV_new[:, :imax] = (vals @ scatter).T
+        WAV_ = WAV_new
+    return WAV_
+
+
+def denoise_fxy(WAV, x, y, r, imax=None, niter=1, gap_threshold=None, ppca_k=None):
+    """
+    F-X Cadzow denoiser using a single batched SVD over all frequency bins.
+
+    Replaces the per-frequency-bin Python loop in `denoise` with a single
+    ``np.linalg.svd`` call on the stacked ``(imax, nrows, ncols)`` tensor,
+    giving a large speed improvement via LAPACK batched paths.
+
+    Parameters
+    ----------
+    WAV : ndarray (nc, nf), complex
+        Channels in the frequency domain (rfft output).
+    x : ndarray (nc,)
+        Lateral channel coordinates [µm].
+    y : ndarray (nc,)
+        Depth channel coordinates [µm].
+    r : int
+        Maximum SVD rank (number of plane waves retained).
+    imax : int, optional
+        Process only bins ``[:imax]``; higher bins pass through unchanged.
+        Defaults to all bins.
+    niter : int
+        Number of Cadzow iterations.  Default 1.
+    gap_threshold : float, optional
+        If set, enables adaptive per-bin rank selection: the rank for each
+        bin is the position of the largest s[i]/s[i+1] ratio, clamped to
+        [1, r].  Falls back to ``r`` when no ratio exceeds ``gap_threshold``.
+        A value around 1.5–2.0 is a reasonable starting point.  None uses
+        fixed rank ``r`` (default).
+    ppca_k : float, optional
+        If set, enables a PPCA-style outlier correction each iteration: after
+        the first rank reduction, channels whose per-frequency amplitude
+        deviates from the model by more than ``median + ppca_k * MAD`` are
+        replaced by the model prediction, then the SVD is repeated on the
+        cleaned data.  Suppresses impedance-mismatch artefacts without
+        altering channels consistent with the spatial model.  Typical values:
+        2–5.  None disables (default).
+
+    Returns
+    -------
+    WAV_ : ndarray (nc, nf), complex
+    """
+    nc, nf = WAV.shape
+    imax = int(min(imax if imax is not None else nf, nf))
+    T, it, ic, trcount = trajectory(x, y)
+    scatter = np.zeros((len(ic), nc))
+    scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
+    return _process_window(
+        WAV, it, ic, T.shape, scatter, r, imax, niter, gap_threshold, ppca_k
+    )
+
+
 def cadzow_np1(
     wav,
     fs=30000,
@@ -146,14 +288,12 @@ def cadzow_np1(
     npad=int(0),
 ):
     """
-    Apply Fxy rank-denoiser to a full recording of Neuropixel 1 probe geometry
-    ntr - nswx has to be a multiple of (nswx - ovx)
-    Examples of working set of parameters:
-        ovx = int(5); nswx = int(33); ovx = int(6))
-        ovx = int(16); nswx = int(32); ovx = int(0))
-        ovx = int(32); nswx = int(64); ovx = int(0))
-        ovx = int(24); nswx = int(64); ovx = int(0))
-        ovx = int(8); nswx = int(16); ovx = int(0))
+    Apply Fxy rank-denoiser to a full recording of Neuropixel 1 probe geometry.
+
+    .. deprecated::
+        Use `cadzow_denoiser` instead — it accepts any probe geometry and uses
+        batched SVD (via `denoise_fxy`) for a large speed improvement.
+
     :param wav: ntr, ns
     :param fs:
     :param ovx is the overlap in x
@@ -161,13 +301,18 @@ def cadzow_np1(
     :param npad is the padding
     :return:
     """
-    #
+    warnings.warn(
+        "cadzow_np1() is deprecated; use cadzow_denoiser() for any probe geometry "
+        "and faster batched SVD.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     ntr, ns = wav.shape
     h = h or neuropixel.trace_header(version=1)
     nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
     fscale = scipy.fft.rfftfreq(ns, d=1 / fs)
-    imax = np.searchsorted(fscale, fmax)
     WAV = scipy.fft.rfft(wav[:, :])
+    imax = WAV.shape[-1] if fmax is None else int(np.searchsorted(fscale, fmax))
     padgain = scipy.signal.windows.hann(npad * 2)[:npad]
     WAV = np.r_[
         np.flipud(WAV[1 : npad + 1, :]) * padgain[:, np.newaxis],
@@ -205,3 +350,150 @@ def cadzow_np1(
     WAV_ = WAV_[npad : -npad - 1]  # remove padding
     wav_ = scipy.fft.irfft(WAV_)
     return wav_
+
+
+def cadzow_denoiser(
+    wav,
+    h=None,
+    fs=250.0,
+    rank=5,
+    niter=1,
+    fmax=100.0,
+    nswx=32,
+    ovx=16,
+    npad=0,
+    gap_threshold=None,
+    ppca_k=None,
+    n_jobs=1,
+):
+    """
+    F-X Cadzow denoiser for any Neuropixel probe geometry.
+
+    Geometry-agnostic replacement for `cadzow_np1`: accepts an explicit probe
+    header ``h`` (NP1, NP2, or any custom geometry) and uses batched SVD via
+    `_process_window` instead of a per-bin Python loop.  Window trajectories are
+    precomputed once and dispatched to parallel workers via joblib when
+    ``n_jobs != 1``.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns), float
+        Raw LFP, channels × samples.
+    h : dict or None
+        Probe header with keys ``'x'`` and ``'y'`` (channel coordinates [µm]).
+        Must have at least ``nc`` elements.  Defaults to the NP1 geometry.
+        Pass ``neuropixel.trace_header(version=2)`` for NP2 probes.
+    fs : float
+        Sampling rate [Hz].  Default 250.
+    rank : int
+        Maximum SVD rank (plane waves retained per frequency bin).  Default 5.
+    niter : int
+        Number of Cadzow iterations.  Default 1.
+    fmax : float or None
+        Maximum frequency processed [Hz]; higher bins pass through unchanged.
+        None processes all bins up to Nyquist.  Default 100.
+    nswx : int
+        Channel-window width (number of channels per spatial window).
+        Default 32.
+    ovx : int
+        Channel-window overlap (must satisfy ``ovx < nswx / 2``).  Default 16.
+    npad : int
+        Reflective channel padding on each side.  Default 0.
+    gap_threshold : float, optional
+        Adaptive rank: use the largest singular-value gap as the per-bin rank,
+        clamped to [1, rank].  Falls back to fixed rank when the maximum ratio
+        is below this value.  None disables adaptive selection.
+    ppca_k : float, optional
+        PPCA-style outlier correction threshold in MAD units.  After an initial
+        rank reduction, channels deviating from the model by more than
+        ``median + ppca_k * MAD`` (per frequency bin) are replaced by the model
+        prediction and the SVD is repeated.  Suppresses impedance-mismatch
+        artefacts.  Typical values: 2–5.  None disables (default).
+    n_jobs : int
+        Number of parallel workers for the spatial-window loop.  ``np.linalg.svd``
+        releases the GIL, so threads (``prefer='threads'``) are used.  Default 1
+        (serial).  Use ``-1`` for all available cores.
+
+    Returns
+    -------
+    wav_ : ndarray (nc, ns), float32
+    """
+    from joblib import Parallel, delayed
+
+    ntr, ns = wav.shape
+    if h is None:
+        _h = neuropixel.trace_header(version=1)
+        h = {k: v[:ntr] for k, v in _h.items()}
+
+    nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
+    WAV = scipy.fft.rfft(wav)
+    fscale = scipy.fft.rfftfreq(ns, d=1.0 / fs)
+    imax = WAV.shape[1] if fmax is None else int(np.searchsorted(fscale, fmax))
+    padgain = scipy.signal.windows.hann(npad * 2)[:npad]
+    WAV = np.r_[
+        np.flipud(WAV[1 : npad + 1, :]) * padgain[:, np.newaxis],
+        WAV,
+        np.flipud(WAV[-npad - 2 : -1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis],
+    ]
+    x = np.r_[
+        np.flipud(h["x"][1 : npad + 1]), h["x"], np.flipud(h["x"][-npad - 2 : -1])
+    ]
+    y = np.r_[
+        np.flipud(h["y"][1 : npad + 1]) - 120,
+        h["y"],
+        np.flipud(h["y"][-npad - 2 : -1]) + 120,
+    ]
+
+    hanning = scipy.signal.windows.hann(ovx * 2 - 1)[:ovx]
+    gain_window = np.r_[hanning, np.ones(nswx - ovx * 2), np.flipud(hanning)]
+
+    # Precompute per-window geometry (trajectory + scatter + gain) once before dispatch
+    windows = []
+    for firstx in np.arange(nwinx) * (nswx - ovx):
+        lastx = int(firstx + nswx)
+        sl = slice(firstx, lastx)
+        nc_w = len(x[sl])
+        if firstx == 0:
+            gw = np.r_[np.ones(nswx - ovx), np.flipud(hanning)][:nc_w]
+        elif lastx >= ntr:
+            gw = np.r_[hanning, np.ones(nswx - ovx)][:nc_w]
+        else:
+            gw = gain_window[:nc_w]
+        T, it, ic, trcount = trajectory(x[sl], y[sl])
+        scatter = np.zeros((len(ic), nc_w))
+        scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
+        windows.append((sl, gw, it, ic, T.shape, scatter))
+
+    def _worker(sl, gw, it, ic, T_shape, scatter):
+        return (
+            sl,
+            gw,
+            _process_window(
+                WAV[sl],
+                it,
+                ic,
+                T_shape,
+                scatter,
+                rank,
+                imax,
+                niter,
+                gap_threshold,
+                ppca_k,
+            ),
+        )
+
+    if n_jobs == 1:
+        results = [_worker(*w) for w in windows]
+    else:
+        results = Parallel(n_jobs=n_jobs, prefer="threads")(
+            delayed(_worker)(*w) for w in windows
+        )
+
+    WAV_ = np.zeros_like(WAV)
+    for sl, gw, WAV_w in results:
+        WAV_[sl] += WAV_w * gw[:, np.newaxis]
+
+    WAV_ = WAV_[
+        npad : -npad - 1
+    ]  # remove channel padding (npad=0 trims the phantom tail row)
+    return scipy.fft.irfft(WAV_).astype(np.float32)

@@ -3,6 +3,7 @@
 ## [1.11.0] - UNRELEASED
 
 ### added
+- `ibldsp.cadzow.cadzow_denoiser`: faster parallelised LFP denoiser with improved PPCA-based outlier channel suppression for cleaner results; supports `fmax=None` to process the full spectrum up to Nyquist.
 - `spikeglx.Reader` supports reading from npy files.
 - `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files. Now uses out-of-core multiprocessing (non-overlapping chunks, `PAD_OUT=512` output-sample warmup, `n_jobs` parameter).
 - `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
