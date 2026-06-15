@@ -4,7 +4,6 @@ Module to work with raw voltage traces. Spike sorting pre-processing functions.
 
 import inspect
 import joblib
-import multiprocessing
 import tqdm
 from pathlib import Path
 
@@ -1044,6 +1043,7 @@ def detect_bad_channels_cbin(
     n_batches: int = 10,
     batch_duration: float = None,
     display: bool = False,
+    return_features: bool = False,
 ) -> np.ndarray:
     """
     Detect faulty channels in a SpikeGLX binary or compressed binary file.
@@ -1067,16 +1067,22 @@ def detect_bad_channels_cbin(
     display : bool, optional
         If True, displays a diagnostic figure showing channel features and an excerpt of the
         raw data using the `ephys_bad_channels` plotting function. Defaults to False.
+    return_features : bool, optional
+        If True, returns a tuple ``(channel_flags, xfeats_med)`` instead of just
+        ``channel_flags``.  Defaults to False to preserve the original return signature.
 
     Returns
     -------
-    numpy.ndarray
+    channel_flags : numpy.ndarray
         Integer array of shape (nc,) containing channel quality labels, where nc is the number
         of channels (excluding sync channels):
         - 0: good/ok channel
         - 1: dead channel (low coherence/amplitude)
         - 2: high noise channel
         - 3: outside of the brain
+    xfeats_med : dict
+        Median per-channel features across all batches ('xcor_hf', 'xcor_lf', 'psd_hf',
+        'rms_raw').  Only returned when ``return_features=True``.
     """
     sr = (
         bin_file if isinstance(bin_file, spikeglx.Reader) else spikeglx.Reader(bin_file)
@@ -1103,6 +1109,8 @@ def detect_bad_channels_cbin(
         raw = sr[sl, :nc].T
         from ibllib.plots.figures import ephys_bad_channels
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
+    if return_features:
+        return channel_flags, xfeats_med
     return channel_flags
 
 
@@ -1117,7 +1125,8 @@ def _resample_lfp_chunk(args):
     (file_bin, out_file, out_shape, out_dtype_str,
      first_out, last_out, first_in, last_in, pad_left_out,
      q, highpass_cutoff, nc, major_version, sample_shift, fs,
-     channel_labels, geom_x, geom_y, reader_kwargs, car, car_file) = args
+     channel_labels, geom_x, geom_y, reader_kwargs, car, car_file,
+     cadzow_kwargs) = args
 
     out_dtype = np.dtype(out_dtype_str)
     # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
@@ -1141,6 +1150,15 @@ def _resample_lfp_chunk(args):
         raw = raw - car_trace[np.newaxis, :]
 
     dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)   # (nc, ≈L_in//q)
+
+    if cadzow_kwargs is not None:
+        from ibldsp import cadzow as _cadzow_mod
+        cx = geom_x if geom_x is not None else neuropixel.trace_header(version=1)['x'][:nc]
+        cy = geom_y if geom_y is not None else neuropixel.trace_header(version=1)['y'][:nc]
+        dec = _cadzow_mod.cadzow_denoiser(
+            dec, h={'x': cx, 'y': cy}, fs=fs / q,
+            **{**cadzow_kwargs, 'n_jobs': 1},
+        )
 
     n_out = last_out - first_out
     valid = dec[:, pad_left_out:pad_left_out + n_out]
@@ -1166,6 +1184,7 @@ def resample_denoise_lfp_cbin(
     highpass_cutoff: float | None = 2,
     n_jobs: int = 1,
     car: bool = True,
+    cadzow_kwargs: dict | None = None,
 ) -> Path:
     """
     Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
@@ -1193,14 +1212,25 @@ def resample_denoise_lfp_cbin(
     car : bool
         Apply median common-average reference after resampling.  The removed trace is saved
         alongside the output as ``<stem>_car.npy``.  Defaults to True.
+    cadzow_kwargs : dict or None
+        If provided, Cadzow spatial denoising is applied to each decimated chunk.
+        Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
+        ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
+        inside each worker; outer-level parallelism is controlled by *n_jobs* above.
+        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT = 9216) is a multiple of the
+        canonical Cadzow FFT window (256 × 3 = 768) by design.  Default None (disabled).
 
     Returns
     -------
     Path
         Path to the completed output .npy file, shape (ns // q, nc).
     """
+    # 9216 = 12 × 768 — chunk + 2 × pad must stay a multiple of the cadzow window
     PAD_OUT = 512        # output-samples of filter warmup on each side of every chunk
     CHUNK_SIZE_OUT = 8192
+    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0, (
+        f"CHUNK_SIZE_OUT {CHUNK_SIZE_OUT} + 2*PAD_OUT {PAD_OUT} must be a multiple of 768"
+    )
 
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
     output = output or Path(sr.file_bin).parent.joinpath("lf_resampled.npy")
@@ -1237,14 +1267,15 @@ def resample_denoise_lfp_cbin(
             first_valid, last_valid, first_in, last_in, pad_left_out,
             q, highpass_cutoff, nc, major_version, sample_shift, fs,
             channel_labels, geom_x, geom_y, reader_kwargs, car, str(car_path) if car else None,
+            cadzow_kwargs,
         ))
 
-    # fork avoids re-importing the module in every worker on macOS (default: spawn).
-    ctx = multiprocessing.get_context("fork")
-    with ctx.Pool(n_jobs) as pool:
-        for _ in tqdm.tqdm(pool.imap_unordered(_resample_lfp_chunk, chunk_args),
-                           total=len(chunk_args), desc="resampling", unit="chunk"):
-            pass
+    # loky backend avoids fork-safety crashes on macOS / Apple Silicon.
+    from joblib import Parallel, delayed
+    Parallel(n_jobs=n_jobs, backend="loky")(
+        delayed(_resample_lfp_chunk)(args)
+        for args in tqdm.tqdm(chunk_args, desc="resampling", unit="chunk")
+    )
     return output
 
 

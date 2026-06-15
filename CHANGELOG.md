@@ -5,13 +5,16 @@
 ### added
 - `ibldsp.cadzow.cadzow_denoiser`: faster parallelised LFP denoiser with improved PPCA-based outlier channel suppression for cleaner results; supports `fmax=None` to process the full spectrum up to Nyquist.
 - `spikeglx.Reader` supports reading from npy files.
-- `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files. Now uses out-of-core multiprocessing (non-overlapping chunks, `PAD_OUT=512` output-sample warmup, `n_jobs` parameter).
+- `ibldsp.voltage.resample_denoise_lfp_cbin`: resample and quantize LFP files in numpy files. Now uses out-of-core multiprocessing (non-overlapping chunks, `PAD_OUT=512` output-sample warmup, `n_jobs` parameter). New `cadzow_kwargs` parameter applies Cadzow spatial denoising to each decimated chunk.
+- `ibldsp.voltage.detect_bad_channels_cbin`: new `return_features` parameter to optionally return per-channel feature dictionary alongside channel flags.
 - `ibldsp.fourier.compute_psd_log`: util to compute the log power spectral density of a signal with logscale frequency binning.
 - `spikeglx.spikeinterface_recording`: load a SpikeGLX AP recording from a `.cbin` or `.bin` file, returning a SpikeInterface `BaseRecording`
 - `spikeinterface` added to dependencies
 - `neuropixel.NP2Converter`: support for NP2QB probes with a single active shank (routed as NP2.1)
 
 ### fixed
+- `ibldsp.voltage.resample_denoise_lfp_cbin`: switched from `multiprocessing` fork pool to `joblib` loky backend to avoid fork-safety crashes on macOS/Apple Silicon.
+- `ibldsp.cadzow._process_window`: suppress floating-point warnings (divide/overflow/invalid) during SVD reconstruction.
 - `ibldsp.waveforms.recovery_point`: off-by-one in boundary clipping (`>` → `>=`) caused `IndexError` when the trough sits exactly `idx_from_trough` samples from the end of the waveform.
 - `ibldsp.waveforms.compute_spike_features`: apply a 5-sample cosine taper to the time axis before peak detection to prevent `ValueError: All-NaN slice encountered` when a waveform peak falls at sample 0.
 - `spikeglx._get_neuropixel_version_from_meta`: add probe type `2003` as NP2.1 variant

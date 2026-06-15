@@ -197,30 +197,31 @@ def _process_window(
     WAV_ : ndarray (nc_w, nf), complex
     """
     WAV_ = WAV_sl.copy()
-    for _ in range(niter):
-        T_batch = np.zeros((imax, *T_shape), dtype=complex)
-        T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
-        U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
-        _apply_rank_threshold(s, r, gap_threshold)
-        T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
-
-        if ppca_k is not None:
-            WAV_rec = (T_batch_[:, it[0], it[1]] @ scatter).T
-            residual = np.abs(WAV_[:, :imax] - WAV_rec)
-            med = np.median(residual, axis=0)
-            mad = np.median(np.abs(residual - med[np.newaxis, :]), axis=0)
-            mask = residual > (med + ppca_k * mad)
-            WAV_clean = WAV_[:, :imax].copy()
-            WAV_clean[mask] = WAV_rec[mask]
-            T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
+    with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+        for _ in range(niter):
+            T_batch = np.zeros((imax, *T_shape), dtype=complex)
+            T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
             U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
             _apply_rank_threshold(s, r, gap_threshold)
             T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
 
-        vals = T_batch_[:, it[0], it[1]]
-        WAV_new = WAV_.copy()
-        WAV_new[:, :imax] = (vals @ scatter).T
-        WAV_ = WAV_new
+            if ppca_k is not None:
+                WAV_rec = (T_batch_[:, it[0], it[1]] @ scatter).T
+                residual = np.abs(WAV_[:, :imax] - WAV_rec)
+                med = np.median(residual, axis=0)
+                mad = np.median(np.abs(residual - med[np.newaxis, :]), axis=0)
+                mask = residual > (med + ppca_k * mad)
+                WAV_clean = WAV_[:, :imax].copy()
+                WAV_clean[mask] = WAV_rec[mask]
+                T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
+                U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
+                _apply_rank_threshold(s, r, gap_threshold)
+                T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
+
+            vals = T_batch_[:, it[0], it[1]]
+            WAV_new = WAV_.copy()
+            WAV_new[:, :imax] = (vals @ scatter).T
+            WAV_ = WAV_new
     return WAV_
 
 
