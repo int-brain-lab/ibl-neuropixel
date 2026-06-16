@@ -333,3 +333,52 @@ def dft2(x, r, c, nk, nl):
         * (r[np.newaxis] * k[:, np.newaxis] + c[np.newaxis] * h[:, np.newaxis])
     )
     return np.matmul(exp, x).reshape((nk, nl, nt))
+
+
+def compute_psd_log(data: np.ndarray, fs: float, welch_kwargs: dict | None = None):
+    """Compute a log-binned power spectral density (PSD) for each channel.
+
+    This function estimates the PSD of each input channel using Welch's method,
+    then averages the PSD values into logarithmically spaced frequency bins.
+
+    Parameters
+    ----------
+    data : array-like, shape (n_channels, n_samples)
+        Multichannel time-series data, with channels along axis 0 and time along
+        axis 1.
+    fs : float
+        Sampling frequency of the signal in Hz.
+    welch_kwargs: dict, optional
+        Parameters for the Welch's method. See `scipy.signal.welch` for details.
+    Returns
+    -------
+    fscale_log : ndarray
+        Log-spaced frequency scale corresponding to the PSD bins.
+    psd_log : ndarray, shape (n_channels, n_bins)
+        Log-binned PSD values for each channel.
+    """
+    nc = data.shape[0]
+    # handle input arguments for the welch function
+    welch_kwargs = {} if welch_kwargs is None else welch_kwargs
+    welch_kwargs = (
+        dict(
+            nperseg=2**16,  # Segment length
+            noverlap=2**15,  # Overlap between segments
+            nfft=2**16,  # FFT length
+        )
+        | welch_kwargs
+    )
+    # Compute Welch's PSD for each channel
+    fscale, psd_array = scipy.signal.welch(
+        data,
+        fs=fs,
+        axis=1,  # Compute along time axis (columns)
+        **welch_kwargs,
+    )
+    bin_edges = np.logspace(np.log2(1), np.log2(fs / 2), 128, base=2)
+    fscale_log = 2 ** np.cumsum((np.diff(np.log2(bin_edges)) + np.log2(bin_edges[0])))
+    ibins = np.searchsorted(fscale, bin_edges, side="right") - 1
+    psd_log = np.zeros((nc, bin_edges.size - 1))
+    for i in np.arange(bin_edges.size - 1):
+        psd_log[:, i] = np.mean(psd_array[:, ibins[i] : ibins[i + 1] + 1], axis=-1)
+    return fscale_log, psd_log

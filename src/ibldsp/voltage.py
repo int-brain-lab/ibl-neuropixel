@@ -510,7 +510,10 @@ def destripe(
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
         can also be set to 'car', in which case the median accross channels will be subtracted
-    :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
+    :param k_filter: controls the spatial filter applied after bandpass and ADC correction.
+        True  (default for AP): applies the k-filter (wavenumber / spatial frequency filter).
+        False: applies Common Average Reference (CAR) — median subtraction across channels.
+        None : skips spatial filtering entirely; only bandpass and ADC shift are applied.
     :return: x, filtered array
     """
     butter_kwargs, k_kwargs = _get_destripe_parameters(
@@ -1040,6 +1043,7 @@ def detect_bad_channels_cbin(
     n_batches: int = 10,
     batch_duration: float = None,
     display: bool = False,
+    return_features: bool = False,
 ) -> np.ndarray:
     """
     Detect faulty channels in a SpikeGLX binary or compressed binary file.
@@ -1063,16 +1067,22 @@ def detect_bad_channels_cbin(
     display : bool, optional
         If True, displays a diagnostic figure showing channel features and an excerpt of the
         raw data using the `ephys_bad_channels` plotting function. Defaults to False.
+    return_features : bool, optional
+        If True, returns a tuple ``(channel_flags, xfeats_med)`` instead of just
+        ``channel_flags``.  Defaults to False to preserve the original return signature.
 
     Returns
     -------
-    numpy.ndarray
+    channel_flags : numpy.ndarray
         Integer array of shape (nc,) containing channel quality labels, where nc is the number
         of channels (excluding sync channels):
         - 0: good/ok channel
         - 1: dead channel (low coherence/amplitude)
         - 2: high noise channel
         - 3: outside of the brain
+    xfeats_med : dict
+        Median per-channel features across all batches ('xcor_hf', 'xcor_lf', 'psd_hf',
+        'rms_raw').  Only returned when ``return_features=True``.
     """
     sr = (
         bin_file if isinstance(bin_file, spikeglx.Reader) else spikeglx.Reader(bin_file)
@@ -1099,7 +1109,70 @@ def detect_bad_channels_cbin(
         raw = sr[sl, :nc].T
         from ibllib.plots.figures import ephys_bad_channels
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
+    if return_features:
+        return channel_flags, xfeats_med
     return channel_flags
+
+
+def _resample_lfp_chunk(args):
+    """
+    Worker for resample_denoise_lfp_cbin.
+
+    Reads one padded input slice, applies the preprocessing pipeline, discards the padded
+    edges, and writes the valid output directly to the pre-allocated memmap.
+    All state is passed through *args* so the function is pickle-safe.
+    """
+    (file_bin, out_file, out_shape, out_dtype_str,
+     first_out, last_out, first_in, last_in, pad_left_out,
+     q, highpass_cutoff, nc, major_version, sample_shift, fs,
+     channel_labels, geom_x, geom_y, reader_kwargs, car, car_file,
+     cadzow_kwargs) = args
+
+    out_dtype = np.dtype(out_dtype_str)
+    # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
+    sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
+    raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)   # (nc, L_in)
+
+    if major_version == 1:
+        raw = fourier.fshift(raw, sample_shift, axis=1)
+
+    if highpass_cutoff is not None:
+        sos = scipy.signal.butter(3, highpass_cutoff, btype="highpass", fs=fs, output="sos")
+        raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
+
+    if channel_labels is not None:
+        raw = interpolate_bad_channels(raw, channel_labels, geom_x, geom_y)
+
+    # CAR before decimation: median computed on the full-bandwidth LFP, then downsampled for storage
+    if car:
+        good_chans = np.where(channel_labels == 0)[0] if channel_labels is not None else np.arange(nc)
+        car_trace = np.median(raw[good_chans, :], axis=0).astype(np.float32)   # (L_in,)
+        raw = raw - car_trace[np.newaxis, :]
+
+    dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)   # (nc, ≈L_in//q)
+
+    if cadzow_kwargs is not None:
+        from ibldsp import cadzow as _cadzow_mod
+        cx = geom_x if geom_x is not None else neuropixel.trace_header(version=1)['x'][:nc]
+        cy = geom_y if geom_y is not None else neuropixel.trace_header(version=1)['y'][:nc]
+        dec = _cadzow_mod.cadzow_denoiser(
+            dec, h={'x': cx, 'y': cy}, fs=fs / q,
+            **{**cadzow_kwargs, 'n_jobs': 1},
+        )
+
+    n_out = last_out - first_out
+    valid = dec[:, pad_left_out:pad_left_out + n_out]
+    actual_n = valid.shape[1]   # may be < n_out at the end of the file
+
+    if car:
+        car_trace_dec = scipy.signal.decimate(car_trace, q, ftype="fir", n=256)
+        car_map = np.lib.format.open_memmap(car_file, mode="r+", dtype=np.float32, shape=(out_shape[0],))
+        car_map[first_out:first_out + actual_n] = car_trace_dec[pad_left_out:pad_left_out + actual_n]
+        car_map.flush()
+
+    za = np.lib.format.open_memmap(out_file, mode="r+", dtype=out_dtype, shape=out_shape)
+    za[first_out:first_out + actual_n, :] = valid[:, :actual_n].T.astype(out_dtype)
+    za.flush()
 
 
 def resample_denoise_lfp_cbin(
@@ -1108,83 +1181,101 @@ def resample_denoise_lfp_cbin(
     output: Path = None,
     dtype: "np.typing.DTypeLike" = np.float16,
     channel_labels: np.ndarray = None,
+    highpass_cutoff: float | None = 2,
+    n_jobs: int = 1,
+    car: bool = True,
+    cadzow_kwargs: dict | None = None,
 ) -> Path:
     """
-    Resample and denoise local field potential (LFP) data from a SpikeGLX compressed binary file.
+    Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
 
-    This function processes LFP recordings by downsampling them by a factor of q using
-    decimation with a finite impulse response (FIR) filter. The processing is performed
-    in overlapping chunks to avoid edge effects, with the overlapping regions properly
-    weighted and combined in the output.
+    Processes LFP recordings out-of-core: the output is pre-allocated as a memory-mapped
+    .npy file and filled by n_jobs parallel workers, each handling a non-overlapping slice
+    of the output with PAD_OUT extra samples on each side for filter warmup.
 
     Parameters
     ----------
     lf_file : spikeglx.Reader | Path | str
-        Input LFP file, either as a SpikeGLX Reader object or a path (string or Path object)
-        to a SpikeGLX binary or compressed binary file.
-    q : int, optional
-        Downsampling factor (decimation ratio). The output sampling rate will be the input
-        sampling rate divided by q. Defaults to 5.
+        Input LFP file as a SpikeGLX Reader or path to a binary/compressed binary file.
+    q : int
+        Downsampling factor; output sampling rate = input rate / q.  Defaults to 5.
     output : Path, optional
-        Path where the resampled data will be saved as a memory-mapped file. If None,
-        defaults to "lf_resampled.cbin" in the same directory as the input file.
-    dtype : str, optional # Data type of the output file. Defaults to "float16".
+        Output .npy path.  Defaults to ``lf_resampled.npy`` next to the input file.
+    dtype : np.dtype
+        Storage dtype for the output memmap.  Defaults to float16.
     channel_labels : np.ndarray, optional
-        Array of channel quality labels (not currently used in the implementation but
-        reserved for future bad channel handling). Defaults to None.
+        Per-channel quality labels passed to ``interpolate_bad_channels``.  None to skip.
+    highpass_cutoff : float or None
+        3rd-order Butterworth zero-phase highpass corner [Hz].  None to skip.
+    n_jobs : int
+        Number of parallel worker processes.  Defaults to 1 (sequential).
+    car : bool
+        Apply median common-average reference after resampling.  The removed trace is saved
+        alongside the output as ``<stem>_car.npy``.  Defaults to True.
+    cadzow_kwargs : dict or None
+        If provided, Cadzow spatial denoising is applied to each decimated chunk.
+        Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
+        ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
+        inside each worker; outer-level parallelism is controlled by *n_jobs* above.
+        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT = 9216) is a multiple of the
+        canonical Cadzow FFT window (256 × 3 = 768) by design.  Default None (disabled).
 
     Returns
     -------
     Path
-        Path to the output file containing the resampled LFP data as a float32 memory-mapped
-        array with shape (ns // q, nc), where ns is the number of samples and nc is the
-        number of channels (excluding sync channels).
+        Path to the completed output .npy file, shape (ns // q, nc).
     """
-    CHUNK_SIZE = 2048 * 8
+    # 9216 = 12 × 768 — chunk + 2 × pad must stay a multiple of the cadzow window
+    PAD_OUT = 512        # output-samples of filter warmup on each side of every chunk
+    CHUNK_SIZE_OUT = 8192
+    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0, (
+        f"CHUNK_SIZE_OUT {CHUNK_SIZE_OUT} + 2*PAD_OUT {PAD_OUT} must be a multiple of 768"
+    )
+
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
-    # channel_labels = detect_bad_channels_cbin(lf_file)
-    output = output or Path(lf_file).parent.joinpath("lf_resampled.cbin")
+    output = output or Path(sr.file_bin).parent.joinpath("lf_resampled.npy")
+    output.parent.mkdir(parents=True, exist_ok=True)
 
-    ns, nc = (sr.ns, sr.nc - sr.nsync)
+    ns, nc = sr.ns, sr.nc - sr.nsync
+    ns_out = ns // q
+    out_shape = (ns_out, nc)
+    out_dtype_str = np.dtype(dtype).str
 
-    # here we create a memmap upfront to pre-allocate and allow multi-processing
-    za = np.memmap(
-        filename=output,
-        dtype=dtype,
-        mode="w+",  # if not out_file.exists() else 'r+',
-        shape=(ns // q, nc),
+    major_version = int(sr.major_version) if sr.major_version is not None else 0
+    geo = sr.geometry
+    sample_shift = np.array(geo["sample_shift"][:nc]) if (major_version == 1 and geo is not None) else np.zeros(nc)
+    geom_x = np.array(geo["x"][:nc]) if geo is not None else None
+    geom_y = np.array(geo["y"][:nc]) if geo is not None else None
+    fs = float(sr.fs)
+    # Pass raw Reader metadata so workers can reconstruct it for files without a .meta.
+    reader_kwargs = {"nc": sr.nc, "ns": sr.ns, "fs": sr.fs, "dtype": np.dtype(sr.dtype).str}
+
+    # Pre-allocate; workers open their own 'r+' handles — no shared file object.
+    _ = np.lib.format.open_memmap(output, mode="w+", dtype=dtype, shape=out_shape)
+    car_path = output.with_name(output.stem + '_car.npy') if car else None
+    if car:
+        _ = np.lib.format.open_memmap(car_path, mode="w+", dtype=np.float32, shape=(ns_out,))
+
+    wg = utils.WindowGenerator(ns=ns_out, nswin=CHUNK_SIZE_OUT + 2 * PAD_OUT, overlap=2 * PAD_OUT)
+    chunk_args = []
+    for win_first, win_last, first_valid, last_valid in wg.firstlast_valid:
+        first_in = win_first * q
+        last_in = min(ns, win_last * q)
+        pad_left_out = first_valid - win_first
+        chunk_args.append((
+            str(sr.file_bin), str(output), out_shape, out_dtype_str,
+            first_valid, last_valid, first_in, last_in, pad_left_out,
+            q, highpass_cutoff, nc, major_version, sample_shift, fs,
+            channel_labels, geom_x, geom_y, reader_kwargs, car, str(car_path) if car else None,
+            cadzow_kwargs,
+        ))
+
+    # loky backend avoids fork-safety crashes on macOS / Apple Silicon.
+    from joblib import Parallel, delayed
+    Parallel(n_jobs=n_jobs, backend="loky")(
+        delayed(_resample_lfp_chunk)(args)
+        for args in tqdm.tqdm(chunk_args, desc="resampling", unit="chunk")
     )
-    # channel_labels = ibldsp.voltage.detect_bad_channels_cbin(sr)
-    wg = ibldsp.utils.WindowGenerator(
-        ns=sr.ns, nswin=(CHUNK_SIZE + 2) * q, overlap=q * 128
-    )
-    wg_rsamp = ibldsp.utils.WindowGenerator(
-        ns=sr.ns // q, nswin=(CHUNK_SIZE + 2), overlap=128
-    )
-
-    # the indexing is really complicated as we want to only populate the valid part of the windows to avoid edges effects
-    # while also being able to transpose this overlap in the resampled space index
-    # to do so we zip together two window generators
-    for sl, slr in zip(wg.firstlast, wg_rsamp.firstlast_splicing):
-        first_rs, last_rs, amp_rs = slr
-        first, last = sl
-        raw = sr[first:last, :nc].T
-        # raw = ibldsp.fourier.fshift(raw, h['sample_shift'], axis=1)
-        # raw = ibldsp.voltage.interpolate_bad_channels(raw, channel_labels, h["x"], h["y"])
-        # butter_kwargs = {
-        #     "N": 3,
-        #     "Wn": np.array([2, 200]) / sr.fs * 2,
-        #     "btype": "bandpass",
-        # }
-        # sos = scipy.signal.butter(**butter_kwargs, output="sos")
-        # raw = sr[first:last, : -sr.nsync]
-        # raw = scipy.signal.sosfiltfilt(sos, raw, axis=0)
-        rsamp = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)[
-            :, : raw.shape[1] // q
-        ].T
-        # rsamp = raw[:, ::5][:, :raw.shape[1] // resamp_factor_q].T
-        za[first_rs:last_rs, :] += np.astype(rsamp * amp_rs[:, np.newaxis], np.float32)
-
     return output
 
 
@@ -1220,7 +1311,7 @@ def stack(data, word, fcn_agg=np.nanmean, header=None):
     return stack, hstack
 
 
-def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
+def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3, scale=True):
     """
     Compute the current source density (CSD) of a given LFP signal recorded on Neuropixel probes.
 
@@ -1245,13 +1336,17 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
         - 'kcsd': kernel CSD method (requires the KCSD Python package)
     sigma : float, optional
         Tissue conductivity in Siemens per meter, defaults to 1/3 S.m-1
+    scale : bool, optional
+        If True, scale the finite difference by the intercontact distance and tissue conductivity.
+        If False, return the raw numerical finite difference without spatial/conductivity scaling.
 
     Returns
     -------
     numpy.ndarray
         Current source density with the same shape as the input LFP array.
         Positive values indicate current sources, negative values indicate sinks.
-        Units are in A.m-3 (amperes per cubic meter).
+        With scale=True, units are in A.m-3 (amperes per cubic meter).
+        With scale=False, values are the unscaled numerical finite difference.
     """
     csd = np.zeros(lfp.shape, dtype=np.float64) * np.nan
     xy = (h["x"] + 1j * h["y"]) / 1e6
@@ -1262,9 +1357,10 @@ def current_source_density(lfp, h, n=2, method="diff", sigma=1 / 3):
         dx = np.median(np.diff(np.abs(xy[itr])))
         if method == "diff":
             sl = slice(1, -1) if n == 2 else slice(0, -1)
-            csd[itr[sl], :] = (
-                np.diff(lfp[itr, :].astype(np.float64), n=n, axis=0) / dx**n * sigma
-            )
+            diff = np.diff(lfp[itr, :].astype(np.float64), n=n, axis=0)
+            if scale:
+                diff = diff / dx**n * sigma
+            csd[itr[sl], :] = diff
             csd[itr[0], :] = csd[itr[1], :]
             csd[itr[-1], :] = csd[itr[-2], :]
         elif method == "kcsd":
