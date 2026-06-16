@@ -777,7 +777,10 @@ def decompress_destripe_cbin(
                 inside_brain = np.where(channel_labels != 3)[0]
                 # this applies either the k-filter or CAR
                 chunk[inside_brain, :] = apply_spatial_filter(
-                    chunk[inside_brain, :], k_filter, collection=h["shank"], **k_kwargs
+                    chunk[inside_brain, :],
+                    k_filter,
+                    collection=h["shank"][inside_brain],
+                    **k_kwargs,
                 )
             else:
                 chunk = apply_spatial_filter(
