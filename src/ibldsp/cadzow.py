@@ -197,7 +197,7 @@ def _process_window(
     WAV_ : ndarray (nc_w, nf), complex
     """
     WAV_ = WAV_sl.copy()
-    with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
         for _ in range(niter):
             T_batch = np.zeros((imax, *T_shape), dtype=complex)
             T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T

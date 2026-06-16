@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.11.0] - UNRELEASED
+## [1.11.0] - 2026-06-16
 
 ### added
 - `ibldsp.cadzow.cadzow_denoiser`: faster parallelised LFP denoiser with improved PPCA-based outlier channel suppression for cleaner results; supports `fmax=None` to process the full spectrum up to Nyquist.

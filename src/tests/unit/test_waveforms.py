@@ -122,12 +122,15 @@ def test_recovery_point_trough_at_boundary():
     idx_from_trough = 5  # default for fs=30000, recovery_duration_ms=0.16
     n_units = 3
     arr_peak = np.ones((n_units, ns), dtype=np.float32)
-    df = pd.DataFrame({
-        'trough_time_idx': [ns - idx_from_trough] * n_units,  # idx_all == ns → out-of-bounds before fix
-        'invert_sign_peak': [1] * n_units,
-    })
+    df = pd.DataFrame(
+        {
+            "trough_time_idx": [ns - idx_from_trough]
+            * n_units,  # idx_all == ns → out-of-bounds before fix
+            "invert_sign_peak": [1] * n_units,
+        }
+    )
     result = waveforms.recovery_point(arr_peak, df, idx_from_trough=idx_from_trough)
-    assert (result['recovery_time_idx'].to_numpy() < ns).all()
+    assert (result["recovery_time_idx"].to_numpy() < ns).all()
 
 
 def test_compute_spike_features_peak_at_edge():

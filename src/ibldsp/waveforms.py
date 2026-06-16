@@ -656,7 +656,9 @@ def compute_spike_features(
     n_taper = 5
     n_samples = arr_in.shape[1]
     t = np.arange(n_samples)
-    taper = fcn_cosine([0, n_taper])(t) * (1 - fcn_cosine([n_samples - n_taper, n_samples])(t))
+    taper = fcn_cosine([0, n_taper])(t) * (
+        1 - fcn_cosine([n_samples - n_taper, n_samples])(t)
+    )
     arr_in = arr_in * taper[np.newaxis, :, np.newaxis]
     df = find_peak(arr_in)
     # Per waveform, keep only trace that contains the peak

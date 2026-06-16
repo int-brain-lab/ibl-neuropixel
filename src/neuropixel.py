@@ -792,7 +792,9 @@ class NP2Converter:
             ValueError(f"Unsupported etype: {etype}")
         for sh in self.shank_info.keys():
             n_chns = len(self.shank_info[sh]["chns"])
-            n_sync_out = int(np.sum(np.array(self.shank_info[sh]["chns"]) >= self.napch))
+            n_sync_out = int(
+                np.sum(np.array(self.shank_info[sh]["chns"]) >= self.napch)
+            )
             meta_shank = copy.deepcopy(self.sr.meta)
             meta_shank["acqApLfSy"][iempty] = 0
             meta_shank["acqApLfSy"][ifull] = n_chns - n_sync_out

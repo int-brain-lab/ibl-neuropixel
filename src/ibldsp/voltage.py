@@ -1111,6 +1111,7 @@ def detect_bad_channels_cbin(
     if display:
         raw = sr[sl, :nc].T
         from ibllib.plots.figures import ephys_bad_channels
+
         ephys_bad_channels(raw, sr.fs, channel_flags, xfeats_med)
     if return_features:
         return channel_flags, xfeats_med
@@ -1125,22 +1126,43 @@ def _resample_lfp_chunk(args):
     edges, and writes the valid output directly to the pre-allocated memmap.
     All state is passed through *args* so the function is pickle-safe.
     """
-    (file_bin, out_file, out_shape, out_dtype_str,
-     first_out, last_out, first_in, last_in, pad_left_out,
-     q, highpass_cutoff, nc, major_version, sample_shift, fs,
-     channel_labels, geom_x, geom_y, reader_kwargs, car, car_file,
-     cadzow_kwargs) = args
+    (
+        file_bin,
+        out_file,
+        out_shape,
+        out_dtype_str,
+        first_out,
+        last_out,
+        first_in,
+        last_in,
+        pad_left_out,
+        q,
+        highpass_cutoff,
+        nc,
+        major_version,
+        sample_shift,
+        fs,
+        channel_labels,
+        geom_x,
+        geom_y,
+        reader_kwargs,
+        car,
+        car_file,
+        cadzow_kwargs,
+    ) = args
 
     out_dtype = np.dtype(out_dtype_str)
     # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
     sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
-    raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)   # (nc, L_in)
+    raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)  # (nc, L_in)
 
     if major_version == 1:
         raw = fourier.fshift(raw, sample_shift, axis=1)
 
     if highpass_cutoff is not None:
-        sos = scipy.signal.butter(3, highpass_cutoff, btype="highpass", fs=fs, output="sos")
+        sos = scipy.signal.butter(
+            3, highpass_cutoff, btype="highpass", fs=fs, output="sos"
+        )
         raw = scipy.signal.sosfiltfilt(sos, raw, axis=-1)
 
     if channel_labels is not None:
@@ -1148,33 +1170,54 @@ def _resample_lfp_chunk(args):
 
     # CAR before decimation: median computed on the full-bandwidth LFP, then downsampled for storage
     if car:
-        good_chans = np.where(channel_labels == 0)[0] if channel_labels is not None else np.arange(nc)
-        car_trace = np.median(raw[good_chans, :], axis=0).astype(np.float32)   # (L_in,)
+        good_chans = (
+            np.where(channel_labels == 0)[0]
+            if channel_labels is not None
+            else np.arange(nc)
+        )
+        car_trace = np.median(raw[good_chans, :], axis=0).astype(np.float32)  # (L_in,)
         raw = raw - car_trace[np.newaxis, :]
 
-    dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)   # (nc, ≈L_in//q)
+    dec = scipy.signal.decimate(raw, q, axis=1, ftype="fir", n=256)  # (nc, ≈L_in//q)
 
     if cadzow_kwargs is not None:
         from ibldsp import cadzow as _cadzow_mod
-        cx = geom_x if geom_x is not None else neuropixel.trace_header(version=1)['x'][:nc]
-        cy = geom_y if geom_y is not None else neuropixel.trace_header(version=1)['y'][:nc]
+
+        cx = (
+            geom_x
+            if geom_x is not None
+            else neuropixel.trace_header(version=1)["x"][:nc]
+        )
+        cy = (
+            geom_y
+            if geom_y is not None
+            else neuropixel.trace_header(version=1)["y"][:nc]
+        )
         dec = _cadzow_mod.cadzow_denoiser(
-            dec, h={'x': cx, 'y': cy}, fs=fs / q,
-            **{**cadzow_kwargs, 'n_jobs': 1},
+            dec,
+            h={"x": cx, "y": cy},
+            fs=fs / q,
+            **{**cadzow_kwargs, "n_jobs": 1},
         )
 
     n_out = last_out - first_out
-    valid = dec[:, pad_left_out:pad_left_out + n_out]
-    actual_n = valid.shape[1]   # may be < n_out at the end of the file
+    valid = dec[:, pad_left_out : pad_left_out + n_out]
+    actual_n = valid.shape[1]  # may be < n_out at the end of the file
 
     if car:
         car_trace_dec = scipy.signal.decimate(car_trace, q, ftype="fir", n=256)
-        car_map = np.lib.format.open_memmap(car_file, mode="r+", dtype=np.float32, shape=(out_shape[0],))
-        car_map[first_out:first_out + actual_n] = car_trace_dec[pad_left_out:pad_left_out + actual_n]
+        car_map = np.lib.format.open_memmap(
+            car_file, mode="r+", dtype=np.float32, shape=(out_shape[0],)
+        )
+        car_map[first_out : first_out + actual_n] = car_trace_dec[
+            pad_left_out : pad_left_out + actual_n
+        ]
         car_map.flush()
 
-    za = np.lib.format.open_memmap(out_file, mode="r+", dtype=out_dtype, shape=out_shape)
-    za[first_out:first_out + actual_n, :] = valid[:, :actual_n].T.astype(out_dtype)
+    za = np.lib.format.open_memmap(
+        out_file, mode="r+", dtype=out_dtype, shape=out_shape
+    )
+    za[first_out : first_out + actual_n, :] = valid[:, :actual_n].T.astype(out_dtype)
     za.flush()
 
 
@@ -1229,7 +1272,7 @@ def resample_denoise_lfp_cbin(
         Path to the completed output .npy file, shape (ns // q, nc).
     """
     # 9216 = 12 × 768 — chunk + 2 × pad must stay a multiple of the cadzow window
-    PAD_OUT = 512        # output-samples of filter warmup on each side of every chunk
+    PAD_OUT = 512  # output-samples of filter warmup on each side of every chunk
     CHUNK_SIZE_OUT = 8192
     assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0, (
         f"CHUNK_SIZE_OUT {CHUNK_SIZE_OUT} + 2*PAD_OUT {PAD_OUT} must be a multiple of 768"
@@ -1246,35 +1289,68 @@ def resample_denoise_lfp_cbin(
 
     major_version = int(sr.major_version) if sr.major_version is not None else 0
     geo = sr.geometry
-    sample_shift = np.array(geo["sample_shift"][:nc]) if (major_version == 1 and geo is not None) else np.zeros(nc)
+    sample_shift = (
+        np.array(geo["sample_shift"][:nc])
+        if (major_version == 1 and geo is not None)
+        else np.zeros(nc)
+    )
     geom_x = np.array(geo["x"][:nc]) if geo is not None else None
     geom_y = np.array(geo["y"][:nc]) if geo is not None else None
     fs = float(sr.fs)
     # Pass raw Reader metadata so workers can reconstruct it for files without a .meta.
-    reader_kwargs = {"nc": sr.nc, "ns": sr.ns, "fs": sr.fs, "dtype": np.dtype(sr.dtype).str}
+    reader_kwargs = {
+        "nc": sr.nc,
+        "ns": sr.ns,
+        "fs": sr.fs,
+        "dtype": np.dtype(sr.dtype).str,
+    }
 
     # Pre-allocate; workers open their own 'r+' handles — no shared file object.
     _ = np.lib.format.open_memmap(output, mode="w+", dtype=dtype, shape=out_shape)
-    car_path = output.with_name(output.stem + '_car.npy') if car else None
+    car_path = output.with_name(output.stem + "_car.npy") if car else None
     if car:
-        _ = np.lib.format.open_memmap(car_path, mode="w+", dtype=np.float32, shape=(ns_out,))
+        _ = np.lib.format.open_memmap(
+            car_path, mode="w+", dtype=np.float32, shape=(ns_out,)
+        )
 
-    wg = utils.WindowGenerator(ns=ns_out, nswin=CHUNK_SIZE_OUT + 2 * PAD_OUT, overlap=2 * PAD_OUT)
+    wg = utils.WindowGenerator(
+        ns=ns_out, nswin=CHUNK_SIZE_OUT + 2 * PAD_OUT, overlap=2 * PAD_OUT
+    )
     chunk_args = []
     for win_first, win_last, first_valid, last_valid in wg.firstlast_valid:
         first_in = win_first * q
         last_in = min(ns, win_last * q)
         pad_left_out = first_valid - win_first
-        chunk_args.append((
-            str(sr.file_bin), str(output), out_shape, out_dtype_str,
-            first_valid, last_valid, first_in, last_in, pad_left_out,
-            q, highpass_cutoff, nc, major_version, sample_shift, fs,
-            channel_labels, geom_x, geom_y, reader_kwargs, car, str(car_path) if car else None,
-            cadzow_kwargs,
-        ))
+        chunk_args.append(
+            (
+                str(sr.file_bin),
+                str(output),
+                out_shape,
+                out_dtype_str,
+                first_valid,
+                last_valid,
+                first_in,
+                last_in,
+                pad_left_out,
+                q,
+                highpass_cutoff,
+                nc,
+                major_version,
+                sample_shift,
+                fs,
+                channel_labels,
+                geom_x,
+                geom_y,
+                reader_kwargs,
+                car,
+                str(car_path) if car else None,
+                cadzow_kwargs,
+            )
+        )
 
     # loky backend avoids fork-safety crashes on macOS / Apple Silicon.
     from joblib import Parallel, delayed
+
     Parallel(n_jobs=n_jobs, backend="loky")(
         delayed(_resample_lfp_chunk)(args)
         for args in tqdm.tqdm(chunk_args, desc="resampling", unit="chunk")
