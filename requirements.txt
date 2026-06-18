@@ -1,9 +1,0 @@
-iblutil >= 1.7.0
-joblib
-matplotlib
-mtscomp
-numpy >= 1.21.6
-ONE-api >= 2.11.0
-pandas
-scipy >= 1.11
-spikeinterface

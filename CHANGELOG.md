@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1] - 2026-06-18
+
+### changed
+- Migrated packaging from `setup.py` + `requirements.txt` to `pyproject.toml`
+- `spikeinterface` is now an optional dependency; install with `pip install ibl-neuropixel[spikeinterface]`
+- `spikeinterface` imports moved inside `spikeinterface_recording()` so the module loads without the optional dep installed
+
 ## [1.11.0] - 2026-06-16
 
 ### added

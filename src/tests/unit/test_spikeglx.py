@@ -6,10 +6,15 @@ import uuid
 
 import numpy as np
 from iblutil.io import hashfile
-import spikeinterface.core as si
-
 import neuropixel
 import spikeglx
+
+try:
+    import spikeinterface.core as si
+
+    HAS_SPIKEINTERFACE = True
+except ImportError:
+    HAS_SPIKEINTERFACE = False
 
 TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
@@ -827,6 +832,7 @@ class TestOnlineSpikeGlxReader(unittest.TestCase):
             assert np.all(sr[299_999, :] == 0)
 
 
+@unittest.skipUnless(HAS_SPIKEINTERFACE, "spikeinterface not installed")
 class TestSpikeinterfaceRecording(unittest.TestCase):
     """Tests for spikeinterface_recording() with .bin and .cbin inputs."""
 

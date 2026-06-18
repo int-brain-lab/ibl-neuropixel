@@ -32,11 +32,10 @@ jobs:
           cd ibl-neuropixel
           ruff check
 
-      - name: iblrig and iblpybpod requirements
+      - name: Install package
         shell: bash -l {0}
         run: |
           pip install -e ibl-neuropixel
-          pip install -r ibl-neuropixel/requirements.txt
 
       - name: CPU unit tests
         shell: bash -l {0}

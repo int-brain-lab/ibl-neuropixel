@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibl-neuropixel"
+version = "1.11.1"
+description = "Collection of tools for Neuropixel 1.0 and 2.0 probes data"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "The International Brain Laboratory" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "iblutil >= 1.7.0",
+    "joblib",
+    "matplotlib",
+    "mtscomp",
+    "numpy >= 1.21.6",
+    "ONE-api >= 2.11.0",
+    "pandas",
+    "scipy >= 1.11",
+]
+
+[project.urls]
+Homepage = "https://github.com/int-brain-lab/ibl-neuropixel"
+"Bug Tracker" = "https://github.com/int-brain-lab/ibl-neuropixel/issues"
+
+[project.optional-dependencies]
+spikeinterface = ["spikeinterface[extractors]"]
+dev = ["pytest", "ruff"]
+gpu = ["pyfftw", "cupy"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+[tool.setuptools]
+py-modules = ["spikeglx", "neuropixel"]
+include-package-data = true

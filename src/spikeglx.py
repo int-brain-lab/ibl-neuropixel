@@ -13,8 +13,6 @@ from iblutil.util import Bunch
 import one.alf.path
 
 import neuropixel
-import spikeinterface.extractors as se
-from spikeinterface.extractors.extractor_classes import SpikeGLXRecordingExtractor
 
 
 SAMPLE_SIZE = 2  # int16
@@ -1152,12 +1150,14 @@ def spikeinterface_recording(file_path: Path):
     spikeinterface.core.BaseRecording
         SpikeInterface recording loaded with the appropriate extractor.
     """
+    import spikeinterface.extractors as se
+
     file_path = Path(file_path)
     folder_path = file_path.parent
     if file_path.suffix == ".cbin":
         return se.read_cbin_ibl(
             folder_path=folder_path, cbin_file_path=file_path, stream_name="ap"
         )
-    stream_names, _ = SpikeGLXRecordingExtractor.get_streams(folder_path=folder_path)
+    stream_names, _ = se.SpikeGLXRecordingExtractor.get_streams(folder_path=folder_path)
     ap_stream = next(s for s in stream_names if s.endswith(".ap"))
     return se.read_spikeglx(folder_path=folder_path, stream_name=ap_stream)

@@ -1,3 +1,0 @@
-pyfftw
-cupy
-cudatoolkit <= 11.0
