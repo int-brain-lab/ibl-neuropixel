@@ -39,7 +39,7 @@ class TestCadzow(unittest.TestCase):
 
     def test_fmax_none(self):
         """fmax=None must process all bins up to Nyquist without error."""
-        wav, _ = _plane_wave()
+        wav, _ = _plane_wave(nc=128)
         out_new = ibldsp.cadzow.cadzow_denoiser(wav, fmax=None)
         self.assertEqual(out_new.shape, wav.shape)
         with warnings.catch_warnings():
@@ -117,7 +117,8 @@ class TestCadzow(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             out_old = ibldsp.cadzow.cadzow_np1(wav, fs=250.0, rank=3, fmax=None)
-        out_new = ibldsp.cadzow.cadzow_denoiser(wav, fs=250.0, rank=3, fmax=None)
+        # use the same windowing as cadzow_np1 defaults for a fair regression comparison
+        out_new = ibldsp.cadzow.cadzow_denoiser(wav, fs=250.0, rank=3, fmax=None, nswx=32, ovx=16)
         rms_old = float(np.sqrt(np.mean(out_old**2)))
         rms_diff = float(np.sqrt(np.mean((out_old - out_new) ** 2)))
         rel = rms_diff / rms_old
@@ -129,7 +130,7 @@ class TestCadzow(unittest.TestCase):
 
     def test_cadzow_denoiser_ppca_k_end_to_end(self):
         """cadzow_denoiser with ppca_k: correct shape, no NaN/Inf, differs from no-ppca run."""
-        wav, _ = _plane_wave(nc=32, ns=500, noise_sigma=0.1)
+        wav, _ = _plane_wave(nc=128, ns=500, noise_sigma=0.1)
         out_base = ibldsp.cadzow.cadzow_denoiser(wav, fs=250.0, rank=3, fmax=None)
         out_ppca = ibldsp.cadzow.cadzow_denoiser(
             wav, fs=250.0, rank=3, fmax=None, ppca_k=2.0
