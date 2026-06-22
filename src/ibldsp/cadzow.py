@@ -360,8 +360,8 @@ def cadzow_denoiser(
     rank=5,
     niter=1,
     fmax=100.0,
-    nswx=32,
-    ovx=16,
+    nswx=64,
+    ovx=32,
     npad=0,
     gap_threshold=None,
     ppca_k=None,
@@ -395,9 +395,13 @@ def cadzow_denoiser(
         None processes all bins up to Nyquist.  Default 100.
     nswx : int
         Channel-window width (number of channels per spatial window).
-        Default 32.
+        Default 64.
     ovx : int
-        Channel-window overlap (must satisfy ``ovx < nswx / 2``).  Default 16.
+        Channel-window overlap in channels.  Any value in ``[1, nswx - 1]`` is
+        valid; overlaps above 50% (``ovx > nswx // 2``) use a Hann synthesis
+        window with running normalisation instead of the partition-of-unity gain.
+        Default 16 (kept for backward compatibility; recommended value is
+        ``nswx // 2``, e.g. 32 for the default ``nswx=64``).
     npad : int
         Reflective channel padding on each side.  Default 0.
     gap_threshold : float, optional
@@ -445,21 +449,43 @@ def cadzow_denoiser(
         np.flipud(h["y"][-npad - 2 : -1]) + 120,
     ]
 
-    hanning = scipy.signal.windows.hann(ovx * 2 - 1)[:ovx]
-    gain_window = np.r_[hanning, np.ones(nswx - ovx * 2), np.flipud(hanning)]
+    # Synthesis windowing strategy depends on overlap fraction:
+    #   ovx ≤ nswx//2  (≤50%): exact partition-of-unity gain window — backward-compatible,
+    #                           no normalisation required.
+    #   ovx > nswx//2  (>50%): Hann synthesis window + running normalisation sum.
+    #                           Supports any ovx in [1, nswx-1]; the accumulation step
+    #                           divides each channel by the total Hann weight it received,
+    #                           so blending is always correct regardless of overlap ratio.
+    step = nswx - ovx
+    # Backward-compatible branch: for ovx ≤ nswx//2 the original partition-of-unity
+    # gain window is used unchanged; the WOLA path only activates for higher overlaps.
+    high_overlap = ovx > nswx // 2
+    if not high_overlap:
+        hanning = scipy.signal.windows.hann(ovx * 2 - 1)[:ovx]
+        gain_window = np.r_[hanning, np.ones(nswx - ovx * 2), np.flipud(hanning)]
+    else:
+        hann_full = scipy.signal.windows.hann(nswx)
 
     # Precompute per-window geometry (trajectory + scatter + gain) once before dispatch
     windows = []
-    for firstx in np.arange(nwinx) * (nswx - ovx):
+    for i, firstx in enumerate(np.arange(nwinx) * step):
         lastx = int(firstx + nswx)
         sl = slice(firstx, lastx)
         nc_w = len(x[sl])
-        if firstx == 0:
-            gw = np.r_[np.ones(nswx - ovx), np.flipud(hanning)][:nc_w]
-        elif lastx >= ntr:
-            gw = np.r_[hanning, np.ones(nswx - ovx)][:nc_w]
+        if high_overlap:
+            gw = hann_full.copy()
+            if i == 0:  # replace fade-in with ones at probe start
+                gw[:step] = 1.0
+            if i == nwinx - 1:  # replace fade-out with ones at probe end
+                gw[max(0, nswx - step) :] = 1.0
+            gw = gw[:nc_w]
         else:
-            gw = gain_window[:nc_w]
+            if firstx == 0:
+                gw = np.r_[np.ones(nswx - ovx), np.flipud(hanning)][:nc_w]
+            elif lastx >= ntr:
+                gw = np.r_[hanning, np.ones(nswx - ovx)][:nc_w]
+            else:
+                gw = gain_window[:nc_w]
         T, it, ic, trcount = trajectory(x[sl], y[sl])
         scatter = np.zeros((len(ic), nc_w))
         scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
@@ -491,8 +517,15 @@ def cadzow_denoiser(
         )
 
     WAV_ = np.zeros_like(WAV)
-    for sl, gw, WAV_w in results:
-        WAV_[sl] += WAV_w * gw[:, np.newaxis]
+    if high_overlap:
+        WAV_norm = np.zeros(WAV.shape[0])
+        for sl, gw, WAV_w in results:
+            WAV_[sl] += WAV_w * gw[:, np.newaxis]
+            WAV_norm[sl] += gw
+        WAV_ /= np.maximum(WAV_norm, 1e-6)[:, np.newaxis]
+    else:
+        for sl, gw, WAV_w in results:
+            WAV_[sl] += WAV_w * gw[:, np.newaxis]
 
     WAV_ = WAV_[
         npad : -npad - 1

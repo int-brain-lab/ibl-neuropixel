@@ -1,11 +1,18 @@
 # Changelog
 
-## [1.11.1] - 2026-06-18
+## [1.11.2]
+
+### fixed
+- `ibldsp.voltage.kfilt`: default wavenumber cutoff `Wn` corrected from `0.1` to `0.01`.
+- `ibldsp.voltage.destripe`: `k_kwargs` were not forwarded to `apply_spatial_filter` in the inside-brain path (multi-shank recordings), so custom spatial-filter parameters were silently ignored.
+
+## [1.11.1]
 
 ### changed
 - Migrated packaging from `setup.py` + `requirements.txt` to `pyproject.toml`
 - `spikeinterface` is now an optional dependency; install with `pip install ibl-neuropixel[spikeinterface]`
 - `spikeinterface` imports moved inside `spikeinterface_recording()` so the module loads without the optional dep installed
+- `ibldsp.cadzow.cadzow_denoiser`: default `nswx` raised from 32 to 64 and default `ovx` raised from 16 to 32 (50% overlap). The previous defaults caused visible CSD stripes due to insufficient spatial-window overlap.
 
 ## [1.11.0] - 2026-06-16
 
