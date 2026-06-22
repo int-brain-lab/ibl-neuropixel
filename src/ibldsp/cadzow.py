@@ -474,10 +474,10 @@ def cadzow_denoiser(
         nc_w = len(x[sl])
         if high_overlap:
             gw = hann_full.copy()
-            if i == 0:           # replace fade-in with ones at probe start
+            if i == 0:  # replace fade-in with ones at probe start
                 gw[:step] = 1.0
             if i == nwinx - 1:  # replace fade-out with ones at probe end
-                gw[max(0, nswx - step):] = 1.0
+                gw[max(0, nswx - step) :] = 1.0
             gw = gw[:nc_w]
         else:
             if firstx == 0:

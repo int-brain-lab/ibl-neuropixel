@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.2]
+
+### fixed
+- `ibldsp.voltage.kfilt`: default wavenumber cutoff `Wn` corrected from `0.1` to `0.01`.
+- `ibldsp.voltage.destripe`: `k_kwargs` were not forwarded to `apply_spatial_filter` in the inside-brain path (multi-shank recordings), so custom spatial-filter parameters were silently ignored.
+
 ## [1.11.1]
 
 ### changed

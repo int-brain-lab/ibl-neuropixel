@@ -207,7 +207,7 @@ def kfilt(
     :param ntr_pad: traces added to each side (mirrored)
     :param ntr_tap: n traces for apodizatin on each side
     :param lagc: window size for time domain automatic gain control (no agc otherwise)
-    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}
     :param epsilon: small value to avoid division by zero in the gain calculation (AGC)
     :param gpu: bool
     :return:
@@ -218,7 +218,7 @@ def kfilt(
         gp = np
 
     if butter_kwargs is None:
-        butter_kwargs = {"N": 3, "Wn": 0.1, "btype": "highpass"}
+        butter_kwargs = {"N": 3, "Wn": 0.01, "btype": "highpass"}
     if collection is not None:
         xout = gp.zeros_like(x)
         for c in gp.unique(collection):
@@ -510,10 +510,7 @@ def destripe(
     :param butter_kwargs: (optional, None) butterworth params, see the code for the defaults dict
     :param k_kwargs: (optional, None) K-filter params, see the code for the defaults dict
         can also be set to 'car', in which case the median accross channels will be subtracted
-    :param k_filter: controls the spatial filter applied after bandpass and ADC correction.
-        True  (default for AP): applies the k-filter (wavenumber / spatial frequency filter).
-        False: applies Common Average Reference (CAR) — median subtraction across channels.
-        None : skips spatial filtering entirely; only bandpass and ADC shift are applied.
+    :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
     :return: x, filtered array
     """
     butter_kwargs, k_kwargs = _get_destripe_parameters(
@@ -541,7 +538,10 @@ def destripe(
         x = interpolate_bad_channels(x, channel_labels, h["x"], h["y"])
         inside_brain = np.where(channel_labels != 3)[0]
         x[inside_brain, :] = apply_spatial_filter(
-            x[inside_brain, :], k_filter, collection=h["shank"][inside_brain]
+            x[inside_brain, :],
+            k_filter,
+            collection=h["shank"][inside_brain],
+            **k_kwargs,
         )  # apply the k-filter
     else:
         x = apply_spatial_filter(x, k_filter, collection=h["shank"], **k_kwargs)

@@ -118,7 +118,9 @@ class TestCadzow(unittest.TestCase):
             warnings.simplefilter("ignore", DeprecationWarning)
             out_old = ibldsp.cadzow.cadzow_np1(wav, fs=250.0, rank=3, fmax=None)
         # use the same windowing as cadzow_np1 defaults for a fair regression comparison
-        out_new = ibldsp.cadzow.cadzow_denoiser(wav, fs=250.0, rank=3, fmax=None, nswx=32, ovx=16)
+        out_new = ibldsp.cadzow.cadzow_denoiser(
+            wav, fs=250.0, rank=3, fmax=None, nswx=32, ovx=16
+        )
         rms_old = float(np.sqrt(np.mean(out_old**2)))
         rms_diff = float(np.sqrt(np.mean((out_old - out_new) ** 2)))
         rel = rms_diff / rms_old
