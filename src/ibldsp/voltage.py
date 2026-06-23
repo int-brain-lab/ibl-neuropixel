@@ -192,9 +192,9 @@ def car(x, collection=None, operator="median", **kwargs):
 def kfilt(
     x,
     collection=None,
-    ntr_pad=0,
-    ntr_tap=None,
-    lagc=300,
+    ntr_pad=60,
+    ntr_tap=0,
+    lagc=3000,
     butter_kwargs=None,
     gpu=False,
     epsilon=None,
@@ -225,8 +225,8 @@ def kfilt(
             sel = collection == c
             xout[sel, :] = kfilt(
                 x=x[sel, :],
-                ntr_pad=0,
-                ntr_tap=None,
+                ntr_pad=ntr_pad,
+                ntr_tap=ntr_tap,
                 collection=None,
                 butter_kwargs=butter_kwargs,
             )

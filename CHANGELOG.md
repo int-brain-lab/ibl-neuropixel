@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.11.3] - 2026-06-23
+
+### fixed
+- `ibldsp.voltage.kfilt`: corrected default values for `ntr_pad` (0→60), `ntr_tap` (None→0), and `lagc` (300→3000); also fixed the recursive multi-collection call that was not forwarding `ntr_pad` and `ntr_tap`.
+
 ## [1.11.2] - 2026-06-22
 
 ### changed
