@@ -236,7 +236,7 @@ def _process_window(
         for _ in range(niter):
             T_batch = np.zeros((imax, *T_shape), dtype=complex)
             T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
-            U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
+            U, s, Vh = _safe_svd(T_batch)
             _apply_rank_threshold(s, r, gap_threshold)
             T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
 
@@ -249,7 +249,7 @@ def _process_window(
                 WAV_clean = WAV_[:, :imax].copy()
                 WAV_clean[mask] = WAV_rec[mask]
                 T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
-                U, s, Vh = np.linalg.svd(T_batch, full_matrices=False)
+                U, s, Vh = _safe_svd(T_batch)
                 _apply_rank_threshold(s, r, gap_threshold)
                 T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
 
