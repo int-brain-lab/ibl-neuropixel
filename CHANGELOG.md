@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### fixed
+- `ibldsp.cadzow._process_window`: add NaN/Inf guard and `gesdd`→`gesvd` fallback in `_safe_svd` to prevent `numpy.linalg.LinAlgError: SVD did not converge` on recordings with saturation artefacts or ill-conditioned channel windows.
+
 ## [1.11.3] - 2026-06-23
 
 ### fixed

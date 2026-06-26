@@ -172,6 +172,41 @@ def denoise(WAV, x, y, r, imax=None, niter=1):
     return WAV_
 
 
+def _safe_svd(T_batch):
+    """Batched SVD with NaN guard and gesdd→gesvd fallback.
+
+    ``np.linalg.svd`` uses LAPACK gesdd (divide-and-conquer) which fails on
+    ill-conditioned complex matrices from artefact-contaminated recordings.
+    Non-finite values are zeroed first; if gesdd still does not converge we
+    fall back to gesvd (QR iteration) one slice at a time via scipy.
+
+    Parameters
+    ----------
+    T_batch : ndarray (nf, nrows, ncols), complex
+        Stacked trajectory matrices (one per frequency bin).
+
+    Returns
+    -------
+    U, s, Vh : ndarrays
+    """
+    if not np.all(np.isfinite(T_batch)):
+        T_batch = np.nan_to_num(T_batch)
+    try:
+        return np.linalg.svd(T_batch, full_matrices=False)
+    except np.linalg.LinAlgError:
+        from scipy.linalg import svd as _scipy_svd
+
+        results = [
+            _scipy_svd(T_batch[i], full_matrices=False, lapack_driver="gesvd")
+            for i in range(T_batch.shape[0])
+        ]
+        return (
+            np.stack([r[0] for r in results]),
+            np.stack([r[1] for r in results]),
+            np.stack([r[2] for r in results]),
+        )
+
+
 def _process_window(
     WAV_sl, it, ic, T_shape, scatter, r, imax, niter, gap_threshold, ppca_k
 ):
