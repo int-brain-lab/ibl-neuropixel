@@ -1,5 +1,6 @@
 import unittest
 import warnings
+from unittest.mock import patch
 
 import numpy as np
 
@@ -145,3 +146,29 @@ class TestCadzow(unittest.TestCase):
             np.allclose(out_base, out_ppca),
             "ppca_k=2.0 produced identical output to ppca_k=None",
         )
+
+    def test_cadzow_denoiser_zero_matrix(self):
+        """All-zero input must complete without error and return finite values."""
+        wav = np.zeros((128, 500), dtype=np.float32)
+        out = ibldsp.cadzow.cadzow_denoiser(wav, n_jobs=1)
+        self.assertEqual(out.shape, wav.shape)
+        self.assertFalse(np.any(~np.isfinite(out)))
+
+    def test_cadzow_svd_nonconvergence_fallback(self):
+        """Simulate LAPACK gesdd non-convergence: _safe_svd must fall back to scipy gesvd.
+
+        Before the fix, _process_window called np.linalg.svd directly so a
+        LinAlgError propagated up (reproduces the supercomputer crash).  After
+        the fix, _process_window calls _safe_svd which catches the error and
+        retries slice-by-slice with scipy gesvd (lapack_driver='gesvd').
+        """
+        wav, _ = _plane_wave(nc=128, ns=500)
+
+        def always_fail_svd(a, *args, **kwargs):
+            raise np.linalg.LinAlgError("SVD did not converge")
+
+        with patch.object(np.linalg, "svd", always_fail_svd):
+            out = ibldsp.cadzow.cadzow_denoiser(wav, n_jobs=1)
+
+        self.assertEqual(out.shape, wav.shape)
+        self.assertFalse(np.any(np.isnan(out)))
