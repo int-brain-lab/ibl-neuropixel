@@ -411,7 +411,14 @@ def saturation_cbin(
 
 
 def interpolate_bad_channels(
-    data, channel_labels=None, x=None, y=None, p=1.3, kriging_distance_um=20, gpu=False
+    data,
+    channel_labels=None,
+    x=None,
+    y=None,
+    p=1.3,
+    kriging_distance_um=20,
+    gpu=False,
+    groupby_y=False,
 ):
     """
     Interpolate the channel labeled as bad channels using linear interpolation.
@@ -423,6 +430,14 @@ def interpolate_bad_channels(
     :param p:
     :param kriging_distance_um:
     :param gpu: bool
+    :param groupby_y: bool. When True, each bad channel is exactly linearly interpolated
+        between its nearest good neighbours *above* and *below* within its own column
+        (same x-coordinate), skipping over any other bad channels in between, instead of
+        using the exponential-decay kriging weights below. This collapses to a 1-D
+        interpolation along y per column, which is what exactly cancels a per-column
+        second-difference such as ``current_source_density``'s — the kriging weights are
+        tuned for the 2-D multi-column neighbourhood and cannot do this exactly regardless
+        of ``kriging_distance_um``.
     :return:
     """
     if gpu:
@@ -435,17 +450,42 @@ def interpolate_bad_channels(
 
     # we interpolate only noisy channels or dead channels (0: good), out of the brain channels are left
     bad_channels = gp.where(np.logical_or(channel_labels == 1, channel_labels == 2))[0]
+    if groupby_y:
+        for i in bad_channels:
+            good_same_col = np.setdiff1d(
+                np.where(x == x[i])[0], bad_channels, assume_unique=True
+            )
+            dy = y[good_same_col] - y[i]
+            below, above = good_same_col[dy <= 0], good_same_col[dy >= 0]
+            lo = below[np.argmax(y[below])] if below.size else None
+            hi = above[np.argmin(y[above])] if above.size else None
+            if lo is None and hi is None:
+                data[i, :] = 0
+            elif lo is None:
+                data[i, :] = data[hi, :]
+            elif hi is None:
+                data[i, :] = data[lo, :]
+            else:
+                d_lo, d_hi = y[i] - y[lo], y[hi] - y[i]
+                if d_lo + d_hi == 0:
+                    data[i, :] = data[lo, :]
+                else:
+                    data[i, :] = (data[lo, :] * d_hi + data[hi, :] * d_lo) / (
+                        d_lo + d_hi
+                    )
+        return data
     for i in bad_channels:
         # compute the weights to apply to neighbouring traces
         offset = gp.abs(x - x[i] + 1j * (y - y[i]))
         weights = gp.exp(-((offset / kriging_distance_um) ** p))
         weights[bad_channels] = 0
         weights[weights < 0.005] = 0
-        weights = weights / gp.sum(weights)
-        imult = gp.where(weights > 0.005)[0]
-        if imult.size == 0:
+        wsum = gp.sum(weights)
+        if wsum == 0:
             data[i, :] = 0
             continue
+        weights = weights / wsum
+        imult = gp.where(weights > 0.005)[0]
         data[i, :] = gp.matmul(weights[imult], data[imult, :])
     # from viewephys.gui import viewephys
     # f = viewephys(data.T, fs=1/30, h=h, title='interp2')
@@ -1199,6 +1239,13 @@ def _resample_lfp_chunk(args):
             fs=fs / q,
             **{**cadzow_kwargs, "n_jobs": 1},
         )
+        # Cadzow re-estimates every channel from its own rank-reduced spatial fit,
+        # including already-interpolated bad channels — this can reintroduce a small
+        # per-channel amplitude mismatch that current_source_density's per-column
+        # second-difference turns into a spurious horizontal line. Re-interpolate those
+        # channels from their Cadzow-denoised same-column neighbours to remove it.
+        if channel_labels is not None:
+            dec = interpolate_bad_channels(dec, channel_labels, cx, cy, groupby_y=True)
 
     n_out = last_out - first_out
     valid = dec[:, pad_left_out : pad_left_out + n_out]

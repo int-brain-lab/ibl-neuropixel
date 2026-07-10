@@ -159,6 +159,75 @@ class TestSaturation(unittest.TestCase):
         self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
 
 
+class TestInterpolateBadChannels(unittest.TestCase):
+    """groupby_y=True: exact per-column linear interpolation along y, ignoring
+    geometrically-closer cross-column neighbours. Motivated by current_source_density,
+    which differentiates each column independently and is disrupted by a channel filled
+    in from a different column's trend."""
+
+    def setUp(self):
+        self.h = neuropixel.trace_header(version=1)
+        self.nc = self.h["x"].size
+        self.x, self.y = self.h["x"], self.h["y"]
+        # a function that is linear in y: exact two-point linear interpolation must
+        # reproduce it exactly at any interior missing sample.
+        f = 3.0 * self.y + 7.0
+        self.data = np.tile(f[:, np.newaxis], (1, 5)).astype(np.float64)
+
+    def test_isolated_bad_channel_exact_recovery(self):
+        labels = np.zeros(self.nc, dtype=int)
+        labels[193] = 1
+        out = ibldsp.voltage.interpolate_bad_channels(
+            self.data.copy(), labels, self.x, self.y, groupby_y=True
+        )
+        np.testing.assert_allclose(out[193], self.data[193])
+
+    def test_adjacent_same_column_bad_channels_exact_recovery(self):
+        # 250 and 254 are adjacent within the same column (x[250] == x[254]).
+        assert self.x[250] == self.x[254]
+        labels = np.zeros(self.nc, dtype=int)
+        labels[[250, 254]] = 1
+        out = ibldsp.voltage.interpolate_bad_channels(
+            self.data.copy(), labels, self.x, self.y, groupby_y=True
+        )
+        np.testing.assert_allclose(out[[250, 254]], self.data[[250, 254]])
+
+    def test_ignores_closer_cross_column_neighbour(self):
+        # channel 191 is geometrically closer to 193 than 193's same-column
+        # neighbours (189, 195, 197) are - groupby_y=True must not use it.
+        labels = np.zeros(self.nc, dtype=int)
+        labels[193] = 1
+        corrupted = self.data.copy()
+        corrupted[191] = 1e6  # would dominate a distance-weighted kriging fit
+        out = ibldsp.voltage.interpolate_bad_channels(
+            corrupted, labels, self.x, self.y, groupby_y=True
+        )
+        np.testing.assert_allclose(out[193], self.data[193])
+
+    def test_edge_channel_falls_back_to_single_neighbour(self):
+        # the top-most channel of a column has no neighbour above it.
+        col0 = np.where(self.x == self.x[0])[0]
+        top = col0[np.argmin(self.y[col0])]
+        below = col0[self.y[col0] == np.sort(self.y[col0])[1]][0]
+        labels = np.zeros(self.nc, dtype=int)
+        labels[top] = 1
+        out = ibldsp.voltage.interpolate_bad_channels(
+            self.data.copy(), labels, self.x, self.y, groupby_y=True
+        )
+        np.testing.assert_allclose(out[top], self.data[below])
+
+    def test_default_kriging_path_unaffected(self):
+        # groupby_y defaults to False: behaviour must match the original
+        # multi-column kriging interpolation, including the all-neighbours-bad
+        # fallback to zero (previously reached via a NaN division, now explicit).
+        labels = np.zeros(self.nc, dtype=int)
+        labels[:5] = 1  # first few channels: neighbours within range are also bad
+        out = ibldsp.voltage.interpolate_bad_channels(
+            self.data.copy(), labels, self.x, self.y
+        )
+        self.assertTrue(np.all(np.isfinite(out)))
+
+
 class TestLFP(unittest.TestCase):
     def test_rsamp_cbin(self):
         """
@@ -195,6 +264,46 @@ class TestLFP(unittest.TestCase):
             za = spikeglx.Reader(out_file, ns=ns // 5, nc=nc, fs=500, dtype=np.float32)
             diff = d[0:-1:resamp_factor_q, :] - za[:]
             np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)
+
+    def test_rsamp_cbin_cadzow_reinterpolation(self):
+        """channel_labels + cadzow_kwargs together: the bad channels Cadzow re-estimates
+        must be overwritten by an exact per-column linear interpolation of their
+        Cadzow-denoised neighbours, so the pipeline output is a fixed point of
+        interpolate_bad_channels(groupby_y=True)."""
+        ns, nc, fs = int(10 * 2500), 16, 2500
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            out_file = Path(temp_dir).joinpath("test_rs.npy")
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                d[:, ic] = np.sin(2 * np.pi * (10 + ic * 4) * np.arange(ns) / fs) * 1000
+            d.tofile(testfile)
+
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            h = neuropixel.trace_header(version=1)
+            x, y = h["x"][:nc], h["y"][:nc]
+            self.assertEqual(x[4], x[8])  # 4 & 8 adjacent within the same column
+            channel_labels = np.zeros(nc, dtype=int)
+            channel_labels[[4, 8, 9]] = 1
+
+            ibldsp.voltage.resample_denoise_lfp_cbin(
+                sr,
+                output=out_file,
+                dtype=np.float32,
+                highpass_cutoff=None,
+                car=False,
+                channel_labels=channel_labels,
+                cadzow_kwargs=dict(rank=3, fmax=None, nswx=8, ovx=4),
+            )
+            za = spikeglx.Reader(
+                out_file, ns=ns // 5, nc=nc, fs=fs / 5, dtype=np.float32
+            )
+            out = za[:].T.astype(np.float64)
+            self.assertTrue(np.all(np.isfinite(out)))
+            fixed_point = ibldsp.voltage.interpolate_bad_channels(
+                out.copy(), channel_labels, x, y, groupby_y=True
+            )
+            np.testing.assert_allclose(out, fixed_point, rtol=1e-6)
 
 
 class TestDetectBadChannels(unittest.TestCase):
