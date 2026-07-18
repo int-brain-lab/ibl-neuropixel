@@ -247,6 +247,20 @@ class TestInterpolateBadChannels(unittest.TestCase):
 
 
 class TestLFP(unittest.TestCase):
+    def test_warmup_pad_out(self):
+        fs_out = 250.0
+        # default 2 Hz corner (and no highpass) keep the historical 512-sample pad
+        self.assertEqual(ibldsp.voltage._warmup_pad_out(2.0, fs_out), 512)
+        self.assertEqual(ibldsp.voltage._warmup_pad_out(None, fs_out), 512)
+        # a lower corner gets a longer pad, covering at least ~3/fc seconds
+        pad_half = ibldsp.voltage._warmup_pad_out(0.5, fs_out)
+        self.assertGreater(pad_half, 512)
+        self.assertGreaterEqual(pad_half / fs_out, 3.0 / 0.5)
+        # the chunk window must always stay a multiple of the 768-sample cadzow window
+        for fc in (None, 0.1, 0.5, 1.0, 2.0, 5.0):
+            pad = ibldsp.voltage._warmup_pad_out(fc, fs_out)
+            self.assertEqual((8192 + 2 * pad) % 768, 0)
+
     def test_rsamp_cbin(self):
         """
         Resamples a binary file by a factor of 5

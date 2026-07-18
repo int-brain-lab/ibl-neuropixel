@@ -1284,6 +1284,40 @@ def _resample_lfp_chunk(args):
     za.flush()
 
 
+def _warmup_pad_out(
+    highpass_cutoff, fs_out, chunk_size_out=8192, cadzow_window=768, floor=512
+):
+    """Per-chunk warmup padding (output samples) sized to the highpass transient.
+
+    Each chunk discards ``pad`` output samples of filter warmup on each side; that pad
+    must outlast the longest filter transient, which is dominated by the zero-phase
+    highpass. A 3rd-order Butterworth's slowest mode has time constant ``1/(pi*fc)``, so
+    the transient scales as ``~1/highpass_cutoff``; we allow ``3 / highpass_cutoff``
+    seconds (~9 time constants). The result is floored so the default 2 Hz case is
+    unchanged, then snapped up to the smallest value keeping ``chunk_size_out + 2*pad`` a
+    multiple of the Cadzow FFT window.
+
+    Parameters
+    ----------
+    highpass_cutoff : float or None
+        Highpass corner [Hz]; None (no highpass) uses the floor.
+    fs_out : float
+        Output (decimated) sampling rate [Hz].
+    chunk_size_out, cadzow_window, floor : int
+        Chunk size, Cadzow window (768) the total must divide, and minimum pad.
+
+    Returns
+    -------
+    int : warmup padding in output samples.
+    """
+    pad = floor
+    if highpass_cutoff:
+        pad = max(floor, int(np.ceil(3.0 / highpass_cutoff * fs_out)))
+    while (chunk_size_out + 2 * pad) % cadzow_window != 0:
+        pad += 1
+    return pad
+
+
 def resample_denoise_lfp_cbin(
     lf_file: spikeglx.Reader | Path | str,
     q: int = 5,
@@ -1328,8 +1362,9 @@ def resample_denoise_lfp_cbin(
         Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
         ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
         inside each worker; outer-level parallelism is controlled by *n_jobs* above.
-        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT = 9216) is a multiple of the
-        canonical Cadzow FFT window (256 × 3 = 768) by design.  Default None (disabled).
+        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT) is kept a multiple of the canonical
+        Cadzow FFT window (256 × 3 = 768) by design; PAD_OUT scales with the highpass corner
+        (see _warmup_pad_out).  Default None (disabled).
     saturation_file : Path or None
         Path to a ``(ns,)`` boolean ``.npy`` memmap flagging saturated samples at the
         input rate.  When provided, each worker rebuilds a cosine mute taper from its
@@ -1346,11 +1381,8 @@ def resample_denoise_lfp_cbin(
     Path
         Path to the completed output .npy file, shape (ns // q, nc).
     """
-    # 9216 = 12 × 768 — chunk + 2 × pad must stay a multiple of the cadzow window
-    PAD_OUT = 512  # output-samples of filter warmup on each side of every chunk
-    CHUNK_SIZE_OUT = 8192
-    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0, (
-        f"CHUNK_SIZE_OUT {CHUNK_SIZE_OUT} + 2*PAD_OUT {PAD_OUT} must be a multiple of 768"
+    CHUNK_SIZE_OUT = (
+        8192  # chunk + 2 × PAD_OUT must stay a multiple of 768 (cadzow window)
     )
 
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
@@ -1372,6 +1404,10 @@ def resample_denoise_lfp_cbin(
     geom_x = np.array(geo["x"][:nc]) if geo is not None else None
     geom_y = np.array(geo["y"][:nc]) if geo is not None else None
     fs = float(sr.fs)
+    # Warmup padding scales with the highpass corner (transient ~ 1/highpass_cutoff),
+    # so a lower corner (e.g. 0.5 Hz) automatically gets a longer pad; 2 Hz stays at 512.
+    PAD_OUT = _warmup_pad_out(highpass_cutoff, fs / q, CHUNK_SIZE_OUT)
+    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0
     # Pass raw Reader metadata so workers can reconstruct it for files without a .meta.
     reader_kwargs = {
         "nc": sr.nc,
