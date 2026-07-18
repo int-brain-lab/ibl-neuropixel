@@ -265,6 +265,51 @@ class TestLFP(unittest.TestCase):
             diff = d[0:-1:resamp_factor_q, :] - za[:]
             np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)
 
+    def test_rsamp_cbin_saturation_mute(self):
+        """A saturation_file mutes the flagged raw samples before filtering: the decimated
+        output over the (tapered) saturated span is attenuated to ~zero, while an
+        unmuted run leaves that span at full amplitude."""
+        ns, nc, fs, q = int(20 * 2500), 8, 2500, 5
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            sat_file = Path(temp_dir).joinpath("sat.npy")
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                d[:, ic] = np.sin(2 * np.pi * (10 + ic * 4) * np.arange(ns) / fs) * 1000
+            d.tofile(testfile)
+            # flag a saturated span well inside the recording (avoid chunk/filter edges)
+            sat = np.zeros(ns, dtype=bool)
+            sat[10 * 2500 : 11 * 2500] = True
+            np.save(sat_file, sat)
+
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            out_plain = Path(temp_dir).joinpath("plain.npy")
+            out_muted = Path(temp_dir).joinpath("muted.npy")
+            for out, sf in [(out_plain, None), (out_muted, sat_file)]:
+                ibldsp.voltage.resample_denoise_lfp_cbin(
+                    sr,
+                    output=out,
+                    dtype=np.float32,
+                    highpass_cutoff=None,
+                    car=False,
+                    saturation_file=sf,
+                )
+            za_plain = spikeglx.Reader(
+                out_plain, ns=ns // q, nc=nc, fs=fs / q, dtype=np.float32
+            )[:]
+            za_muted = spikeglx.Reader(
+                out_muted, ns=ns // q, nc=nc, fs=fs / q, dtype=np.float32
+            )[:]
+            # decimated indices of the muted span core (inside the taper)
+            core = slice(int(10.2 * 500), int(10.8 * 500))
+            self.assertLess(np.abs(za_muted[core]).max(), 1.0)  # muted ≈ 0
+            self.assertGreater(
+                np.abs(za_plain[core]).max(), 100.0
+            )  # unmuted full amplitude
+            # outside the saturated span the two runs agree
+            outside = slice(0, int(9.0 * 500))
+            np.testing.assert_allclose(za_muted[outside], za_plain[outside], atol=1e-3)
+
     def test_rsamp_cbin_cadzow_reinterpolation(self):
         """channel_labels + cadzow_kwargs together: the bad channels Cadzow re-estimates
         must be overwritten by an exact per-column linear interpolation of their

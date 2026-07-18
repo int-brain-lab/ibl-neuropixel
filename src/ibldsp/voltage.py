@@ -1189,12 +1189,24 @@ def _resample_lfp_chunk(args):
         car,
         car_file,
         cadzow_kwargs,
+        saturation_file,
+        mute_window_samples,
     ) = args
 
     out_dtype = np.dtype(out_dtype_str)
     # reader_kwargs supplies nc/ns/fs/dtype for files that have no .meta (e.g. unit tests).
     sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
     raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)  # (nc, L_in)
+
+    # Mute saturated stretches before any filtering so rail-clipped values never enter the
+    # highpass or anti-alias FIR. The cosine taper is rebuilt here from the input-rate
+    # boolean mask (see ibldsp.voltage.saturation) to avoid pickling a full-length array.
+    if saturation_file is not None:
+        sat = np.load(saturation_file, mmap_mode="r")
+        sat_slice = np.asarray(sat[first_in:last_in], dtype=np.float64)
+        win = scipy.signal.windows.cosine(mute_window_samples)
+        mute = np.maximum(0.0, 1.0 - scipy.signal.convolve(sat_slice, win, mode="same"))
+        raw = raw * mute[np.newaxis, :].astype(np.float32)
 
     if major_version == 1:
         raw = fourier.fshift(raw, sample_shift, axis=1)
@@ -1278,6 +1290,8 @@ def resample_denoise_lfp_cbin(
     n_jobs: int = 1,
     car: bool = True,
     cadzow_kwargs: dict | None = None,
+    saturation_file: Path | None = None,
+    mute_window_samples: int = 7,
 ) -> Path:
     """
     Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
@@ -1312,6 +1326,16 @@ def resample_denoise_lfp_cbin(
         inside each worker; outer-level parallelism is controlled by *n_jobs* above.
         The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT = 9216) is a multiple of the
         canonical Cadzow FFT window (256 × 3 = 768) by design.  Default None (disabled).
+    saturation_file : Path or None
+        Path to a ``(ns,)`` boolean ``.npy`` memmap flagging saturated samples at the
+        input rate.  When provided, each worker rebuilds a cosine mute taper from its
+        input slice and multiplies the raw traces by it before any processing, so
+        saturated (rail-clipped) values never enter the highpass or anti-alias filters.
+        Default None (no muting).
+    mute_window_samples : int
+        Width of the cosine taper applied around each saturated stretch when
+        *saturation_file* is set.  Must match the value used during detection so the
+        stored intervals and the muting agree.  Default 7.
 
     Returns
     -------
@@ -1392,6 +1416,8 @@ def resample_denoise_lfp_cbin(
                 car,
                 str(car_path) if car else None,
                 cadzow_kwargs,
+                str(saturation_file) if saturation_file is not None else None,
+                mute_window_samples,
             )
         )
 
