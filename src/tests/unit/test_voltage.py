@@ -158,6 +158,24 @@ class TestSaturation(unittest.TestCase):
         df_sat = ibldsp.voltage.saturation_samples_to_intervals(saturation)
         self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
 
+    def test_saturation_intervals_boundary_edges(self):
+        # recordings that start and/or end saturated must not raise (diff-based fronts
+        # misses boundary edges): a leading rising / trailing falling edge is inserted.
+        n = 1000
+        sat = np.zeros(n, dtype=bool)
+        sat[:50] = True  # starts saturated
+        sat[900:] = True  # ends saturated
+        df = ibldsp.voltage.saturation_samples_to_intervals(sat)
+        self.assertEqual(df.shape[0], 2)
+        np.testing.assert_array_equal(df["start_sample"].to_numpy(), [0, 900])
+        np.testing.assert_array_equal(df["stop_sample"].to_numpy(), [50, n - 1])
+        # fully saturated → a single interval spanning the recording
+        df_full = ibldsp.voltage.saturation_samples_to_intervals(np.ones(n, dtype=bool))
+        self.assertEqual(df_full.shape[0], 1)
+        np.testing.assert_array_equal(
+            df_full[["start_sample", "stop_sample"]].to_numpy(), [[0, n - 1]]
+        )
+
 
 class TestInterpolateBadChannels(unittest.TestCase):
     """groupby_y=True: exact per-column linear interpolation along y, ignoring

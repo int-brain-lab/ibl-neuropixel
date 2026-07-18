@@ -304,12 +304,16 @@ def saturation_samples_to_intervals(
     :param _saturation: np.ndarray: Boolean array with saturation samples set as True
     :return:
     """
-    assert not _saturation[0]
     ind, pol = ibldsp.utils.fronts(_saturation.astype(np.int8))
-    # if the last sample is positive, make sure the interval is closed by providing an even number of events
-    if len(pol) > 0 and pol[-1] == 1:
-        pol = np.r_[pol, -1]
+    # fronts is diff-based, so it misses edges at the array boundaries. If the recording
+    # starts saturated, insert a leading rising edge at sample 0; if it ends saturated,
+    # append a trailing falling edge at the last sample — keeping the events paired.
+    if _saturation[0]:
+        ind = np.r_[0, ind]
+        pol = np.r_[1, pol]
+    if _saturation[-1]:
         ind = np.r_[ind, _saturation.shape[0] - 1]
+        pol = np.r_[pol, -1]
     df_saturation = pd.DataFrame(
         np.c_[ind[::2], ind[1::2]], columns=["start_sample", "stop_sample"]
     )
