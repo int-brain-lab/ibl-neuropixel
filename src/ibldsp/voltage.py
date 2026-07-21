@@ -1220,6 +1220,22 @@ def _resample_lfp_chunk(args):
         raw = fourier.fshift(raw, sample_shift, axis=1)
 
     if highpass_cutoff is not None:
+        # Apodize the true recording boundaries before the highpass. Interior chunks discard
+        # their filter warmup via the PAD_OUT overlap, but the first/last chunk keep the real
+        # recording edge, where the zero-phase highpass rings against the data-boundary step.
+        # Cosine-ramp the raw signal there (~3 filter time-constants, scaling with the corner)
+        # so the filter sees a smooth onset and never generates the transient.
+        taper_len = min(
+            int(np.ceil(3.0 / (2.0 * np.pi * highpass_cutoff) * fs)), last_in - first_in
+        )
+        if taper_len > 1:
+            ramp = utils.fcn_cosine([0, taper_len - 1])(np.arange(taper_len)).astype(
+                np.float32
+            )  # 0 -> 1 cosine
+            if first_in == 0:
+                raw[:, :taper_len] *= ramp
+            if last_in >= sr_local.ns:
+                raw[:, -taper_len:] *= ramp[::-1]
         sos = scipy.signal.butter(
             3, highpass_cutoff, btype="highpass", fs=fs, output="sos"
         )

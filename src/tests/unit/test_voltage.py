@@ -315,6 +315,32 @@ class TestLFP(unittest.TestCase):
             diff = d[0:-1:resamp_factor_q, :] - za[:]
             np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)
 
+    def test_rsamp_cbin_edge_taper(self):
+        # With a highpass, the true recording start/end are cosine-ramped before filtering so
+        # the zero-phase filter cannot ring against the data-boundary step. The first output
+        # samples must therefore be strongly attenuated relative to steady state.
+        ns = int(60 * 2500)
+        nc = 12
+        fs = 2500
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            out_file = Path(temp_dir).joinpath("test_rs.npy")
+            t = np.arange(ns) / fs
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                # DC offset + low-frequency tone: the highpass would ring at the raw edge
+                d[:, ic] = 500 + 800 * np.sin(2 * np.pi * (5 + ic) * t)
+            with open(testfile, "wb+") as f:
+                d.tofile(f)
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            ibldsp.voltage.resample_denoise_lfp_cbin(
+                sr, output=out_file, dtype=np.float32, highpass_cutoff=2.0, car=False
+            )
+            out = np.load(out_file).T  # (nc, ns_out)
+            start = np.sqrt(np.mean(out[:, :5] ** 2))
+            steady = np.sqrt(np.mean(out[:, 2000:4000] ** 2))
+            self.assertLess(start, 0.2 * steady)
+
     def test_rsamp_cbin_saturation_mute(self):
         """A saturation_file mutes the flagged raw samples before filtering: the decimated
         output over the (tapered) saturated span is attenuated to ~zero, while an
