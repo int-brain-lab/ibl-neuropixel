@@ -274,7 +274,8 @@ def saturation(
     Computes
     :param data: [nc, ns]: voltage traces array
     :param max_voltage: maximum value of the voltage: scalar or array of size nc (same units as data)
-    :param v_per_sec: maximum derivative of the voltage in V/s (or units/s)
+    :param v_per_sec: maximum derivative of the voltage in V/s (or units/s); None disables the
+        derivative criterion and detects saturation from the absolute voltage alone (use for LFP)
     :param fs: sampling frequency Hz (defaults to 30kHz)
     :param proportion: 0 < proportion <1  of channels above threshold to consider the sample as saturated (0.2)
     :param mute_window_samples=7: number of samples for the cosine taper applied to the saturation
@@ -282,14 +283,16 @@ def saturation(
         saturation [ns]: boolean array indicating the saturated samples
         mute [ns]: float array indicating the mute function to apply to the data [0-1]
     """
-    # first computes the saturated samples
+    # absolute-voltage criterion: fraction of channels clipping at the ADC rail per sample
     max_voltage = np.atleast_1d(max_voltage)[:, np.newaxis]
-    saturation = np.mean(np.abs(data) > max_voltage * 0.96, axis=0)
-    # then compute the derivative of the voltage saturation
-    n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
-    n_diff_saturated = np.r_[n_diff_saturated, 0]
-    # if either of those reaches more than the proportion of channels labels the sample as saturated
-    saturation = np.logical_or(saturation > proportion, n_diff_saturated > proportion)
+    saturation = np.mean(np.abs(data) > max_voltage * 0.96, axis=0) > proportion
+    # optional derivative criterion: flags abnormally fast voltage swings. It is tuned for the
+    # AP band; on the LFP band normal dynamics exceed it and mislabel clean samples, so pass
+    # v_per_sec=None to rely on the absolute-voltage criterion alone.
+    if v_per_sec is not None:
+        n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
+        n_diff_saturated = np.r_[n_diff_saturated, 0]
+        saturation = np.logical_or(saturation, n_diff_saturated > proportion)
     # apply a cosine taper to the saturation to create a mute function
     win = scipy.signal.windows.cosine(mute_window_samples)
     mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode="same"))
@@ -350,7 +353,8 @@ def saturation_cbin(
     n_jobs : int, optional
         Number of parallel jobs to use for processing, defaults to 4
     v_per_sec : float, optional
-        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8
+        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8; None disables
+        the derivative criterion (absolute-voltage detection only, appropriate for the LFP band)
     proportion : float, optional
         Threshold proportion (0-1) of channels that must be above threshold to consider
         a sample as saturated, defaults to 0.2

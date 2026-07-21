@@ -140,6 +140,24 @@ class TestSaturation(unittest.TestCase):
         self.assertGreater(np.sum(saturated), 5)
         self.assertGreater(np.sum(mute == 0), np.sum(saturated))
 
+    def test_saturation_no_derivative(self):
+        # v_per_sec=None disables the derivative criterion (LFP band): fast but sub-rail
+        # dynamics must NOT be flagged, while true rail clipping still is.
+        np.random.seed(7654)
+        # large, fast fluctuations well below the rail — the derivative criterion would flag
+        # these, the absolute-voltage criterion must not.
+        data = np.random.randn(384, 30_000).astype(np.float32) * 300e-6
+        saturated, _ = ibldsp.voltage.saturation(
+            data, max_voltage=1200e-6, v_per_sec=None
+        )
+        np.testing.assert_array_equal(saturated, 0)
+        # clipping at the rail is still detected without the derivative term
+        data[:, 13_600:13_700] = 1300e-6
+        saturated, _ = ibldsp.voltage.saturation(
+            data, max_voltage=1200e-6, v_per_sec=None
+        )
+        self.assertEqual(np.sum(saturated), 100)
+
     def test_saturation_intervals_output(self):
         saturation = np.zeros(50_000, dtype=bool)
         # we test empty files, make sure we can read/write from empty parquet
