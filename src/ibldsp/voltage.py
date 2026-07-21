@@ -1206,15 +1206,14 @@ def _resample_lfp_chunk(args):
     sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
     raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)  # (nc, L_in)
 
-    # Mute saturated stretches before any filtering so rail-clipped values never enter the
-    # highpass or anti-alias FIR. The cosine taper is rebuilt here from the input-rate
-    # boolean mask (see ibldsp.voltage.saturation) to avoid pickling a full-length array.
+    # Saturated stretches are muted *late* — after Cadzow, on the decimated output (see below).
+    # Muting the raw traces before the highpass/CAR/decimate/Cadzow does not keep the muted
+    # span clean: those stages leak energy back into it (visible as residual noise and spurious
+    # CSD sources/sinks). A single re-mute of the final decimated output is both cleaner and
+    # cheaper. The raw-rate boolean mask is loaded here and downsampled to the output grid.
     if saturation_file is not None:
         sat = np.load(saturation_file, mmap_mode="r")
-        sat_slice = np.asarray(sat[first_in:last_in], dtype=np.float64)
-        win = scipy.signal.windows.cosine(mute_window_samples)
-        mute = np.maximum(0.0, 1.0 - scipy.signal.convolve(sat_slice, win, mode="same"))
-        raw = raw * mute[np.newaxis, :].astype(np.float32)
+        sat_slice = np.asarray(sat[first_in:last_in], dtype=bool)
 
     if major_version == 1:
         raw = fourier.fshift(raw, sample_shift, axis=1)
@@ -1282,6 +1281,20 @@ def _resample_lfp_chunk(args):
         # channels from their Cadzow-denoised same-column neighbours to remove it.
         if channel_labels is not None:
             dec = interpolate_bad_channels(dec, channel_labels, cx, cy, groupby_y=True)
+
+    # Late mute: zero the saturated stretches on the final decimated output. The raw-rate mask
+    # is block-max downsampled onto the decimated grid (any saturated raw sample in a q-block
+    # marks its output sample), then cosine-tapered so the mute ramps smoothly. Applied after
+    # Cadzow so no later stage can re-introduce energy into the muted span.
+    if saturation_file is not None:
+        n_dec = dec.shape[1]
+        n_full = n_dec * q
+        if sat_slice.size < n_full:
+            sat_slice = np.r_[sat_slice, np.zeros(n_full - sat_slice.size, dtype=bool)]
+        sat_dec = sat_slice[:n_full].reshape(n_dec, q).any(axis=1).astype(np.float64)
+        win = scipy.signal.windows.cosine(mute_window_samples)
+        mute = np.maximum(0.0, 1.0 - scipy.signal.convolve(sat_dec, win, mode="same"))
+        dec = dec * mute[np.newaxis, :].astype(dec.dtype)
 
     n_out = last_out - first_out
     valid = dec[:, pad_left_out : pad_left_out + n_out]
@@ -1387,14 +1400,15 @@ def resample_denoise_lfp_cbin(
         (see _warmup_pad_out).  Default None (disabled).
     saturation_file : Path or None
         Path to a ``(ns,)`` boolean ``.npy`` memmap flagging saturated samples at the
-        input rate.  When provided, each worker rebuilds a cosine mute taper from its
-        input slice and multiplies the raw traces by it before any processing, so
-        saturated (rail-clipped) values never enter the highpass or anti-alias filters.
+        input rate.  When provided, each worker downsamples its slice of the mask onto the
+        decimated grid and zeroes the saturated stretches on the *final* decimated output —
+        after the highpass, CAR, decimation and Cadzow.  Muting late (rather than the raw
+        traces before filtering) keeps the muted span clean: earlier stages would otherwise
+        leak energy back into it (residual noise and spurious CSD sources/sinks).
         Default None (no muting).
     mute_window_samples : int
-        Width of the cosine taper applied around each saturated stretch when
-        *saturation_file* is set.  Must match the value used during detection so the
-        stored intervals and the muting agree.  Default 7.
+        Width [in decimated output samples] of the cosine taper ramping the mute in and out
+        around each saturated stretch when *saturation_file* is set.  Default 7.
 
     Returns
     -------
