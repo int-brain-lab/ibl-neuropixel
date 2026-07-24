@@ -28,7 +28,7 @@ jobs:
 
       - name: flake8
         run: |
-          pip install ruff --quiet
+          pip install "ruff==0.15.18" --quiet
           cd ibl-neuropixel
           ruff check
 
