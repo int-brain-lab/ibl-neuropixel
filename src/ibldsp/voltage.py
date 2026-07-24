@@ -274,7 +274,8 @@ def saturation(
     Computes
     :param data: [nc, ns]: voltage traces array
     :param max_voltage: maximum value of the voltage: scalar or array of size nc (same units as data)
-    :param v_per_sec: maximum derivative of the voltage in V/s (or units/s)
+    :param v_per_sec: maximum derivative of the voltage in V/s (or units/s); None disables the
+        derivative criterion and detects saturation from the absolute voltage alone (use for LFP)
     :param fs: sampling frequency Hz (defaults to 30kHz)
     :param proportion: 0 < proportion <1  of channels above threshold to consider the sample as saturated (0.2)
     :param mute_window_samples=7: number of samples for the cosine taper applied to the saturation
@@ -282,14 +283,16 @@ def saturation(
         saturation [ns]: boolean array indicating the saturated samples
         mute [ns]: float array indicating the mute function to apply to the data [0-1]
     """
-    # first computes the saturated samples
+    # absolute-voltage criterion: fraction of channels clipping at the ADC rail per sample
     max_voltage = np.atleast_1d(max_voltage)[:, np.newaxis]
-    saturation = np.mean(np.abs(data) > max_voltage * 0.96, axis=0)
-    # then compute the derivative of the voltage saturation
-    n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
-    n_diff_saturated = np.r_[n_diff_saturated, 0]
-    # if either of those reaches more than the proportion of channels labels the sample as saturated
-    saturation = np.logical_or(saturation > proportion, n_diff_saturated > proportion)
+    saturation = np.mean(np.abs(data) > max_voltage * 0.96, axis=0) > proportion
+    # optional derivative criterion: flags abnormally fast voltage swings. It is tuned for the
+    # AP band; on the LFP band normal dynamics exceed it and mislabel clean samples, so pass
+    # v_per_sec=None to rely on the absolute-voltage criterion alone.
+    if v_per_sec is not None:
+        n_diff_saturated = np.mean(np.abs(np.diff(data, axis=-1)) / fs >= v_per_sec, axis=0)
+        n_diff_saturated = np.r_[n_diff_saturated, 0]
+        saturation = np.logical_or(saturation, n_diff_saturated > proportion)
     # apply a cosine taper to the saturation to create a mute function
     win = scipy.signal.windows.cosine(mute_window_samples)
     mute = np.maximum(0, 1 - scipy.signal.convolve(saturation, win, mode="same"))
@@ -304,12 +307,16 @@ def saturation_samples_to_intervals(
     :param _saturation: np.ndarray: Boolean array with saturation samples set as True
     :return:
     """
-    assert not _saturation[0]
     ind, pol = ibldsp.utils.fronts(_saturation.astype(np.int8))
-    # if the last sample is positive, make sure the interval is closed by providing an even number of events
-    if len(pol) > 0 and pol[-1] == 1:
-        pol = np.r_[pol, -1]
+    # fronts is diff-based, so it misses edges at the array boundaries. If the recording
+    # starts saturated, insert a leading rising edge at sample 0; if it ends saturated,
+    # append a trailing falling edge at the last sample — keeping the events paired.
+    if _saturation[0]:
+        ind = np.r_[0, ind]
+        pol = np.r_[1, pol]
+    if _saturation[-1]:
         ind = np.r_[ind, _saturation.shape[0] - 1]
+        pol = np.r_[pol, -1]
     df_saturation = pd.DataFrame(
         np.c_[ind[::2], ind[1::2]], columns=["start_sample", "stop_sample"]
     )
@@ -346,7 +353,8 @@ def saturation_cbin(
     n_jobs : int, optional
         Number of parallel jobs to use for processing, defaults to 4
     v_per_sec : float, optional
-        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8
+        Maximum derivative of the voltage in V/s (or units/s), defaults to 1e-8; None disables
+        the derivative criterion (absolute-voltage detection only, appropriate for the LFP band)
     proportion : float, optional
         Threshold proportion (0-1) of channels that must be above threshold to consider
         a sample as saturated, defaults to 0.2
@@ -1189,6 +1197,8 @@ def _resample_lfp_chunk(args):
         car,
         car_file,
         cadzow_kwargs,
+        saturation_file,
+        mute_window_samples,
     ) = args
 
     out_dtype = np.dtype(out_dtype_str)
@@ -1196,10 +1206,35 @@ def _resample_lfp_chunk(args):
     sr_local = spikeglx.Reader(file_bin, **reader_kwargs)
     raw = sr_local[first_in:last_in, :nc].T.astype(np.float32)  # (nc, L_in)
 
+    # Saturated stretches are muted *late* — after Cadzow, on the decimated output (see below).
+    # Muting the raw traces before the highpass/CAR/decimate/Cadzow does not keep the muted
+    # span clean: those stages leak energy back into it (visible as residual noise and spurious
+    # CSD sources/sinks). A single re-mute of the final decimated output is both cleaner and
+    # cheaper. The raw-rate boolean mask is loaded here and downsampled to the output grid.
+    if saturation_file is not None:
+        sat = np.load(saturation_file, mmap_mode="r")
+        sat_slice = np.asarray(sat[first_in:last_in], dtype=bool)
+
     if major_version == 1:
         raw = fourier.fshift(raw, sample_shift, axis=1)
 
     if highpass_cutoff is not None:
+        # Apodize the true recording boundaries before the highpass. Interior chunks discard
+        # their filter warmup via the PAD_OUT overlap, but the first/last chunk keep the real
+        # recording edge, where the zero-phase highpass rings against the data-boundary step.
+        # Cosine-ramp the raw signal there (~3 filter time-constants, scaling with the corner)
+        # so the filter sees a smooth onset and never generates the transient.
+        taper_len = min(
+            int(np.ceil(3.0 / (2.0 * np.pi * highpass_cutoff) * fs)), last_in - first_in
+        )
+        if taper_len > 1:
+            ramp = utils.fcn_cosine([0, taper_len - 1])(np.arange(taper_len)).astype(
+                np.float32
+            )  # 0 -> 1 cosine
+            if first_in == 0:
+                raw[:, :taper_len] *= ramp
+            if last_in >= sr_local.ns:
+                raw[:, -taper_len:] *= ramp[::-1]
         sos = scipy.signal.butter(
             3, highpass_cutoff, btype="highpass", fs=fs, output="sos"
         )
@@ -1247,6 +1282,20 @@ def _resample_lfp_chunk(args):
         if channel_labels is not None:
             dec = interpolate_bad_channels(dec, channel_labels, cx, cy, groupby_y=True)
 
+    # Late mute: zero the saturated stretches on the final decimated output. The raw-rate mask
+    # is block-max downsampled onto the decimated grid (any saturated raw sample in a q-block
+    # marks its output sample), then cosine-tapered so the mute ramps smoothly. Applied after
+    # Cadzow so no later stage can re-introduce energy into the muted span.
+    if saturation_file is not None:
+        n_dec = dec.shape[1]
+        n_full = n_dec * q
+        if sat_slice.size < n_full:
+            sat_slice = np.r_[sat_slice, np.zeros(n_full - sat_slice.size, dtype=bool)]
+        sat_dec = sat_slice[:n_full].reshape(n_dec, q).any(axis=1).astype(np.float64)
+        win = scipy.signal.windows.cosine(mute_window_samples)
+        mute = np.maximum(0.0, 1.0 - scipy.signal.convolve(sat_dec, win, mode="same"))
+        dec = dec * mute[np.newaxis, :].astype(dec.dtype)
+
     n_out = last_out - first_out
     valid = dec[:, pad_left_out : pad_left_out + n_out]
     actual_n = valid.shape[1]  # may be < n_out at the end of the file
@@ -1268,6 +1317,40 @@ def _resample_lfp_chunk(args):
     za.flush()
 
 
+def _warmup_pad_out(
+    highpass_cutoff, fs_out, chunk_size_out=8192, cadzow_window=768, floor=512
+):
+    """Per-chunk warmup padding (output samples) sized to the highpass transient.
+
+    Each chunk discards ``pad`` output samples of filter warmup on each side; that pad
+    must outlast the longest filter transient, which is dominated by the zero-phase
+    highpass. A 3rd-order Butterworth's slowest mode has time constant ``1/(pi*fc)``, so
+    the transient scales as ``~1/highpass_cutoff``; we allow ``3 / highpass_cutoff``
+    seconds (~9 time constants). The result is floored so the default 2 Hz case is
+    unchanged, then snapped up to the smallest value keeping ``chunk_size_out + 2*pad`` a
+    multiple of the Cadzow FFT window.
+
+    Parameters
+    ----------
+    highpass_cutoff : float or None
+        Highpass corner [Hz]; None (no highpass) uses the floor.
+    fs_out : float
+        Output (decimated) sampling rate [Hz].
+    chunk_size_out, cadzow_window, floor : int
+        Chunk size, Cadzow window (768) the total must divide, and minimum pad.
+
+    Returns
+    -------
+    int : warmup padding in output samples.
+    """
+    pad = floor
+    if highpass_cutoff:
+        pad = max(floor, int(np.ceil(3.0 / highpass_cutoff * fs_out)))
+    while (chunk_size_out + 2 * pad) % cadzow_window != 0:
+        pad += 1
+    return pad
+
+
 def resample_denoise_lfp_cbin(
     lf_file: spikeglx.Reader | Path | str,
     q: int = 5,
@@ -1278,6 +1361,8 @@ def resample_denoise_lfp_cbin(
     n_jobs: int = 1,
     car: bool = True,
     cadzow_kwargs: dict | None = None,
+    saturation_file: Path | None = None,
+    mute_window_samples: int = 7,
 ) -> Path:
     """
     Resample and denoise local field potential (LFP) data from a SpikeGLX binary file.
@@ -1310,19 +1395,28 @@ def resample_denoise_lfp_cbin(
         Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
         ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
         inside each worker; outer-level parallelism is controlled by *n_jobs* above.
-        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT = 9216) is a multiple of the
-        canonical Cadzow FFT window (256 × 3 = 768) by design.  Default None (disabled).
+        The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT) is kept a multiple of the canonical
+        Cadzow FFT window (256 × 3 = 768) by design; PAD_OUT scales with the highpass corner
+        (see _warmup_pad_out).  Default None (disabled).
+    saturation_file : Path or None
+        Path to a ``(ns,)`` boolean ``.npy`` memmap flagging saturated samples at the
+        input rate.  When provided, each worker downsamples its slice of the mask onto the
+        decimated grid and zeroes the saturated stretches on the *final* decimated output —
+        after the highpass, CAR, decimation and Cadzow.  Muting late (rather than the raw
+        traces before filtering) keeps the muted span clean: earlier stages would otherwise
+        leak energy back into it (residual noise and spurious CSD sources/sinks).
+        Default None (no muting).
+    mute_window_samples : int
+        Width [in decimated output samples] of the cosine taper ramping the mute in and out
+        around each saturated stretch when *saturation_file* is set.  Default 7.
 
     Returns
     -------
     Path
         Path to the completed output .npy file, shape (ns // q, nc).
     """
-    # 9216 = 12 × 768 — chunk + 2 × pad must stay a multiple of the cadzow window
-    PAD_OUT = 512  # output-samples of filter warmup on each side of every chunk
-    CHUNK_SIZE_OUT = 8192
-    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0, (
-        f"CHUNK_SIZE_OUT {CHUNK_SIZE_OUT} + 2*PAD_OUT {PAD_OUT} must be a multiple of 768"
+    CHUNK_SIZE_OUT = (
+        8192  # chunk + 2 × PAD_OUT must stay a multiple of 768 (cadzow window)
     )
 
     sr = lf_file if isinstance(lf_file, spikeglx.Reader) else spikeglx.Reader(lf_file)
@@ -1344,6 +1438,10 @@ def resample_denoise_lfp_cbin(
     geom_x = np.array(geo["x"][:nc]) if geo is not None else None
     geom_y = np.array(geo["y"][:nc]) if geo is not None else None
     fs = float(sr.fs)
+    # Warmup padding scales with the highpass corner (transient ~ 1/highpass_cutoff),
+    # so a lower corner (e.g. 0.5 Hz) automatically gets a longer pad; 2 Hz stays at 512.
+    PAD_OUT = _warmup_pad_out(highpass_cutoff, fs / q, CHUNK_SIZE_OUT)
+    assert (CHUNK_SIZE_OUT + 2 * PAD_OUT) % (256 * 3) == 0
     # Pass raw Reader metadata so workers can reconstruct it for files without a .meta.
     reader_kwargs = {
         "nc": sr.nc,
@@ -1392,6 +1490,8 @@ def resample_denoise_lfp_cbin(
                 car,
                 str(car_path) if car else None,
                 cadzow_kwargs,
+                str(saturation_file) if saturation_file is not None else None,
+                mute_window_samples,
             )
         )
 

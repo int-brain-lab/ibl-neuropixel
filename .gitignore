@@ -1,6 +1,9 @@
 # repo specific stuff
 src/tests/fixtures/np2split/*.*bin*
 
+# Mac
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

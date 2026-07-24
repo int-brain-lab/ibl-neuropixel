@@ -140,6 +140,24 @@ class TestSaturation(unittest.TestCase):
         self.assertGreater(np.sum(saturated), 5)
         self.assertGreater(np.sum(mute == 0), np.sum(saturated))
 
+    def test_saturation_no_derivative(self):
+        # v_per_sec=None disables the derivative criterion (LFP band): fast but sub-rail
+        # dynamics must NOT be flagged, while true rail clipping still is.
+        np.random.seed(7654)
+        # large, fast fluctuations well below the rail — the derivative criterion would flag
+        # these, the absolute-voltage criterion must not.
+        data = np.random.randn(384, 30_000).astype(np.float32) * 300e-6
+        saturated, _ = ibldsp.voltage.saturation(
+            data, max_voltage=1200e-6, v_per_sec=None
+        )
+        np.testing.assert_array_equal(saturated, 0)
+        # clipping at the rail is still detected without the derivative term
+        data[:, 13_600:13_700] = 1300e-6
+        saturated, _ = ibldsp.voltage.saturation(
+            data, max_voltage=1200e-6, v_per_sec=None
+        )
+        self.assertEqual(np.sum(saturated), 100)
+
     def test_saturation_intervals_output(self):
         saturation = np.zeros(50_000, dtype=bool)
         # we test empty files, make sure we can read/write from empty parquet
@@ -157,6 +175,24 @@ class TestSaturation(unittest.TestCase):
         saturation[45852:45865] = True
         df_sat = ibldsp.voltage.saturation_samples_to_intervals(saturation)
         self.assertEqual(81, np.sum(df_sat["stop_sample"] - df_sat["start_sample"]))
+
+    def test_saturation_intervals_boundary_edges(self):
+        # recordings that start and/or end saturated must not raise (diff-based fronts
+        # misses boundary edges): a leading rising / trailing falling edge is inserted.
+        n = 1000
+        sat = np.zeros(n, dtype=bool)
+        sat[:50] = True  # starts saturated
+        sat[900:] = True  # ends saturated
+        df = ibldsp.voltage.saturation_samples_to_intervals(sat)
+        self.assertEqual(df.shape[0], 2)
+        np.testing.assert_array_equal(df["start_sample"].to_numpy(), [0, 900])
+        np.testing.assert_array_equal(df["stop_sample"].to_numpy(), [50, n - 1])
+        # fully saturated → a single interval spanning the recording
+        df_full = ibldsp.voltage.saturation_samples_to_intervals(np.ones(n, dtype=bool))
+        self.assertEqual(df_full.shape[0], 1)
+        np.testing.assert_array_equal(
+            df_full[["start_sample", "stop_sample"]].to_numpy(), [[0, n - 1]]
+        )
 
 
 class TestInterpolateBadChannels(unittest.TestCase):
@@ -229,6 +265,20 @@ class TestInterpolateBadChannels(unittest.TestCase):
 
 
 class TestLFP(unittest.TestCase):
+    def test_warmup_pad_out(self):
+        fs_out = 250.0
+        # default 2 Hz corner (and no highpass) keep the historical 512-sample pad
+        self.assertEqual(ibldsp.voltage._warmup_pad_out(2.0, fs_out), 512)
+        self.assertEqual(ibldsp.voltage._warmup_pad_out(None, fs_out), 512)
+        # a lower corner gets a longer pad, covering at least ~3/fc seconds
+        pad_half = ibldsp.voltage._warmup_pad_out(0.5, fs_out)
+        self.assertGreater(pad_half, 512)
+        self.assertGreaterEqual(pad_half / fs_out, 3.0 / 0.5)
+        # the chunk window must always stay a multiple of the 768-sample cadzow window
+        for fc in (None, 0.1, 0.5, 1.0, 2.0, 5.0):
+            pad = ibldsp.voltage._warmup_pad_out(fc, fs_out)
+            self.assertEqual((8192 + 2 * pad) % 768, 0)
+
     def test_rsamp_cbin(self):
         """
         Resamples a binary file by a factor of 5
@@ -264,6 +314,77 @@ class TestLFP(unittest.TestCase):
             za = spikeglx.Reader(out_file, ns=ns // 5, nc=nc, fs=500, dtype=np.float32)
             diff = d[0:-1:resamp_factor_q, :] - za[:]
             np.testing.assert_array_less(np.abs(diff[1024:-1024] / 1000), 1e-3)
+
+    def test_rsamp_cbin_edge_taper(self):
+        # With a highpass, the true recording start/end are cosine-ramped before filtering so
+        # the zero-phase filter cannot ring against the data-boundary step. The first output
+        # samples must therefore be strongly attenuated relative to steady state.
+        ns = int(60 * 2500)
+        nc = 12
+        fs = 2500
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            out_file = Path(temp_dir).joinpath("test_rs.npy")
+            t = np.arange(ns) / fs
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                # DC offset + low-frequency tone: the highpass would ring at the raw edge
+                d[:, ic] = 500 + 800 * np.sin(2 * np.pi * (5 + ic) * t)
+            with open(testfile, "wb+") as f:
+                d.tofile(f)
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            ibldsp.voltage.resample_denoise_lfp_cbin(
+                sr, output=out_file, dtype=np.float32, highpass_cutoff=2.0, car=False
+            )
+            out = np.load(out_file).T  # (nc, ns_out)
+            start = np.sqrt(np.mean(out[:, :5] ** 2))
+            steady = np.sqrt(np.mean(out[:, 2000:4000] ** 2))
+            self.assertLess(start, 0.2 * steady)
+
+    def test_rsamp_cbin_saturation_mute(self):
+        """A saturation_file mutes the flagged raw samples before filtering: the decimated
+        output over the (tapered) saturated span is attenuated to ~zero, while an
+        unmuted run leaves that span at full amplitude."""
+        ns, nc, fs, q = int(20 * 2500), 8, 2500, 5
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            sat_file = Path(temp_dir).joinpath("sat.npy")
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                d[:, ic] = np.sin(2 * np.pi * (10 + ic * 4) * np.arange(ns) / fs) * 1000
+            d.tofile(testfile)
+            # flag a saturated span well inside the recording (avoid chunk/filter edges)
+            sat = np.zeros(ns, dtype=bool)
+            sat[10 * 2500 : 11 * 2500] = True
+            np.save(sat_file, sat)
+
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            out_plain = Path(temp_dir).joinpath("plain.npy")
+            out_muted = Path(temp_dir).joinpath("muted.npy")
+            for out, sf in [(out_plain, None), (out_muted, sat_file)]:
+                ibldsp.voltage.resample_denoise_lfp_cbin(
+                    sr,
+                    output=out,
+                    dtype=np.float32,
+                    highpass_cutoff=None,
+                    car=False,
+                    saturation_file=sf,
+                )
+            za_plain = spikeglx.Reader(
+                out_plain, ns=ns // q, nc=nc, fs=fs / q, dtype=np.float32
+            )[:]
+            za_muted = spikeglx.Reader(
+                out_muted, ns=ns // q, nc=nc, fs=fs / q, dtype=np.float32
+            )[:]
+            # decimated indices of the muted span core (inside the taper)
+            core = slice(int(10.2 * 500), int(10.8 * 500))
+            self.assertLess(np.abs(za_muted[core]).max(), 1.0)  # muted ≈ 0
+            self.assertGreater(
+                np.abs(za_plain[core]).max(), 100.0
+            )  # unmuted full amplitude
+            # outside the saturated span the two runs agree
+            outside = slice(0, int(9.0 * 500))
+            np.testing.assert_allclose(za_muted[outside], za_plain[outside], atol=1e-3)
 
     def test_rsamp_cbin_cadzow_reinterpolation(self):
         """channel_labels + cadzow_kwargs together: the bad channels Cadzow re-estimates
