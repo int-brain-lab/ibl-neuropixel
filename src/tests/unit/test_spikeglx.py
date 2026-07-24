@@ -432,6 +432,27 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             )
             self.assert_read_glx(bin_3b)
 
+    def test_get_probe_model_and_referencing_scheme(self):
+        expected = {
+            "sample3A_g0_t0.imec.ap.meta": ("3A", "external"),
+            "sample3B_g0_t0.imec1.ap.meta": ("PRB_1_4_0480_1", "external"),
+            "sampleNP2.1_g0_t0.imec.ap.meta": ("PRB2_1_2_0640_0", "tip"),
+            "sampleNP2.4_1shank_g0_t0.imec.ap.meta": ("NP2010", "external"),
+            "sampleNP2.4_4shanks_g0_t0.imec.ap.meta": ("NP2010", "external"),
+            "sampleNHPlong_prototype.ap.meta": ("NP1030", "external"),
+            "sampleNPultra_g0_t0.imec0.ap.meta": ("NP1100", "external"),
+            "sampleNP2QB.imec.ap.meta": ("NP2021", "tip"),
+        }
+        for fname, (model, ref) in expected.items():
+            with self.subTest(fname=fname):
+                md = spikeglx.read_meta_data(self.workdir / fname)
+                self.assertEqual(spikeglx.get_probe_model(md), model)
+                self.assertEqual(spikeglx.get_referencing_scheme(md), ref)
+
+    def test_get_referencing_scheme_no_imro(self):
+        md = spikeglx.read_meta_data(self.workdir / "sample3B_g0_t0.nidq.meta")
+        self.assertIsNone(spikeglx.get_referencing_scheme(md))
+
     def test_check_ephys_file(self):
         self.tdir = tempfile.TemporaryDirectory(prefix="glx_test")
         self.addCleanup(self.tdir.cleanup)
