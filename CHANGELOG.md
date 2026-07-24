@@ -1,12 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [1.12.0] - 2026-07-24
 
 ### added
 - `spikeglx.get_probe_model` and `spikeglx.get_referencing_scheme`: extract the probe part number and referencing scheme (external/tip/ground/on_shank) from SpikeGLX meta-data (`imDatPrb_pn` and `imroTbl`).
+- `ibldsp.voltage.resample_denoise_lfp_cbin` gains `saturation_file` (raw-rate mask) and `mute_window_samples`: mutes rail-clipped samples with a cosine taper before the highpass/anti-alias FIR, so saturation can't ring into the passband.
+- `ibldsp.voltage.saturation`'s derivative criterion is now opt-out via `v_per_sec=None`, for use at the LFP rate where normal dynamics exceed the AP-tuned default (`1e-8`) and mislabel ~23% of clean samples; AP callers are unaffected.
+- Boundary apodization in `resample_denoise_lfp_cbin`: cosine-ramp the raw signal at the true recording start/end (~3 filter time-constants, scaling with the highpass corner) before filtering, so the zero-phase filter can't ring against the data-boundary step.
+- Adaptive warmup padding: per-chunk `PAD_OUT` now scales with the highpass corner via `_warmup_pad_out` (~3/corner s, snapped to a 768 multiple); 2 Hz / no-highpass behaviour is unchanged.
+- `ibldsp.voltage.interpolate_bad_channels` gains `groupby_y=True`: exact 1-D linear interpolation along y within a channel's own column (skipping other bad channels), as an alternative to the default 2-D kriging weights.
 
 ### fixed
 - `ibldsp.cadzow._process_window`: add NaN/Inf guard and `gesdd`→`gesvd` fallback in `_safe_svd` to prevent `numpy.linalg.LinAlgError: SVD did not converge` on recordings with saturation artefacts or ill-conditioned channel windows.
+- `ibldsp.cadzow.cadzow_denoiser` re-estimates every channel from its own rank-reduced spatial fit, including channels already fixed by `interpolate_bad_channels` upstream; this reintroduced a per-channel amplitude mismatch that `current_source_density`'s per-column second difference turned into spurious horizontal stripes. `_resample_lfp_chunk` now calls `interpolate_bad_channels(groupby_y=True)` again right after `cadzow_denoiser` for LFP-band processing to fix this.
+- `ibldsp.voltage.interpolate_bad_channels`: the kriging path divided by zero before checking for it when all in-range neighbours were also flagged bad; now falls back to zero cleanly without a spurious `RuntimeWarning`.
+- `ibldsp.voltage.saturation_samples_to_intervals` no longer asserts when a recording starts or ends already saturated; synthesizes an edge interval instead of raising.
 
 ## [1.11.3] - 2026-06-23
 
