@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### added
+- `spikeglx.get_probe_model` and `spikeglx.get_referencing_scheme`: extract the probe part number and referencing scheme (external/tip/ground/on_shank) from SpikeGLX meta-data (`imDatPrb_pn` and `imroTbl`).
+
 ### fixed
 - `ibldsp.cadzow._process_window`: add NaN/Inf guard and `gesdd`→`gesvd` fallback in `_safe_svd` to prevent `numpy.linalg.LinAlgError: SVD did not converge` on recordings with saturation artefacts or ill-conditioned channel windows.
 

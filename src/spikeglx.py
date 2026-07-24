@@ -656,6 +656,107 @@ def _get_neuropixel_version_from_meta(md):
         ValueError(f"Unknown neuropixel probe type {prb_type}")
 
 
+# Position of the reference-id field within each `imroTbl` per-channel entry, and the
+# reference-id -> human label coding, both keyed by `imDatPrb_type`. Sourced from the
+# SpikeGLX IMRO table reference (https://billkarsh.github.io/SpikeGLX/help/imroTables/)
+# and cross-checked against the sample*.meta fixtures in tests/fixtures/ (types 0, 21,
+# 24, 1030 and 1100). Types 2003 and 2013 are commercial NP2.0 revisions documented
+# upstream but not covered by a local fixture.
+_IMRO_REFID_FIELD = {
+    0: 2,  # NP1.0 (3A/3B): chan, bank, refid, apGain, lfGain[, apFilt]
+    21: 2,  # NP2.0 single shank prototype: chan, bank, refid, elecid
+    2003: 2,  # NP2.0 single shank commercial: chan, bank, refid, elecid
+    24: 3,  # NP2.0 four shank prototype: chan, shank, bank, refid, elecid
+    2013: 3,  # NP2.0 four shank commercial: chan, shank, bank, refid, elecid
+    2020: 3,  # NP2.0 quad probe (NP2QB): chan, shank, bank, refid, elecid
+    1030: 2,  # NHPlong: reuses the NP1.0 imro layout
+    1100: 2,  # NPultra: reuses the NP1.0 imro layout
+}
+
+_IMRO_REFID_LABELS = {
+    0: {0: "external", 1: "tip", 2: "on_shank", 3: "on_shank", 4: "on_shank"},
+    21: {0: "external", 1: "tip", 2: "on_shank", 3: "on_shank", 4: "on_shank", 5: "on_shank"},
+    2003: {0: "external", 1: "ground", 2: "tip"},
+    24: {0: "external", **{i: "tip" for i in range(1, 5)}, **{i: "on_shank" for i in range(5, 21)}},
+    2013: {0: "external", 1: "ground", 2: "tip", 3: "tip", 4: "tip", 5: "tip"},
+    2020: {0: "external", 1: "ground", 2: "tip"},
+    1030: {0: "external", 1: "tip", 2: "on_shank", 3: "on_shank", 4: "on_shank"},
+    1100: {0: "external", 1: "tip", 2: "on_shank", 3: "on_shank", 4: "on_shank"},
+}
+
+
+def _iter_imro_channel_entries(imro_tbl):
+    """Split the raw ``imroTbl`` meta string into its per-channel entries.
+
+    The string is formatted as ``(header)(chan0 fields)(chan1 fields)...`` where the
+    header is e.g. ``(0,384)`` and every subsequent group is a space-separated list of
+    integers for one channel.
+
+    Parameters
+    ----------
+    imro_tbl : str
+        Raw value of the ``imroTbl`` (or ``~imroTbl``) meta-data key.
+
+    Returns
+    -------
+    list of list of str
+        One list of field strings per channel, in channel order.
+    """
+    groups = re.findall(r"\(([^)]*)\)", imro_tbl)
+    return [g.split(" ") for g in groups[1:]]
+
+
+def get_referencing_scheme(md):
+    """Get the referencing scheme used for a recording from SpikeGLX meta-data.
+
+    Referencing is applied uniformly to every channel of a given probe recording, so
+    the reference id of the first channel entry in ``imroTbl`` is representative of
+    the whole probe.
+
+    Parameters
+    ----------
+    md : dict
+        Metadata dictionary as returned by :func:`read_meta_data`.
+
+    Returns
+    -------
+    str or None
+        One of ``"external"``, ``"tip"``, ``"ground"`` or ``"on_shank"``, or None if
+        ``imroTbl`` is absent (e.g. nidq files) or the reference coding for this probe
+        type is not in ``_IMRO_REFID_LABELS``.
+    """
+    if "imroTbl" not in md:
+        return None
+    prb_type = int(md.get("imDatPrb_type", 0))
+    field_idx = _IMRO_REFID_FIELD.get(prb_type)
+    labels = _IMRO_REFID_LABELS.get(prb_type)
+    if field_idx is None or labels is None:
+        return None
+    entries = _iter_imro_channel_entries(md["imroTbl"])
+    if not entries:
+        return None
+    refid = int(entries[0][field_idx])
+    return labels.get(refid)
+
+
+def get_probe_model(md):
+    """Get the probe model (part number) from SpikeGLX meta-data.
+
+    Parameters
+    ----------
+    md : dict
+        Metadata dictionary as returned by :func:`read_meta_data`.
+
+    Returns
+    -------
+    str or None
+        The probe part number, e.g. ``"NP2013"`` or ``"PRB_1_4_0480_1"``. Falls back to
+        the coarser neuropixel version tag (e.g. ``"3A"``) for legacy files that predate
+        the ``imDatPrb_pn`` field.
+    """
+    return md.get("imDatPrb_pn") or _get_neuropixel_version_from_meta(md)
+
+
 def _get_sync_trace_indices_from_meta(md):
     """
     Returns a list containing indices of the sync traces in the original array
