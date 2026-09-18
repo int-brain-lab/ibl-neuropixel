@@ -259,6 +259,34 @@ def test_compute_slowness_too_few_channels_is_nan():
     assert np.isnan(df["slowness_s_per_m"].iloc[0])
 
 
+def test_chained_xcorr_avoids_cycle_skip():
+    """Regression for the artifact chained_xcorr_pick was written to fix: a waveform
+    made of two lobes `shift` samples apart, with the dominant lobe switching smoothly
+    across channels (no actual propagation delay -- true answer is 0 everywhere).
+    Correlating far channels directly against a fixed reference (xcorr_pick) locks onto
+    the wrong lobe past the halfway point -- a discontinuous `shift`-sample jump.
+    Walking neighbour-to-neighbour (chained_xcorr_pick) never compares shapes that are
+    too different to match unambiguously, so it stays correct throughout.
+    """
+    win = 91
+    t = np.arange(win)
+    shift = 15
+    t0, sigma = 45.0, 4.0
+    pulse_a = -np.exp(-(((t - t0) / sigma) ** 2))
+    pulse_b = -np.exp(-(((t - (t0 + shift)) / sigma) ** 2))
+
+    n_channels = 21
+    frac_b = np.linspace(0, 1, n_channels)
+    seg = np.stack([(1 - fb) * pulse_a + fb * pulse_b for fb in frac_b], axis=1)
+
+    lag_direct, _ = waveforms.xcorr_pick(seg, 0)
+    lag_chained, _ = waveforms.chained_xcorr_pick(seg, 0, np.arange(n_channels))
+
+    assert np.max(np.abs(np.diff(lag_direct))) > shift / 2  # the cycle skip
+    assert np.max(np.abs(np.diff(lag_chained))) < 1.0  # stays smooth
+    np.testing.assert_allclose(lag_chained, 0.0, atol=0.1)  # and correct: no real delay
+
+
 def test_generate_waveforms():
     wav = generate_waveform()
     assert wav.shape == (40, 121)

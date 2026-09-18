@@ -665,61 +665,107 @@ def hanning_window_segment(arr, i, peak_time_idx, half_win, hann):
     return arr[i, t0c:t1c, :] * hann[w0:w1, np.newaxis], t0c, t1c
 
 
+def pairwise_xcorr_pick(seg, rows_a, rows_b):
+    """
+    Sub-sample lag of `seg[:, rows_b[k]]` relative to `seg[:, rows_a[k]]`, for each k, by
+    cross-correlation + parabolic interpolation. `rows_a`/`rows_b` are parallel arrays of
+    channel pairs (not one-against-many): `xcorr_pick(seg, ref_row)` is the one-against-many
+    special case (`rows_a = full(ref_row)`, `rows_b = arange(n_channels)`).
+
+    The sub-sample lag is picked with parabolic interpolation (`parabolic_max`) on `|corr|`,
+    so a phase-inverted pair (negative correlation peak) is still matched on shape, not just
+    amplitude sign. The weight returned is the normalized cross-correlation coefficient
+    magnitude (0-1): a fit-quality score.
+
+    :param seg: (window, n_channels) Hanning-tapered snippet, e.g. from hanning_window_segment
+    :param rows_a: (n_pairs,) int, the reference channel of each pair
+    :param rows_b: (n_pairs,) int, the target channel of each pair
+    :return: lag_samples, weight: each (n_pairs,)
+    """
+    win = seg.shape[0]
+    a, b = seg[:, rows_a], seg[:, rows_b]
+    n_fft = 2 * win
+    A = np.fft.rfft(a, n=n_fft, axis=0)
+    B = np.fft.rfft(b, n=n_fft, axis=0)
+    corr_full = np.fft.fftshift(np.fft.irfft(np.conj(A) * B, n=n_fft, axis=0), axes=0)
+    lags = np.arange(n_fft) - n_fft // 2
+    keep_lag = np.abs(lags) <= (win - 1)
+    corr, lags_c = corr_full[keep_lag, :], lags[keep_lag]
+    ipeak, cpeak = parabolic_max(np.abs(corr).T)  # per-pair sub-sample peak
+    lag_at_peak = lags_c[0] + ipeak
+    norm = np.sqrt(np.sum(a**2, axis=0) * np.sum(b**2, axis=0))
+    weight = np.where(norm > 0, cpeak / norm, np.nan)
+    return lag_at_peak, weight
+
+
 def xcorr_pick(seg, ref_row):
     """
     Sub-sample timing pick of every channel in `seg` against its reference (peak) channel.
-
-    Cross-correlates each channel's windowed snippet against the reference channel's own
-    windowed snippet; the sub-sample lag is picked with parabolic interpolation
-    (`parabolic_max`) on `|corr|`, so a phase-inverted channel (negative correlation peak)
-    is still matched on shape, not just amplitude sign. The weight returned is the
-    normalized cross-correlation coefficient magnitude (0-1): a fit-quality score, robust
-    to gradual non-stationarity in waveform shape across channels.
-
-    Validated (2026-09-18) against a frequency-domain phase-slope regression alternative
-    (`get_apf_from2spikes`/`get_phase_slope`, the basis of `wave_shift_phase`): parabolic
-    interpolation is not locking to the nearest sample (~6% of real picks land within 0.01
-    samples of an integer). Phase regression is exact in the noiseless case, but under
-    realistic denoised-channel residual noise this cross-correlation pick is *more*
-    accurate (RMSE 0.099 vs 0.147 samples) -- matching `wave_shift_phase`'s own documented
-    caveat that it "does not work well with raw data sampled at 30kHz" without a
-    per-template calibration step (`get_spike_slopeparams`) too slow to run per spike per
-    channel in a multi-channel timing-pick loop.
+    One-against-many special case of `pairwise_xcorr_pick` -- see its docstring, and
+    `chained_xcorr_pick` for a neighbour-to-neighbour alternative that tolerates gradual
+    spatial drift in waveform shape.
 
     :param seg: (window, n_channels) Hanning-tapered snippet, e.g. from hanning_window_segment
     :param ref_row: column index of the reference (peak) channel in `seg`
     :return: lag_samples, weight: each (n_channels,)
     """
-    win = seg.shape[0]
-    ref = seg[:, ref_row]
-    n_fft = 2 * win
-    R = np.fft.rfft(ref, n=n_fft)
-    S = np.fft.rfft(seg, n=n_fft, axis=0)
-    corr_full = np.fft.fftshift(
-        np.fft.irfft(np.conj(R)[:, np.newaxis] * S, n=n_fft, axis=0), axes=0
-    )
-    lags = np.arange(n_fft) - n_fft // 2
-    keep_lag = np.abs(lags) <= (win - 1)
-    corr, lags_c = corr_full[keep_lag, :], lags[keep_lag]
-    ipeak, cpeak = parabolic_max(np.abs(corr).T)  # per-channel sub-sample peak
-    lag_at_peak = lags_c[0] + ipeak
-    norm = np.sqrt(np.sum(ref**2) * np.sum(seg**2, axis=0))
-    weight = np.where(norm > 0, cpeak / norm, np.nan)
-    return lag_at_peak, weight
+    ncw = seg.shape[1]
+    return pairwise_xcorr_pick(seg, np.full(ncw, ref_row), np.arange(ncw))
 
 
-def weighted_lstsq_slope(x, y, w):
+def chained_xcorr_pick(seg, ref_row, order):
     """
-    Weighted least-squares slope of y ~ x + const, given non-negative weights w.
+    Sub-sample timing pick of every channel in `seg`, by walking outward from the
+    reference channel along `order` and accumulating each neighbour-to-neighbour lag,
+    rather than correlating every channel against the single reference channel directly.
+
+    Why: a spike's waveform shape can drift gradually across a wide neighbourhood (e.g.
+    from a trough-dominant to a more peak-dominant shape a few dozen microns away). Two
+    channels close together in that drift are still a good cross-correlation match: the
+    peak of `xcorr_pick`'s `|corr|` is well-defined. But once the shape has drifted enough
+    relative to a *distant* fixed reference channel, the correlogram can develop a
+    comparably-tall peak at the wrong lag -- a cycle skip, most likely for the ~periodic
+    part of the waveform -- and `xcorr_pick` has no way to prefer the "right" one. Chaining
+    short, easy hops together avoids ever making that long-range, ambiguous match.
+
+    :param seg: (window, n_channels) Hanning-tapered snippet, e.g. from hanning_window_segment
+    :param ref_row: column index of the reference (peak) channel in `seg`
+    :param order: channel indices (a subset of range(seg.shape[1]), no repeats) giving the
+     walk order, e.g. channels sorted by axial distance from the reference. Must include
+     `ref_row`.
+    :return: dt_samples, weight: each (n_channels,); NaN/0 for channels not in `order`
+    """
+    ncw = seg.shape[1]
+    dt = np.full(ncw, np.nan)
+    weight = np.zeros(ncw)
+    dt[ref_row] = 0.0
+    weight[ref_row] = 1.0
+
+    order = np.asarray(order)
+    ref_pos = int(np.flatnonzero(order == ref_row)[0])
+    # walk outward from the reference position in both directions along `order`
+    for chain in (order[ref_pos::-1], order[ref_pos:]):
+        if len(chain) < 2:
+            continue
+        link_lag, link_weight = pairwise_xcorr_pick(seg, chain[:-1], chain[1:])
+        dt[chain[1:]] = np.cumsum(link_lag)
+        weight[chain[1:]] = np.minimum.accumulate(link_weight)  # weakest link on the path
+    return dt, weight
+
+
+def weighted_lstsq_plane(x, y, z, w):
+    """
+    Weighted least-squares fit of z ~ a*x + b*y + const, given non-negative weights w.
     :param x: (n,) independent variable
-    :param y: (n,) dependent variable
+    :param y: (n,) independent variable
+    :param z: (n,) dependent variable
     :param w: (n,) non-negative weights
-    :return: slope (float)
+    :return: a, b (floats)
     """
     sw = np.sqrt(w)
-    X = np.c_[x, np.ones_like(x)] * sw[:, np.newaxis]
-    beta, *_ = np.linalg.lstsq(X, y * sw, rcond=None)
-    return beta[0]
+    X = np.c_[x, y, np.ones_like(x)] * sw[:, np.newaxis]
+    beta, *_ = np.linalg.lstsq(X, z * sw, rcond=None)
+    return beta[0], beta[1]
 
 
 def compute_slowness(
@@ -734,36 +780,39 @@ def compute_slowness(
     """
     Compute the signed slowness of a set of multi-channel waveforms and add it to `df`.
 
-    From a weighted linear fit of per-channel cross-correlation pick time vs axial (y,
-    along the probe) offset from the reference (peak) channel:
-    ``dt = slowness_s_per_m * dy + t0``.
+    Picks come from `chained_xcorr_pick`, walking outward from the reference (peak)
+    channel in order of increasing axial (y) distance -- see its docstring for why a
+    chained, neighbour-to-neighbour pick is used instead of `xcorr_pick` against a single
+    fixed reference channel (gradual spatial drift in waveform shape can make the latter
+    lock onto the wrong cycle of an oscillatory waveform at long range).
+
+    The picks are then fit with a full 3D (`weighted_lstsq_plane`) weighted linear fit,
+    `dt = slowness_x * dx + slowness_y * dy + t0`, but only the axial term
+    `slowness_y` is kept as `slowness_s_per_m`: on a typical probe the lateral (x, across
+    shank columns) extent of a neighbourhood is far shorter than its axial extent, so
+    `slowness_x` alone is too noise-dominated to report (tried and dropped in an earlier
+    version). Fitting it anyway and only reporting `slowness_y`'s projection is not the
+    same as never fitting it: `dx` and `dy` are mildly correlated by the probe's channel
+    layout (e.g. staggered columns), so including `dx` as a covariate controls for that
+    and gives a less biased axial estimate than a 1D fit of `dt` vs `dy` alone would.
 
     Computes the *inverse* of velocity (slowness, proportional to delta T) rather than
     fitting velocity directly, since velocity = 1/slowness blows up whenever the fit's
     dt/dy slope is near zero (e.g. near-simultaneous arrival across the local
-    neighbourhood). Picks come from `xcorr_pick` (see its docstring for why
-    cross-correlation + parabolic interpolation was chosen over a frequency-domain
-    phase-slope regression).
+    neighbourhood).
 
     Sign convention: `channel_geometry`'s y-axis (index 1) is assumed to increase away
     from the probe tip (towards the brain surface), the ibldsp/neuropixel convention.
     `slowness_s_per_m` > 0 means later pick times at larger y (up the probe) -> wave
     moving "up"; velocity = 1 / slowness_s_per_m carries the same sign.
 
-    A lateral (x, across shank columns) component was tried and dropped: on a
-    single-shank NP1.0 probe the local neighbourhood's lateral extent (a few columns,
-    tens of um) is short enough relative to its axial extent that the lateral slowness
-    estimate comes out noise-dominated rather than a real signal, without a
-    fundamentally more careful estimator (larger radius, pooled across spikes per unit,
-    ...).
-
     :param arr: 3D np.array containing multi-channel waveforms; 3D dimensions have to be
      (wav, time, trace), Volts.
     :param df: dataframe of waveform features; must contain `peak_trace_idx`/
      `peak_time_idx` (e.g. from find_peak(arr) or compute_spike_features)
     :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x,
-     y, z), micrometres, same convention as dist_chanel_from_peak/compute_spatial_spread
-     -- only the y-axis (axial) is used. NaN for padded/unused channel slots.
+     y, z), micrometres, same convention as dist_chanel_from_peak/compute_spatial_spread.
+     NaN for padded/unused channel slots.
     :param fs: sampling frequency (Hz)
     :param half_window_ms: half-width of the Hanning window in ms, centred on the
      reference peak time
@@ -787,18 +836,30 @@ def compute_slowness(
         seg, _, _ = hanning_window_segment(arr, i, peak_time[i], half_win, hann)
         if seg is None:
             continue
-        lag, weight = xcorr_pick(seg, peak_trace[i])
-        dt = lag / fs
+        x = channel_geometry[i, :, 0]
+        y = channel_geometry[i, :, 1]
+        valid_ch = np.isfinite(x) & np.isfinite(y)
+        if valid_ch.sum() < min_channels or not valid_ch[peak_trace[i]]:
+            continue
 
-        dy = channel_geometry[i, :, 1] - channel_geometry[i, peak_trace[i], 1]
-        valid = np.isfinite(weight) & np.isfinite(dy) & (weight > 0)
+        order = np.flatnonzero(valid_ch)
+        order = order[np.argsort(y[order])]
+        lag, weight = chained_xcorr_pick(seg, peak_trace[i], order)
+        dt = lag / fs
+        dx = x - x[peak_trace[i]]
+        dy = y - y[peak_trace[i]]
+
+        valid = valid_ch & np.isfinite(weight) & np.isfinite(dt) & (weight > 0)
         if valid.sum() < min_channels:
             continue
         w = weight[valid]
         keep = w >= min_weight_frac * w.max()
         if keep.sum() < min_channels:
             continue
-        slowness[i] = weighted_lstsq_slope(dy[valid][keep] * 1e-6, dt[valid][keep], w[keep])
+        _, slowness_y = weighted_lstsq_plane(
+            dx[valid][keep] * 1e-6, dy[valid][keep] * 1e-6, dt[valid][keep], w[keep]
+        )
+        slowness[i] = slowness_y
     df["slowness_s_per_m"] = slowness
     return df
 
