@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.0] - 2026-09-18
+
+### added
+- `ibldsp.waveforms.compute_slowness`: signed slowness (inverse apparent velocity, s/m) of a multi-channel waveform along the probe axis, from a weighted 3D (`dx`, `dy`) linear fit of per-channel pick time vs distance from the peak channel, keeping only the axial (`dy`) term. Reports slowness rather than velocity since velocity blows up whenever the fit's slope is near zero. Picks come from the new `chained_xcorr_pick`, walking outward from the peak channel by axial distance and cross-correlating only adjacent channels (sub-sample lag via parabolic interpolation on `|corr|`, so a phase-inverted channel is still matched on shape) -- avoids a cycle-skip artifact a single fixed reference channel can hit once a waveform's shape has drifted enough across the neighbourhood. Also new: `hanning_window_segment`, `pairwise_xcorr_pick`/`xcorr_pick`, `weighted_lstsq_plane`.
+
+### fixed
+- `ibldsp.waveforms.compute_spatial_spread`: was calling `dist_chanel_from_peak(channel_geometry, df)` with the whole dataframe instead of `df["peak_trace_idx"]`, and fed `weights_spk_ch`'s signed peak values straight into `spatial_spread_weighted`'s weighted mean, which could return a nonsensical (even negative) spread whenever a spike's per-channel signed weights nearly cancelled out. Now passes the peak-trace index array and uses `abs(weights)`.
+
 ## [1.12.0] - 2026-07-24
 
 ### added

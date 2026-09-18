@@ -192,6 +192,101 @@ def test_weights_all_channels():
     np.testing.assert_equal(weight, weight_tested)
 
 
+def test_compute_spatial_spread():
+    """Regression test: compute_spatial_spread used to call
+    dist_chanel_from_peak(channel_geometry, df) with the whole dataframe instead of
+    df["peak_trace_idx"], and fed weights_spk_ch's *signed* peak values straight into
+    spatial_spread_weighted's weighted mean, which could give a nonsensical (even
+    negative) spread whenever the signed weights of a spike's channels nearly
+    cancelled out -- weight_tested[0] below (4.0, -6.0, 0.0) is exactly such a case.
+    """
+    arr = make_array_peak_through_tip()
+    df = waveforms.find_peak(arr)
+    np.testing.assert_equal(df["peak_trace_idx"].to_numpy(), np.array([1, 0]))
+
+    # simple linear channel layout, same for both spikes: channel i at (0, i, 0)
+    xy_line = np.array([[0.0, i, 0.0] for i in range(arr.shape[2])])
+    channel_geometry = np.tile(xy_line, (arr.shape[0], 1, 1))
+
+    df = waveforms.compute_spatial_spread(arr, df, channel_geometry)
+
+    # spike 0: peak on ch1, eu_dist=[1, 0, 1], |weights|=[4, 6, 0] -> (4+0+0)/10
+    # spike 1: peak on ch0, eu_dist=[0, 1, 2], |weights|=[8, 7, 7] -> (0+7+14)/22
+    np.testing.assert_almost_equal(df["spatial_spread"].to_numpy(), np.array([0.4, 21 / 22]))
+    assert (df["spatial_spread"].to_numpy() >= 0).all()
+
+
+def _make_synthetic_slowness_wave(slowness_true, fs=30_000.0, n_channels=5, dy_um=20.0):
+    """Single-column, n_channels waveform, each channel a copy of a smooth template
+    pulse sub-sample shifted (via fshift) by exactly `slowness_true * dy`, so
+    compute_slowness's recovered value can be checked against a known answer."""
+    ns = 91
+    t0, sigma = 45.0, 4.0
+    t = np.arange(ns)
+    pulse = -np.exp(-(((t - t0) / sigma) ** 2))  # smooth negative bump
+
+    peak_idx = n_channels // 2
+    y_um = (np.arange(n_channels) - peak_idx) * dy_um
+    arr = np.zeros((1, ns, n_channels))
+    for c in range(n_channels):
+        dy_m = y_um[c] * 1e-6
+        shift_samples = slowness_true * dy_m * fs
+        amplitude = np.exp(-abs(y_um[c]) / (dy_um * (n_channels + 2)))  # mild decay
+        arr[0, :, c] = amplitude * fshift(pulse, shift_samples)
+
+    channel_geometry = np.zeros((1, n_channels, 3))
+    channel_geometry[0, :, 1] = y_um
+    return arr, channel_geometry, peak_idx
+
+
+def test_compute_slowness_recovers_known_value():
+    for slowness_true in (-0.4, 0.0, 0.3):
+        arr, channel_geometry, peak_idx = _make_synthetic_slowness_wave(slowness_true)
+        df = waveforms.find_peak(arr)
+        assert df["peak_trace_idx"].iloc[0] == peak_idx
+
+        df = waveforms.compute_slowness(arr, df, channel_geometry)
+        # Sub-sample pick + a 5-channel fit (much less averaging than a real ~20-30
+        # channel neighbourhood) leaves more estimation noise than the ~0.1-sample RMSE
+        # measured on real data (see compute_slowness's docstring), hence the loose delta.
+        np.testing.assert_allclose(df["slowness_s_per_m"].iloc[0], slowness_true, atol=0.1)
+
+
+def test_compute_slowness_too_few_channels_is_nan():
+    arr, channel_geometry, _ = _make_synthetic_slowness_wave(0.2, n_channels=5)
+    df = waveforms.find_peak(arr)
+    df = waveforms.compute_slowness(arr, df, channel_geometry, min_channels=6)
+    assert np.isnan(df["slowness_s_per_m"].iloc[0])
+
+
+def test_chained_xcorr_avoids_cycle_skip():
+    """Regression for the artifact chained_xcorr_pick was written to fix: a waveform
+    made of two lobes `shift` samples apart, with the dominant lobe switching smoothly
+    across channels (no actual propagation delay -- true answer is 0 everywhere).
+    Correlating far channels directly against a fixed reference (xcorr_pick) locks onto
+    the wrong lobe past the halfway point -- a discontinuous `shift`-sample jump.
+    Walking neighbour-to-neighbour (chained_xcorr_pick) never compares shapes that are
+    too different to match unambiguously, so it stays correct throughout.
+    """
+    win = 91
+    t = np.arange(win)
+    shift = 15
+    t0, sigma = 45.0, 4.0
+    pulse_a = -np.exp(-(((t - t0) / sigma) ** 2))
+    pulse_b = -np.exp(-(((t - (t0 + shift)) / sigma) ** 2))
+
+    n_channels = 21
+    frac_b = np.linspace(0, 1, n_channels)
+    seg = np.stack([(1 - fb) * pulse_a + fb * pulse_b for fb in frac_b], axis=1)
+
+    lag_direct, _ = waveforms.xcorr_pick(seg, 0)
+    lag_chained, _ = waveforms.chained_xcorr_pick(seg, 0, np.arange(n_channels))
+
+    assert np.max(np.abs(np.diff(lag_direct))) > shift / 2  # the cycle skip
+    assert np.max(np.abs(np.diff(lag_chained))) < 1.0  # stays smooth
+    np.testing.assert_allclose(lag_chained, 0.0, atol=0.1)  # and correct: no real delay
+
+
 def test_generate_waveforms():
     wav = generate_waveform()
     assert wav.shape == (40, 121)
