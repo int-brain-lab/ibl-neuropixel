@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.12.1] - 2026-09-18
+
+### fixed
+- `ibldsp.waveforms.compute_spatial_spread`: was calling `dist_chanel_from_peak(channel_geometry, df)` with the whole dataframe instead of `df["peak_trace_idx"]`, and fed `weights_spk_ch`'s signed peak values straight into `spatial_spread_weighted`'s weighted mean, which could return a nonsensical (even negative) spread whenever a spike's per-channel signed weights nearly cancelled out. Now passes the peak-trace index array and uses `abs(weights)`.
+
 ## [1.12.0] - 2026-07-24
 
 ### added

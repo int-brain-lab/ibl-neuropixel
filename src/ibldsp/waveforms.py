@@ -628,8 +628,19 @@ def weights_spk_ch(arr, weight_type="peak"):
 
 
 def compute_spatial_spread(arr, df, channel_geometry, weight_type="peak"):
-    eu_dist = dist_chanel_from_peak(channel_geometry, df)
-    weights = weights_spk_ch(arr, weight_type)
+    """
+    Compute the spatial spread of a set of multi-channel waveforms and add it to `df`.
+    :param arr: 3D np.array containing multi-channel waveforms; 3D dimensions have to be (wav, time, trace)
+    :param df: dataframe of waveform features, output of find_peak(arr) (needs 'peak_trace_idx')
+    :param channel_geometry: Matrix N(spikes) * N(channels) * 3 (spatial coordinates x, y, z)
+    :param weight_type: value to be used as weight (implemented: peak), see weights_spk_ch
+    :return: df, with an added 'spatial_spread' column (N(spikes),)
+    """
+    eu_dist = dist_chanel_from_peak(channel_geometry, df["peak_trace_idx"].to_numpy())
+    # weights_spk_ch returns the *signed* peak value (weight_type="peak"): spatial_spread_weighted's
+    # weighted mean needs a non-negative weight (a distance-weighting), or the average can come out
+    # nonsensical (even negative) whenever the signed weights nearly cancel out.
+    weights = np.abs(weights_spk_ch(arr, weight_type))
     df["spatial_spread"] = spatial_spread_weighted(eu_dist, weights)
     return df
 

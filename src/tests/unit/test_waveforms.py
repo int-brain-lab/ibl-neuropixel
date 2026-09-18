@@ -192,6 +192,30 @@ def test_weights_all_channels():
     np.testing.assert_equal(weight, weight_tested)
 
 
+def test_compute_spatial_spread():
+    """Regression test: compute_spatial_spread used to call
+    dist_chanel_from_peak(channel_geometry, df) with the whole dataframe instead of
+    df["peak_trace_idx"], and fed weights_spk_ch's *signed* peak values straight into
+    spatial_spread_weighted's weighted mean, which could give a nonsensical (even
+    negative) spread whenever the signed weights of a spike's channels nearly
+    cancelled out -- weight_tested[0] below (4.0, -6.0, 0.0) is exactly such a case.
+    """
+    arr = make_array_peak_through_tip()
+    df = waveforms.find_peak(arr)
+    np.testing.assert_equal(df["peak_trace_idx"].to_numpy(), np.array([1, 0]))
+
+    # simple linear channel layout, same for both spikes: channel i at (0, i, 0)
+    xy_line = np.array([[0.0, i, 0.0] for i in range(arr.shape[2])])
+    channel_geometry = np.tile(xy_line, (arr.shape[0], 1, 1))
+
+    df = waveforms.compute_spatial_spread(arr, df, channel_geometry)
+
+    # spike 0: peak on ch1, eu_dist=[1, 0, 1], |weights|=[4, 6, 0] -> (4+0+0)/10
+    # spike 1: peak on ch0, eu_dist=[0, 1, 2], |weights|=[8, 7, 7] -> (0+7+14)/22
+    np.testing.assert_almost_equal(df["spatial_spread"].to_numpy(), np.array([0.4, 21 / 22]))
+    assert (df["spatial_spread"].to_numpy() >= 0).all()
+
+
 def test_generate_waveforms():
     wav = generate_waveform()
     assert wav.shape == (40, 121)
