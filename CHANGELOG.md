@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.13.0] - 2026-09-18
+
+### added
+- `ibldsp.waveforms.compute_slowness`: signed slowness (inverse apparent velocity, s/m) of a multi-channel waveform along the probe axis, from a weighted linear fit of per-channel cross-correlation pick time vs axial distance from the peak channel. Reports slowness rather than velocity since velocity blows up whenever the fit's slope is near zero. Picks come from the new `xcorr_pick` (sub-sample lag via parabolic interpolation on `|corr|`, so a phase-inverted channel is still matched on shape), backed by the new `hanning_window_segment` and `weighted_lstsq_slope` helpers.
+
 ## [1.12.1] - 2026-09-18
 
 ### fixed

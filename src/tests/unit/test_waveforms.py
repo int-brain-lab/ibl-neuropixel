@@ -216,6 +216,49 @@ def test_compute_spatial_spread():
     assert (df["spatial_spread"].to_numpy() >= 0).all()
 
 
+def _make_synthetic_slowness_wave(slowness_true, fs=30_000.0, n_channels=5, dy_um=20.0):
+    """Single-column, n_channels waveform, each channel a copy of a smooth template
+    pulse sub-sample shifted (via fshift) by exactly `slowness_true * dy`, so
+    compute_slowness's recovered value can be checked against a known answer."""
+    ns = 91
+    t0, sigma = 45.0, 4.0
+    t = np.arange(ns)
+    pulse = -np.exp(-(((t - t0) / sigma) ** 2))  # smooth negative bump
+
+    peak_idx = n_channels // 2
+    y_um = (np.arange(n_channels) - peak_idx) * dy_um
+    arr = np.zeros((1, ns, n_channels))
+    for c in range(n_channels):
+        dy_m = y_um[c] * 1e-6
+        shift_samples = slowness_true * dy_m * fs
+        amplitude = np.exp(-abs(y_um[c]) / (dy_um * (n_channels + 2)))  # mild decay
+        arr[0, :, c] = amplitude * fshift(pulse, shift_samples)
+
+    channel_geometry = np.zeros((1, n_channels, 3))
+    channel_geometry[0, :, 1] = y_um
+    return arr, channel_geometry, peak_idx
+
+
+def test_compute_slowness_recovers_known_value():
+    for slowness_true in (-0.4, 0.0, 0.3):
+        arr, channel_geometry, peak_idx = _make_synthetic_slowness_wave(slowness_true)
+        df = waveforms.find_peak(arr)
+        assert df["peak_trace_idx"].iloc[0] == peak_idx
+
+        df = waveforms.compute_slowness(arr, df, channel_geometry)
+        # Sub-sample pick + a 5-channel fit (much less averaging than a real ~20-30
+        # channel neighbourhood) leaves more estimation noise than the ~0.1-sample RMSE
+        # measured on real data (see compute_slowness's docstring), hence the loose delta.
+        np.testing.assert_allclose(df["slowness_s_per_m"].iloc[0], slowness_true, atol=0.1)
+
+
+def test_compute_slowness_too_few_channels_is_nan():
+    arr, channel_geometry, _ = _make_synthetic_slowness_wave(0.2, n_channels=5)
+    df = waveforms.find_peak(arr)
+    df = waveforms.compute_slowness(arr, df, channel_geometry, min_channels=6)
+    assert np.isnan(df["slowness_s_per_m"].iloc[0])
+
+
 def test_generate_waveforms():
     wav = generate_waveform()
     assert wav.shape == (40, 121)
