@@ -4,6 +4,7 @@
 
 ### fixed
 - `ibldsp.cadzow.cadzow_denoiser`: opt-in `fill_grid` and `shrinkage` (Gavish-Donoho) remove the CSD seams at the window boundaries; `cadzow_denoiser_np1` / `cadzow_denoiser_np2` use them as LFP defaults
+- `ibldsp.cadzow.cadzow_denoiser`: opt-in `bad_channels` estimates bad channels from the Cadzow fit instead of interpolating them, `cadzow_kwargs["bad_channels_as_missing"]` in `resample_denoise_lfp_cbin`
 
 ## [1.13.0] - 2026-09-18
 

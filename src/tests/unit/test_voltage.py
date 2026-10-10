@@ -426,6 +426,53 @@ class TestLFP(unittest.TestCase):
             )
             np.testing.assert_allclose(out, fixed_point, rtol=1e-6)
 
+    def test_rsamp_cbin_cadzow_bad_channels_as_missing(self):
+        """cadzow_kwargs bad_channels_as_missing=True: Cadzow estimates the bad channels itself (fill_grid), so the
+        output is no longer re-interpolated after Cadzow, and the key is not forwarded to cadzow_denoiser."""
+        ns, nc, fs = int(10 * 2500), 16, 2500
+        with tempfile.TemporaryDirectory() as temp_dir:
+            testfile = Path(temp_dir).joinpath("test.dat")
+            d = np.zeros((ns, nc), dtype=np.float32)
+            for ic in range(nc):
+                d[:, ic] = np.sin(2 * np.pi * (10 + ic * 4) * np.arange(ns) / fs) * 1000
+            d.tofile(testfile)
+            sr = spikeglx.Reader(testfile, ns=ns, nc=nc, fs=fs, dtype=np.float32)
+            h = neuropixel.trace_header(version=1)
+            x, y = h["x"][:nc], h["y"][:nc]
+            channel_labels = np.zeros(nc, dtype=int)
+            channel_labels[[4, 8, 9]] = 1
+            outs = {}
+            for as_missing in (False, True):
+                out_file = Path(temp_dir).joinpath(f"test_rs_{as_missing}.npy")
+                ibldsp.voltage.resample_denoise_lfp_cbin(
+                    sr,
+                    output=out_file,
+                    dtype=np.float32,
+                    highpass_cutoff=None,
+                    car=False,
+                    channel_labels=channel_labels,
+                    cadzow_kwargs=dict(
+                        rank=3,
+                        fmax=None,
+                        nswx=8,
+                        ovx=4,
+                        fill_grid=True,
+                        bad_channels_as_missing=as_missing,
+                    ),
+                )
+                za = spikeglx.Reader(
+                    out_file, ns=ns // 5, nc=nc, fs=fs / 5, dtype=np.float32
+                )
+                outs[as_missing] = za[:].T.astype(np.float64)
+                self.assertTrue(np.all(np.isfinite(outs[as_missing])))
+            for as_missing, out in outs.items():
+                fixed_point = ibldsp.voltage.interpolate_bad_channels(
+                    out.copy(), channel_labels, x, y, groupby_y=True
+                )
+                self.assertEqual(
+                    np.allclose(out, fixed_point, rtol=1e-6), not as_missing
+                )
+
 
 class TestDetectBadChannels(unittest.TestCase):
     @staticmethod

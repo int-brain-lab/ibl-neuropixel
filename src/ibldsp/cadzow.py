@@ -103,7 +103,7 @@ def _apply_shrinkage(s, r, shape, scale):
     s[:, r:] = 0.0
 
 
-def _fill_grid(wav, x, y):
+def _fill_grid(wav, x, y, good=None):
     """
     Place the channels on the full grid of unique lateral x depth positions and fill the empty positions.
 
@@ -115,6 +115,8 @@ def _fill_grid(wav, x, y):
     wav : ndarray (nc, ns)
     x, y : ndarray (nc,)
         Channel coordinates [µm].
+    good : ndarray (nc,) of bool, optional
+        Channels whose data is used; the others are filled like the empty positions.  Default: all.
 
     Returns
     -------
@@ -129,7 +131,7 @@ def _fill_grid(wav, x, y):
     g = np.zeros((yu.size, xu.size, wav.shape[1]))
     known = np.zeros((yu.size, xu.size), dtype=bool)
     g.reshape(-1, wav.shape[1])[ireal] = wav
-    known.ravel()[ireal] = True
+    known.ravel()[ireal] = True if good is None else good
     while not known.all():
         gp, kp = (
             np.pad(g * known[..., np.newaxis], ((1, 1), (1, 1), (0, 0))),
@@ -513,6 +515,7 @@ def cadzow_denoiser(
     ppca_k=None,
     fill_grid=False,
     shrinkage=None,
+    bad_channels=None,
     n_jobs=1,
 ):
     """
@@ -573,6 +576,10 @@ def cadzow_denoiser(
         The factor puts the largest singular value of white noise on the
         Marchenko-Pastur bulk edge: 2.25 for NP1 with ``fill_grid=True``,
         ``nswx=64``, ``ovx=32``.  None (default) keeps the hard rank cut.
+    bad_channels : ndarray (nc,) of bool, optional
+        Channels whose data is discarded (e.g. dead and noisy channels).  They are
+        filled like the empty grid positions (implies ``fill_grid=True``) and their
+        output is the Cadzow estimate, so no interpolation is needed before or after.
     n_jobs : int
         Number of parallel workers for the spatial-window loop.  ``np.linalg.svd``
         releases the GIL, so threads (``prefer='threads'``) are used.  Default 1
@@ -588,8 +595,9 @@ def cadzow_denoiser(
     if h is None:
         _h = neuropixel.trace_header(version=1)
         h = {k: v[:ntr] for k, v in _h.items()}
-    if fill_grid:
-        g, gx, gy, ireal = _fill_grid(wav, h["x"][:ntr], h["y"][:ntr])
+    if fill_grid or bad_channels is not None:
+        good = None if bad_channels is None else ~np.asarray(bad_channels, dtype=bool)
+        g, gx, gy, ireal = _fill_grid(wav, h["x"][:ntr], h["y"][:ntr], good)
         f = g.shape[0] // ntr  # windows of the same depth extent
         kw = dict(fs=fs, rank=rank, niter=niter, fmax=fmax, npad=npad, ppca_k=ppca_k)
         kw.update(gap_threshold=gap_threshold, shrinkage=shrinkage, n_jobs=n_jobs)
