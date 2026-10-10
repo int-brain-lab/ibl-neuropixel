@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### added
+- `ibldsp.cadzow.cadzow_denoiser` gains `fill_grid` and `shrinkage`, both opt-in (defaults unchanged, output bit-identical). On NP1 the 2-D block-Hankel trajectory of a window is half zeros (each 20 µm row holds 2 of the 4 lateral positions), which the SVD treats as data; and the hard adaptive rank (`gap_threshold`) keeps different numbers of components in neighbouring windows. Both leave horizontal seams at the window boundaries of the CSD. `fill_grid=True` runs on the full grid of unique lateral x depth positions, with virtual channels at the empty positions (mean of their 4-neighbours) and windows of the same depth extent; `shrinkage='gavish-donoho'` replaces the hard rank cut by Gavish-Donoho optimal singular-value shrinkage against the noise level of each window and frequency bin (Marchenko-Pastur median), capped at `rank`. The noise scale is calibrated on white noise per geometry (`calibrate_shrinkage_scale`, cached), or set with `shrinkage_scale`. Windows stay independent (same parallel structure), cost is unchanged.
+
 ## [1.13.0] - 2026-09-18
 
 ### added

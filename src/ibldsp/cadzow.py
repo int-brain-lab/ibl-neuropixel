@@ -17,10 +17,13 @@ for N-spatial dimensions.
 }
 """
 
+import functools
 import warnings
 
 import numpy as np
 import scipy.fft
+import scipy.integrate
+import scipy.optimize
 import scipy.signal
 from iblutil.numerical import ismember2d
 
@@ -50,6 +53,74 @@ def _apply_rank_threshold(s, r, gap_threshold=None):
     r_adapt = np.clip(r_adapt, 1, r)
     idx = np.arange(s.shape[1])[np.newaxis, :]
     s[idx >= r_adapt[:, np.newaxis]] = 0.0
+
+
+@functools.lru_cache(maxsize=32)
+def _marchenko_pastur_median(beta):
+    """Median of the Marchenko-Pastur distribution of aspect ratio ``beta`` (unit variance)."""
+    lo, hi = (1 - np.sqrt(beta)) ** 2, (1 + np.sqrt(beta)) ** 2
+
+    def pdf(t):
+        return np.sqrt(max((hi - t) * (t - lo), 0.0)) / (2 * np.pi * beta * t)
+
+    return scipy.optimize.brentq(
+        lambda m: scipy.integrate.quad(pdf, lo, m)[0] - 0.5, lo, hi
+    )
+
+
+def _shrinkage_noise(s, shape):
+    """
+    Noise level per entry of a trajectory matrix, from its median singular value.
+
+    Parameters
+    ----------
+    s : ndarray (nbins, k)
+        Singular values sorted descending per row.
+    shape : tuple
+        Trajectory matrix shape ``(m, n)``.
+
+    Returns
+    -------
+    ndarray (nbins,)
+        ``median(s) / sqrt(max(m, n) * mu_beta)`` with ``mu_beta`` the Marchenko-Pastur median.
+    """
+    beta = min(shape) / max(shape)
+    return np.median(s, axis=1) / np.sqrt(max(shape) * _marchenko_pastur_median(beta))
+
+
+def _apply_shrinkage(s, r, shape, scale):
+    """
+    Gavish-Donoho optimal singular-value shrinkage (Frobenius loss), capped at rank ``r``, in place.
+
+    Each singular value is shrunk continuously against the noise level of its own matrix, so neighbouring windows
+    with similar data keep similar fits; a hard rank cut switches components on and off between windows, which
+    shows as seams at the window boundaries.
+
+    Parameters
+    ----------
+    s : ndarray (nbins, k)
+        Singular values sorted descending per row, modified in-place.
+    r : int
+        Hard upper bound on rank.
+    shape : tuple
+        Trajectory matrix shape ``(m, n)``.
+    scale : float
+        Factor applied to the median-based noise estimate. The trajectory entries are not independent (Hankel
+        duplicates, interpolated grid positions), so the factor is calibrated on white noise, see
+        `calibrate_shrinkage_scale`.
+
+    References
+    ----------
+    Gavish, M. & Donoho, D. L. (2017). Optimal shrinkage of singular values. IEEE Trans. Inf. Theory 63, 2137-2152.
+    """
+    beta = min(shape) / max(shape)
+    sigma = _shrinkage_noise(s, shape) * scale * np.sqrt(max(shape))
+    y = s / np.maximum(sigma[:, np.newaxis], np.finfo(float).tiny)
+    eta = np.sqrt(np.maximum((y**2 - beta - 1) ** 2 - 4 * beta, 0.0)) / np.maximum(
+        y, np.finfo(float).tiny
+    )
+    s[:] = np.where(y > 1 + np.sqrt(beta), eta * sigma[:, np.newaxis], 0.0)
+    s[:, r:] = 0.0
 
 
 def derank(T, r):
@@ -208,7 +279,17 @@ def _safe_svd(T_batch):
 
 
 def _process_window(
-    WAV_sl, it, ic, T_shape, scatter, r, imax, niter, gap_threshold, ppca_k
+    WAV_sl,
+    it,
+    ic,
+    T_shape,
+    scatter,
+    r,
+    imax,
+    niter,
+    gap_threshold,
+    ppca_k,
+    shrink_scale=None,
 ):
     """SVD rank reduction for one spatial window with precomputed trajectory geometry.
 
@@ -226,19 +307,29 @@ def _process_window(
         Precomputed scatter matrix: maps trajectory entries back to channels.
     r, imax, niter, gap_threshold, ppca_k
         Algorithm parameters (see ``denoise_fxy``).
+    shrink_scale : float, optional
+        If set, the hard rank cut is replaced by Gavish-Donoho shrinkage with this noise scale (see
+        `_apply_shrinkage`); ``gap_threshold`` is then ignored.
 
     Returns
     -------
     WAV_ : ndarray (nc_w, nf), complex
     """
+
+    def _low_rank(T_batch):
+        U, s, Vh = _safe_svd(T_batch)
+        if shrink_scale is None:
+            _apply_rank_threshold(s, r, gap_threshold)
+        else:
+            _apply_shrinkage(s, r, T_shape, shrink_scale)
+        return (U * s[:, np.newaxis, :]) @ Vh
+
     WAV_ = WAV_sl.copy()
     with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
         for _ in range(niter):
             T_batch = np.zeros((imax, *T_shape), dtype=complex)
             T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
-            U, s, Vh = _safe_svd(T_batch)
-            _apply_rank_threshold(s, r, gap_threshold)
-            T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
+            T_batch_ = _low_rank(T_batch)
 
             if ppca_k is not None:
                 WAV_rec = (T_batch_[:, it[0], it[1]] @ scatter).T
@@ -249,9 +340,7 @@ def _process_window(
                 WAV_clean = WAV_[:, :imax].copy()
                 WAV_clean[mask] = WAV_rec[mask]
                 T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
-                U, s, Vh = _safe_svd(T_batch)
-                _apply_rank_threshold(s, r, gap_threshold)
-                T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
+                T_batch_ = _low_rank(T_batch)
 
             vals = T_batch_[:, it[0], it[1]]
             WAV_new = WAV_.copy()
@@ -260,7 +349,9 @@ def _process_window(
     return WAV_
 
 
-def denoise_fxy(WAV, x, y, r, imax=None, niter=1, gap_threshold=None, ppca_k=None):
+def denoise_fxy(
+    WAV, x, y, r, imax=None, niter=1, gap_threshold=None, ppca_k=None, shrink_scale=None
+):
     """
     F-X Cadzow denoiser using a single batched SVD over all frequency bins.
 
@@ -297,6 +388,9 @@ def denoise_fxy(WAV, x, y, r, imax=None, niter=1, gap_threshold=None, ppca_k=Non
         cleaned data.  Suppresses impedance-mismatch artefacts without
         altering channels consistent with the spatial model.  Typical values:
         2–5.  None disables (default).
+    shrink_scale : float, optional
+        If set, replaces the hard rank cut by Gavish-Donoho singular-value shrinkage with this noise scale (see
+        `calibrate_shrinkage_scale`); ``gap_threshold`` is then ignored.  None (default) keeps the hard rank cut.
 
     Returns
     -------
@@ -308,7 +402,17 @@ def denoise_fxy(WAV, x, y, r, imax=None, niter=1, gap_threshold=None, ppca_k=Non
     scatter = np.zeros((len(ic), nc))
     scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
     return _process_window(
-        WAV, it, ic, T.shape, scatter, r, imax, niter, gap_threshold, ppca_k
+        WAV,
+        it,
+        ic,
+        T.shape,
+        scatter,
+        r,
+        imax,
+        niter,
+        gap_threshold,
+        ppca_k,
+        shrink_scale,
     )
 
 
@@ -388,6 +492,225 @@ def cadzow_np1(
     return wav_
 
 
+def _full_grid(x, y):
+    """
+    Full rectangular grid spanned by the unique lateral and depth positions of a probe.
+
+    On NP1 each 20 µm row holds 2 of the 4 lateral positions (checkerboard), so the 2-D block-Hankel trajectory
+    built from the channels alone is half empty; the empty entries are zeros the SVD treats as data.
+
+    Parameters
+    ----------
+    x, y : ndarray (nc,)
+        Channel coordinates [µm].
+
+    Returns
+    -------
+    gx, gy : ndarray (n_grid,)
+        Grid coordinates, ordered by depth then lateral position.
+    ireal : ndarray (nc,)
+        Grid index of each channel.
+    """
+    xu, yu = np.unique(x), np.unique(y)
+    gx, gy = np.meshgrid(xu, yu)
+    ireal = np.searchsorted(yu, y) * xu.size + np.searchsorted(xu, x)
+    if np.unique(ireal).size != ireal.size:
+        raise ValueError("fill_grid requires unique channel positions")
+    return gx.ravel(), gy.ravel(), ireal
+
+
+def _fill_grid(wav, gx, gy, ireal, good=None):
+    """
+    Place the channels on the full grid and fill every other position with the mean of its known 4-neighbours.
+
+    Known positions are the (good) channels. Positions without a known neighbour are filled in later passes from the
+    positions filled before them.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns)
+    gx, gy : ndarray (n_grid,)
+        Grid coordinates from `_full_grid`.
+    ireal : ndarray (nc,)
+        Grid index of each channel.
+    good : ndarray (nc,) of bool, optional
+        Channels whose data is used; the others are filled like empty grid positions. Default: all.
+
+    Returns
+    -------
+    ndarray (n_grid, ns)
+    """
+    nx, ny = np.unique(gx).size, np.unique(gy).size
+    g = np.zeros((ny, nx, wav.shape[1]), dtype=np.float64)
+    known = np.zeros((ny, nx), dtype=bool)
+    g.reshape(ny * nx, -1)[ireal] = wav
+    known.ravel()[ireal] = True if good is None else good
+    if not known.any():
+        raise ValueError("no known channel to fill the grid from")
+    while not known.all():
+        acc, cnt = np.zeros_like(g), np.zeros((ny, nx))
+        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            src = (
+                slice(max(dy, 0), ny + min(dy, 0)),
+                slice(max(dx, 0), nx + min(dx, 0)),
+            )
+            dst = (
+                slice(max(-dy, 0), ny + min(-dy, 0)),
+                slice(max(-dx, 0), nx + min(-dx, 0)),
+            )
+            acc[dst] += g[src] * known[src][..., np.newaxis]
+            cnt[dst] += known[src]
+        new = ~known & (cnt > 0)
+        g[new] = acc[new] / cnt[new][:, np.newaxis]
+        known |= new
+    return g.reshape(ny * nx, -1)
+
+
+def _pad_channels(x, y, npad):
+    """Reflective channel padding of the coordinates, plus the trailing phantom row (see `cadzow_denoiser`)."""
+    x = np.r_[np.flipud(x[1 : npad + 1]), x, np.flipud(x[-npad - 2 : -1])]
+    y = np.r_[
+        np.flipud(y[1 : npad + 1]) - 120,
+        y,
+        np.flipud(y[-npad - 2 : -1]) + 120,
+    ]
+    return x, y
+
+
+def _window_geometry(x, y, ntr, nswx, ovx, npad=0):
+    """
+    Spatial windows of `cadzow_denoiser`: channel slice, synthesis gain and trajectory geometry of each window.
+
+    Parameters
+    ----------
+    x, y : ndarray
+        Padded channel coordinates [µm] (see `_pad_channels`).
+    ntr : int
+        Number of channels before padding.
+    nswx, ovx : int
+        Window width and overlap [channels].
+    npad : int
+        Channel padding on each side.
+
+    Returns
+    -------
+    list of tuple
+        ``(slice, gain, it, ic, T_shape, scatter)`` per window.
+    """
+    nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
+    # Synthesis windowing strategy depends on overlap fraction:
+    #   ovx ≤ nswx//2  (≤50%): exact partition-of-unity gain window — backward-compatible,
+    #                           no normalisation required.
+    #   ovx > nswx//2  (>50%): Hann synthesis window + running normalisation sum.
+    #                           Supports any ovx in [1, nswx-1]; the accumulation step
+    #                           divides each channel by the total Hann weight it received,
+    #                           so blending is always correct regardless of overlap ratio.
+    step = nswx - ovx
+    # Backward-compatible branch: for ovx ≤ nswx//2 the original partition-of-unity
+    # gain window is used unchanged; the WOLA path only activates for higher overlaps.
+    high_overlap = ovx > nswx // 2
+    if not high_overlap:
+        hanning = scipy.signal.windows.hann(ovx * 2 - 1)[:ovx]
+        gain_window = np.r_[hanning, np.ones(nswx - ovx * 2), np.flipud(hanning)]
+    else:
+        hann_full = scipy.signal.windows.hann(nswx)
+
+    # Precompute per-window geometry (trajectory + scatter + gain) once before dispatch
+    windows = []
+    for i, firstx in enumerate(np.arange(nwinx) * step):
+        lastx = int(firstx + nswx)
+        sl = slice(firstx, lastx)
+        nc_w = len(x[sl])
+        if high_overlap:
+            gw = hann_full.copy()
+            if i == 0:  # replace fade-in with ones at probe start
+                gw[:step] = 1.0
+            if i == nwinx - 1:  # replace fade-out with ones at probe end
+                gw[max(0, nswx - step) :] = 1.0
+            gw = gw[:nc_w]
+        else:
+            if firstx == 0:
+                gw = np.r_[np.ones(nswx - ovx), np.flipud(hanning)][:nc_w]
+            elif lastx >= ntr:
+                gw = np.r_[hanning, np.ones(nswx - ovx)][:nc_w]
+            else:
+                gw = gain_window[:nc_w]
+        T, it, ic, trcount = trajectory(x[sl], y[sl])
+        scatter = np.zeros((len(ic), nc_w))
+        scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
+        windows.append((sl, gw, it, ic, T.shape, scatter))
+    return windows
+
+
+@functools.lru_cache(maxsize=16)
+def _calibrate_shrinkage_scale(x, y, nswx, ovx, fill_grid, ns, quantile, seed):
+    x, y = np.array(x), np.array(y)
+    wav = np.random.default_rng(seed).standard_normal((x.size, ns))
+    if fill_grid:
+        x, y, ireal = _full_grid(x, y)
+        factor = x.size // ireal.size
+        wav = _fill_grid(wav, x, y, ireal)
+        nswx, ovx = nswx * factor, ovx * factor
+    WAV = scipy.fft.rfft(wav)[:, 1:]  # drop the DC bin
+    WAV = np.r_[WAV, WAV[-2:-1]]  # phantom row, as in cadzow_denoiser with npad=0
+    xp, yp = _pad_channels(x, y, 0)
+    ratios = []
+    for sl, _, it, ic, T_shape, _ in _window_geometry(xp, yp, x.size, nswx, ovx):
+        T_batch = np.zeros((WAV.shape[1], *T_shape), dtype=complex)
+        T_batch[:, it[0], it[1]] = WAV[sl][ic].T
+        s = np.linalg.svd(T_batch, compute_uv=False)
+        beta = min(T_shape) / max(T_shape)
+        edge = (
+            _shrinkage_noise(s, T_shape) * np.sqrt(max(T_shape)) * (1 + np.sqrt(beta))
+        )
+        ratios.append(s[:, 0] / edge)
+    return float(np.quantile(np.concatenate(ratios), quantile))
+
+
+def calibrate_shrinkage_scale(
+    x, y, nswx=64, ovx=32, fill_grid=False, ns=2048, quantile=0.99, seed=0
+):
+    """
+    Noise-scale factor of the Gavish-Donoho shrinkage, calibrated on white noise for a probe geometry.
+
+    The shrinker zeroes singular values below the Marchenko-Pastur bulk edge of the noise. Trajectory entries are
+    not independent (Hankel duplicates, interpolated grid positions), so the median-based noise estimate is rescaled
+    so that the ``quantile`` of the largest singular value of pure white noise lands on the bulk edge: on pure noise
+    the shrinkage then keeps nothing in ``quantile`` of the windows and frequency bins.
+
+    Results are cached per geometry and parameters.
+
+    Parameters
+    ----------
+    x, y : ndarray (nc,)
+        Channel coordinates [µm].
+    nswx, ovx : int
+        Window width and overlap [channels], as passed to `cadzow_denoiser`.
+    fill_grid : bool
+        Calibrate for the full-grid trajectory (see `cadzow_denoiser`).
+    ns : int
+        Number of samples of the white-noise realisation.
+    quantile : float
+        Quantile of the largest noise singular value placed on the bulk edge.
+    seed : int
+        Seed of the white-noise realisation.
+
+    Returns
+    -------
+    float
+    """
+    return _calibrate_shrinkage_scale(
+        tuple(np.asarray(x, dtype=float)),
+        tuple(np.asarray(y, dtype=float)),
+        int(nswx),
+        int(ovx),
+        bool(fill_grid),
+        int(ns),
+        float(quantile),
+        int(seed),
+    )
+
+
 def cadzow_denoiser(
     wav,
     h=None,
@@ -400,6 +723,9 @@ def cadzow_denoiser(
     npad=0,
     gap_threshold=None,
     ppca_k=None,
+    fill_grid=False,
+    shrinkage=None,
+    shrinkage_scale=None,
     n_jobs=1,
 ):
     """
@@ -442,13 +768,33 @@ def cadzow_denoiser(
     gap_threshold : float, optional
         Adaptive rank: use the largest singular-value gap as the per-bin rank,
         clamped to [1, rank].  Falls back to fixed rank when the maximum ratio
-        is below this value.  None disables adaptive selection.
+        is below this value.  None disables adaptive selection.  The rank then
+        jumps between neighbouring windows, which leaves seams at the window
+        boundaries of the CSD; ``shrinkage`` is the smooth alternative.
     ppca_k : float, optional
         PPCA-style outlier correction threshold in MAD units.  After an initial
         rank reduction, channels deviating from the model by more than
         ``median + ppca_k * MAD`` (per frequency bin) are replaced by the model
         prediction and the SVD is repeated.  Suppresses impedance-mismatch
         artefacts.  Typical values: 2–5.  None disables (default).
+    fill_grid : bool
+        Run on the full rectangular grid of the probe's unique lateral and depth
+        positions, with virtual channels at the positions without a channel
+        (the mean of their 4-neighbours).  On NP1 half the grid positions are
+        empty (checkerboard), so the default trajectory is half zeros which the
+        SVD treats as data; this biases the fit, most at low rank.  Windows keep
+        the same depth extent (``nswx`` and ``ovx`` stay in channels).  Only the
+        channels are returned.  Default False.
+    shrinkage : {None, 'gavish-donoho'}
+        None (default) keeps the hard rank cut (``rank``, ``gap_threshold``).
+        'gavish-donoho' shrinks the singular values continuously against the
+        noise level of each window and frequency bin (Marchenko-Pastur median of
+        its singular values), capped at ``rank``.  Neighbouring windows then keep
+        consistent fits, without seams.  Incompatible with ``gap_threshold``.
+    shrinkage_scale : float, optional
+        Noise-scale factor of the shrinkage.  None (default) calibrates it on
+        white noise for the geometry and window parameters, see
+        `calibrate_shrinkage_scale` (cached, a few seconds the first time).
     n_jobs : int
         Number of parallel workers for the spatial-window loop.  ``np.linalg.svd``
         releases the GIL, so threads (``prefer='threads'``) are used.  Default 1
@@ -458,14 +804,75 @@ def cadzow_denoiser(
     -------
     wav_ : ndarray (nc, ns), float32
     """
-    from joblib import Parallel, delayed
-
     ntr, ns = wav.shape
     if h is None:
         _h = neuropixel.trace_header(version=1)
         h = {k: v[:ntr] for k, v in _h.items()}
+    if shrinkage not in (None, "gavish-donoho"):
+        raise ValueError(
+            f"unknown shrinkage {shrinkage!r}, expected None or 'gavish-donoho'"
+        )
+    if shrinkage is not None and gap_threshold is not None:
+        raise ValueError(
+            "gap_threshold (hard adaptive rank) and shrinkage are exclusive"
+        )
+    shrink_scale = None
+    if shrinkage is not None:
+        shrink_scale = (
+            calibrate_shrinkage_scale(h["x"][:ntr], h["y"][:ntr], nswx, ovx, fill_grid)
+            if shrinkage_scale is None
+            else shrinkage_scale
+        )
+    kwargs = dict(
+        fs=fs,
+        rank=rank,
+        niter=niter,
+        fmax=fmax,
+        npad=npad,
+        gap_threshold=gap_threshold,
+        ppca_k=ppca_k,
+        shrink_scale=shrink_scale,
+        n_jobs=n_jobs,
+    )
+    if not fill_grid:
+        return _cadzow_windows(wav, h["x"], h["y"], nswx=nswx, ovx=ovx, **kwargs)
+    gx, gy, ireal = _full_grid(np.asarray(h["x"][:ntr]), np.asarray(h["y"][:ntr]))
+    if gx.size % ntr:
+        raise ValueError(
+            f"fill_grid: the {gx.size} grid positions are not a multiple of the {ntr} channels"
+        )
+    factor = gx.size // ntr
+    out = _cadzow_windows(
+        _fill_grid(wav, gx, gy, ireal),
+        gx,
+        gy,
+        nswx=nswx * factor,
+        ovx=ovx * factor,
+        **kwargs,
+    )
+    return out[ireal]
 
-    nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
+
+def _cadzow_windows(
+    wav,
+    x,
+    y,
+    fs,
+    rank,
+    niter,
+    fmax,
+    nswx,
+    ovx,
+    npad,
+    gap_threshold,
+    ppca_k,
+    shrink_scale,
+    n_jobs,
+):
+    """Spatial-window loop of `cadzow_denoiser` on channels at coordinates ``x``, ``y``."""
+    from joblib import Parallel, delayed
+
+    ntr, ns = wav.shape
     WAV = scipy.fft.rfft(wav)
     fscale = scipy.fft.rfftfreq(ns, d=1.0 / fs)
     imax = WAV.shape[1] if fmax is None else int(np.searchsorted(fscale, fmax))
@@ -475,56 +882,9 @@ def cadzow_denoiser(
         WAV,
         np.flipud(WAV[-npad - 2 : -1, :]) * np.flipud(np.r_[padgain, 1])[:, np.newaxis],
     ]
-    x = np.r_[
-        np.flipud(h["x"][1 : npad + 1]), h["x"], np.flipud(h["x"][-npad - 2 : -1])
-    ]
-    y = np.r_[
-        np.flipud(h["y"][1 : npad + 1]) - 120,
-        h["y"],
-        np.flipud(h["y"][-npad - 2 : -1]) + 120,
-    ]
-
-    # Synthesis windowing strategy depends on overlap fraction:
-    #   ovx ≤ nswx//2  (≤50%): exact partition-of-unity gain window — backward-compatible,
-    #                           no normalisation required.
-    #   ovx > nswx//2  (>50%): Hann synthesis window + running normalisation sum.
-    #                           Supports any ovx in [1, nswx-1]; the accumulation step
-    #                           divides each channel by the total Hann weight it received,
-    #                           so blending is always correct regardless of overlap ratio.
-    step = nswx - ovx
-    # Backward-compatible branch: for ovx ≤ nswx//2 the original partition-of-unity
-    # gain window is used unchanged; the WOLA path only activates for higher overlaps.
+    x, y = _pad_channels(x, y, npad)
+    windows = _window_geometry(x, y, ntr, nswx, ovx, npad)
     high_overlap = ovx > nswx // 2
-    if not high_overlap:
-        hanning = scipy.signal.windows.hann(ovx * 2 - 1)[:ovx]
-        gain_window = np.r_[hanning, np.ones(nswx - ovx * 2), np.flipud(hanning)]
-    else:
-        hann_full = scipy.signal.windows.hann(nswx)
-
-    # Precompute per-window geometry (trajectory + scatter + gain) once before dispatch
-    windows = []
-    for i, firstx in enumerate(np.arange(nwinx) * step):
-        lastx = int(firstx + nswx)
-        sl = slice(firstx, lastx)
-        nc_w = len(x[sl])
-        if high_overlap:
-            gw = hann_full.copy()
-            if i == 0:  # replace fade-in with ones at probe start
-                gw[:step] = 1.0
-            if i == nwinx - 1:  # replace fade-out with ones at probe end
-                gw[max(0, nswx - step) :] = 1.0
-            gw = gw[:nc_w]
-        else:
-            if firstx == 0:
-                gw = np.r_[np.ones(nswx - ovx), np.flipud(hanning)][:nc_w]
-            elif lastx >= ntr:
-                gw = np.r_[hanning, np.ones(nswx - ovx)][:nc_w]
-            else:
-                gw = gain_window[:nc_w]
-        T, it, ic, trcount = trajectory(x[sl], y[sl])
-        scatter = np.zeros((len(ic), nc_w))
-        scatter[np.arange(len(ic)), ic] = 1.0 / trcount[ic]
-        windows.append((sl, gw, it, ic, T.shape, scatter))
 
     def _worker(sl, gw, it, ic, T_shape, scatter):
         return (
@@ -541,6 +901,7 @@ def cadzow_denoiser(
                 niter,
                 gap_threshold,
                 ppca_k,
+                shrink_scale,
             ),
         )
 

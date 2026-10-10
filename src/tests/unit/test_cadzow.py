@@ -172,3 +172,135 @@ class TestCadzow(unittest.TestCase):
 
         self.assertEqual(out.shape, wav.shape)
         self.assertFalse(np.any(np.isnan(out)))
+
+
+def _laminar_field(ns=512, fs=250.0, n_sources=6, seed=0):
+    """Smooth laminar field on NP1: Gaussian depth profiles with sinusoidal time courses, constant laterally."""
+    rng = np.random.default_rng(seed)
+    y = neuropixel.trace_header(version=1)["y"].astype(float)
+    t = np.arange(ns) / fs
+    out = np.zeros((y.size, ns))
+    for _ in range(n_sources):
+        z0, width, freq = (
+            rng.uniform(0, 3840),
+            rng.uniform(200, 600),
+            rng.uniform(2, 30),
+        )
+        phase = rng.uniform(0, 2 * np.pi)
+        profile = np.exp(-0.5 * ((y - z0) / width) ** 2)
+        out += profile[:, None] * np.sin(2 * np.pi * freq * t + phase)[None, :]
+    return out
+
+
+class TestCadzowFillGridShrinkage(unittest.TestCase):
+    H = neuropixel.trace_header(version=1)
+    HXY = {"x": H["x"], "y": H["y"]}
+    SCALE = 2.25  # calibrated shrinkage scale for NP1, full grid, nswx=64, ovx=32
+
+    def csd_error(self, out, clean):
+        """CSD error relative to the CSD RMS of the clean field."""
+        from ibldsp.voltage import current_source_density
+
+        csd = current_source_density(clean, self.H)
+        err = current_source_density(out.astype(np.float64), self.H) - csd
+        return np.sqrt(np.mean(err**2) / np.mean(csd**2))
+
+    def test_full_grid(self):
+        """NP1 is a checkerboard: the full grid has twice the channels, each channel on its own grid position."""
+        gx, gy, ireal = ibldsp.cadzow._full_grid(self.H["x"], self.H["y"])
+        self.assertEqual(gx.size, 768)
+        self.assertEqual(np.unique(ireal).size, 384)
+        np.testing.assert_array_equal(gx[ireal], self.H["x"])
+        np.testing.assert_array_equal(gy[ireal], self.H["y"])
+
+    def test_fill_grid(self):
+        """Channels are kept as is; virtual positions of a depth-linear field are exact away from the probe ends."""
+        gx, gy, ireal = ibldsp.cadzow._full_grid(self.H["x"], self.H["y"])
+        wav = np.tile(self.H["y"][:, None].astype(float), (1, 3))
+        g = ibldsp.cadzow._fill_grid(wav, gx, gy, ireal)
+        np.testing.assert_array_equal(g[ireal], wav)
+        interior = (gy > gy.min()) & (gy < gy.max())
+        np.testing.assert_allclose(g[interior, 0], gy[interior])
+
+    def test_fill_grid_np2_is_identity(self):
+        """NP2 has no empty grid positions: fill_grid must not change the output."""
+        h2 = neuropixel.trace_header(version=2)
+        wav = np.random.default_rng(3).standard_normal((384, 256))
+        kwargs = dict(h={"x": h2["x"], "y": h2["y"]}, rank=3, fmax=None)
+        np.testing.assert_array_equal(
+            ibldsp.cadzow.cadzow_denoiser(wav, **kwargs),
+            ibldsp.cadzow.cadzow_denoiser(wav, fill_grid=True, **kwargs),
+        )
+
+    def test_apply_shrinkage(self):
+        """Noise-level singular values are zeroed, a strong one is shrunk but kept, rank is capped."""
+        shape = (51, 32)
+        rng = np.random.default_rng(0)
+        T = rng.standard_normal((4, *shape)) + 1j * rng.standard_normal((4, *shape))
+        s = np.linalg.svd(T, compute_uv=False)
+        s[:, :2] *= np.array([50.0, 30.0])  # two strong components
+        s_ = s.copy()
+        ibldsp.cadzow._apply_shrinkage(s_, r=1, shape=shape, scale=1.0)
+        self.assertTrue(np.all(s_[:, 0] > 0))
+        self.assertTrue(np.all(s_[:, 0] < s[:, 0]))
+        np.testing.assert_array_equal(s_[:, 1:], 0.0)  # capped at rank 1
+        s_ = s.copy()
+        ibldsp.cadzow._apply_shrinkage(s_, r=32, shape=shape, scale=1.0)
+        self.assertTrue(np.all(s_[:, :2] > 0))
+        np.testing.assert_array_equal(s_[:, 5:], 0.0)  # noise bulk removed
+
+    def test_calibrate_shrinkage_scale(self):
+        """Deterministic, cached, and above 1 (Hankel duplicates spread the noise singular values)."""
+        args = (self.H["x"], self.H["y"], 64, 32, True)
+        scale = ibldsp.cadzow.calibrate_shrinkage_scale(*args, ns=256)
+        self.assertGreater(scale, 1.5)
+        self.assertLess(scale, 3.5)
+        self.assertEqual(scale, ibldsp.cadzow.calibrate_shrinkage_scale(*args, ns=256))
+
+    def test_shrinkage_options(self):
+        wav = np.zeros((384, 256))
+        with self.assertRaises(ValueError):
+            ibldsp.cadzow.cadzow_denoiser(
+                wav, shrinkage="gavish-donoho", gap_threshold=2.0
+            )
+        with self.assertRaises(ValueError):
+            ibldsp.cadzow.cadzow_denoiser(wav, shrinkage="soft")
+
+    def test_shrinkage_white_noise(self):
+        """Pure white noise is almost entirely removed."""
+        wav = np.random.default_rng(2).standard_normal((384, 512))
+        out = ibldsp.cadzow.cadzow_denoiser(
+            wav,
+            h=self.HXY,
+            fmax=None,
+            fill_grid=True,
+            shrinkage="gavish-donoho",
+            shrinkage_scale=self.SCALE,
+        )
+        self.assertLess(out.std() / wav.std(), 0.05)
+
+    def test_fill_grid_shrinkage_csd(self):
+        """On a smooth laminar field, full grid + shrinkage beats the lfpack v04 settings in CSD, clean and noisy."""
+        clean = _laminar_field()
+        noisy = (
+            clean
+            + np.random.default_rng(1).standard_normal(clean.shape) * 0.05 * clean.std()
+        )
+        production = dict(rank=5, fmax=None, gap_threshold=2.0, ppca_k=2.0)
+        new = dict(
+            rank=5,
+            fmax=None,
+            ppca_k=2.0,
+            fill_grid=True,
+            shrinkage="gavish-donoho",
+            shrinkage_scale=self.SCALE,
+        )
+        for wav, tol in ((clean, 0.05), (noisy, 0.4)):
+            err_prod = self.csd_error(
+                ibldsp.cadzow.cadzow_denoiser(wav, h=self.HXY, **production), clean
+            )
+            err_new = self.csd_error(
+                ibldsp.cadzow.cadzow_denoiser(wav, h=self.HXY, **new), clean
+            )
+            self.assertLess(err_new, tol)
+            self.assertLess(err_new, err_prod / 3)
