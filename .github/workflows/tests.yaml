@@ -3,8 +3,7 @@ name: ibl-neuropixel CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  pull_request:  # any base branch, so that stacked PRs are tested too
 
 jobs:
   tests:
