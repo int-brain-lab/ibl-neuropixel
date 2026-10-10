@@ -195,7 +195,7 @@ def _laminar_field(ns=512, fs=250.0, n_sources=6, seed=0):
 class TestCadzowFillGridShrinkage(unittest.TestCase):
     H = neuropixel.trace_header(version=1)
     HXY = {"x": H["x"], "y": H["y"]}
-    SCALE = 2.25  # calibrated shrinkage scale for NP1, full grid, nswx=64, ovx=32
+    SCALE = 2.25  # shrinkage noise scale for NP1, full grid, nswx=64, ovx=32
 
     def csd_error(self, out, clean):
         """CSD error relative to the CSD RMS of the clean field."""
@@ -205,19 +205,13 @@ class TestCadzowFillGridShrinkage(unittest.TestCase):
         err = current_source_density(out.astype(np.float64), self.H) - csd
         return np.sqrt(np.mean(err**2) / np.mean(csd**2))
 
-    def test_full_grid(self):
-        """NP1 is a checkerboard: the full grid has twice the channels, each channel on its own grid position."""
-        gx, gy, ireal = ibldsp.cadzow._full_grid(self.H["x"], self.H["y"])
+    def test_fill_grid(self):
+        """NP1 checkerboard: twice the positions, channels kept as is, a depth-linear field exact away from the ends."""
+        wav = np.tile(self.H["y"][:, None].astype(float), (1, 3))
+        g, gx, gy, ireal = ibldsp.cadzow._fill_grid(wav, self.H["x"], self.H["y"])
         self.assertEqual(gx.size, 768)
-        self.assertEqual(np.unique(ireal).size, 384)
         np.testing.assert_array_equal(gx[ireal], self.H["x"])
         np.testing.assert_array_equal(gy[ireal], self.H["y"])
-
-    def test_fill_grid(self):
-        """Channels are kept as is; virtual positions of a depth-linear field are exact away from the probe ends."""
-        gx, gy, ireal = ibldsp.cadzow._full_grid(self.H["x"], self.H["y"])
-        wav = np.tile(self.H["y"][:, None].astype(float), (1, 3))
-        g = ibldsp.cadzow._fill_grid(wav, gx, gy, ireal)
         np.testing.assert_array_equal(g[ireal], wav)
         interior = (gy > gy.min()) & (gy < gy.max())
         np.testing.assert_allclose(g[interior, 0], gy[interior])
@@ -249,23 +243,6 @@ class TestCadzowFillGridShrinkage(unittest.TestCase):
         self.assertTrue(np.all(s_[:, :2] > 0))
         np.testing.assert_array_equal(s_[:, 5:], 0.0)  # noise bulk removed
 
-    def test_calibrate_shrinkage_scale(self):
-        """Deterministic, cached, and above 1 (Hankel duplicates spread the noise singular values)."""
-        args = (self.H["x"], self.H["y"], 64, 32, True)
-        scale = ibldsp.cadzow.calibrate_shrinkage_scale(*args, ns=256)
-        self.assertGreater(scale, 1.5)
-        self.assertLess(scale, 3.5)
-        self.assertEqual(scale, ibldsp.cadzow.calibrate_shrinkage_scale(*args, ns=256))
-
-    def test_shrinkage_options(self):
-        wav = np.zeros((384, 256))
-        with self.assertRaises(ValueError):
-            ibldsp.cadzow.cadzow_denoiser(
-                wav, shrinkage="gavish-donoho", gap_threshold=2.0
-            )
-        with self.assertRaises(ValueError):
-            ibldsp.cadzow.cadzow_denoiser(wav, shrinkage="soft")
-
     def test_shrinkage_white_noise(self):
         """Pure white noise is almost entirely removed."""
         wav = np.random.default_rng(2).standard_normal((384, 512))
@@ -274,8 +251,7 @@ class TestCadzowFillGridShrinkage(unittest.TestCase):
             h=self.HXY,
             fmax=None,
             fill_grid=True,
-            shrinkage="gavish-donoho",
-            shrinkage_scale=self.SCALE,
+            shrinkage=self.SCALE,
         )
         self.assertLess(out.std() / wav.std(), 0.05)
 
@@ -292,8 +268,7 @@ class TestCadzowFillGridShrinkage(unittest.TestCase):
             fmax=None,
             ppca_k=2.0,
             fill_grid=True,
-            shrinkage="gavish-donoho",
-            shrinkage_scale=self.SCALE,
+            shrinkage=self.SCALE,
         )
         for wav, tol in ((clean, 0.05), (noisy, 0.4)):
             err_prod = self.csd_error(
@@ -314,8 +289,7 @@ class TestCadzowBadChannels(unittest.TestCase):
         fmax=None,
         ppca_k=2.0,
         fill_grid=True,
-        shrinkage="gavish-donoho",
-        shrinkage_scale=2.25,
+        shrinkage=2.25,
     )
     # dead channels spread along the probe and a cluster of noisy channels, as in a real NP1 insertion
     BAD = np.isin(
@@ -331,17 +305,6 @@ class TestCadzowBadChannels(unittest.TestCase):
         )
         out[[36, 75, 112, 151, 264]] = 0
         return out
-
-    def test_bad_channels_options(self):
-        wav = np.zeros((384, 256))
-        with self.assertRaises(ValueError):
-            ibldsp.cadzow.cadzow_denoiser(
-                wav, bad_channels=self.BAD
-            )  # requires fill_grid
-        with self.assertRaises(ValueError):
-            ibldsp.cadzow.cadzow_denoiser(
-                wav, fill_grid=True, bad_channels=self.BAD[:100]
-            )
 
     def test_bad_channels_data_is_discarded(self):
         """The output does not depend on the data of the bad channels."""

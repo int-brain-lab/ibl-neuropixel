@@ -1270,7 +1270,7 @@ def _resample_lfp_chunk(args):
         )
         kwargs = dict(cadzow_kwargs)
         # opt-in: Cadzow discards the bad channels and estimates them from its own fit
-        # (requires fill_grid=True), instead of re-interpolating them afterwards
+        # (implies fill_grid=True), instead of re-interpolating them afterwards
         as_missing = kwargs.pop("bad_channels_as_missing", False)
         if as_missing and channel_labels is not None:
             kwargs["bad_channels"] = np.isin(channel_labels, (1, 2))
@@ -1401,7 +1401,7 @@ def resample_denoise_lfp_cbin(
         Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
         ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
         inside each worker; outer-level parallelism is controlled by *n_jobs* above.
-        The extra key ``bad_channels_as_missing=True`` (requires ``fill_grid=True``) passes
+        The extra key ``bad_channels_as_missing=True`` passes
         the dead and noisy channels of *channel_labels* to Cadzow as ``bad_channels``, which
         estimates them from its fit; the re-interpolation after Cadzow is then skipped.
         The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT) is kept a multiple of the canonical
