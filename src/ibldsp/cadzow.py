@@ -708,3 +708,57 @@ def cadzow_denoiser(
         npad : -npad - 1
     ]  # remove channel padding (npad=0 trims the phantom tail row)
     return scipy.fft.irfft(WAV_).astype(np.float32)
+
+
+# LFP defaults (lfpack): the shrinkage noise scales are calibrated on white noise for nswx=64, ovx=32
+_LFP_KWARGS = dict(rank=5, niter=1, fmax=None, nswx=64, ovx=32, ppca_k=2.0)
+
+
+def cadzow_denoiser_np1(wav, h=None, **kwargs):
+    """
+    `cadzow_denoiser` with the LFP defaults for NP1 probes (checkerboard of 4 lateral positions).
+
+    Full grid (``fill_grid=True``) and Gavish-Donoho shrinkage (``shrinkage=2.25``), ``rank=5``, ``niter=1``,
+    ``fmax=None``, ``nswx=64``, ``ovx=32``, ``ppca_k=2``.  Any keyword overrides a default; the shrinkage scale is
+    only valid for ``nswx=64``, ``ovx=32``.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns), float
+    h : dict or None
+        Probe header with keys ``'x'`` and ``'y'``.  Defaults to the NP1 geometry.
+    **kwargs
+        Forwarded to `cadzow_denoiser`.
+
+    Returns
+    -------
+    wav_ : ndarray (nc, ns), float32
+    """
+    kwargs = {**_LFP_KWARGS, "fill_grid": True, "shrinkage": 2.25, **kwargs}
+    return cadzow_denoiser(wav, h=h, **kwargs)
+
+
+def cadzow_denoiser_np2(wav, h=None, **kwargs):
+    """
+    `cadzow_denoiser` with the LFP defaults for NP2 and any probe whose positions fill their grid (single shank).
+
+    Gavish-Donoho shrinkage (``shrinkage=1.22``), ``rank=5``, ``niter=1``, ``fmax=None``, ``nswx=64``, ``ovx=32``,
+    ``ppca_k=2``.  Any keyword overrides a default; the shrinkage scale is only valid for ``nswx=64``, ``ovx=32``.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns), float
+    h : dict or None
+        Probe header with keys ``'x'`` and ``'y'``.  Defaults to the NP2 single-shank geometry.
+    **kwargs
+        Forwarded to `cadzow_denoiser`.
+
+    Returns
+    -------
+    wav_ : ndarray (nc, ns), float32
+    """
+    if h is None:
+        h = {
+            k: v[: wav.shape[0]] for k, v in neuropixel.trace_header(version=2).items()
+        }
+    return cadzow_denoiser(wav, h=h, **{**_LFP_KWARGS, "shrinkage": 1.22, **kwargs})

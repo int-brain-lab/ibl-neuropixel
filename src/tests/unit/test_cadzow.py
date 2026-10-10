@@ -361,3 +361,25 @@ class TestCadzowBadChannels(unittest.TestCase):
 
         self.assertLess(err(missing), err(interpolated) / 2)
         self.assertLess(err(missing), 1.5 * err(reference))
+
+
+class TestCadzowEntryPoints(unittest.TestCase):
+    def test_np1_np2_defaults(self):
+        """The NP1 / NP2 entry points are cadzow_denoiser with the LFP defaults, and the defaults can be overridden."""
+        wav = np.random.default_rng(0).standard_normal((384, 256))
+        lfp = dict(rank=5, niter=1, fmax=None, nswx=64, ovx=32, ppca_k=2.0)
+        h2 = neuropixel.trace_header(version=2)
+        for fcn, kwargs in (
+            (ibldsp.cadzow.cadzow_denoiser_np1, dict(fill_grid=True, shrinkage=2.25)),
+            (
+                ibldsp.cadzow.cadzow_denoiser_np2,
+                dict(h={"x": h2["x"], "y": h2["y"]}, shrinkage=1.22),
+            ),
+        ):
+            np.testing.assert_array_equal(
+                fcn(wav), ibldsp.cadzow.cadzow_denoiser(wav, **lfp, **kwargs)
+            )
+            np.testing.assert_array_equal(
+                fcn(wav, rank=3),
+                ibldsp.cadzow.cadzow_denoiser(wav, **{**lfp, **kwargs, "rank": 3}),
+            )
