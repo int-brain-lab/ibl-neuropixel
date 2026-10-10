@@ -1268,18 +1268,24 @@ def _resample_lfp_chunk(args):
             if geom_y is not None
             else neuropixel.trace_header(version=1)["y"][:nc]
         )
+        kwargs = dict(cadzow_kwargs)
+        # opt-in: Cadzow discards the bad channels and estimates them from its own fit
+        # (requires fill_grid=True), instead of re-interpolating them afterwards
+        as_missing = kwargs.pop("bad_channels_as_missing", False)
+        if as_missing and channel_labels is not None:
+            kwargs["bad_channels"] = np.isin(channel_labels, (1, 2))
         dec = _cadzow_mod.cadzow_denoiser(
             dec,
             h={"x": cx, "y": cy},
             fs=fs / q,
-            **{**cadzow_kwargs, "n_jobs": 1},
+            **{**kwargs, "n_jobs": 1},
         )
         # Cadzow re-estimates every channel from its own rank-reduced spatial fit,
         # including already-interpolated bad channels — this can reintroduce a small
         # per-channel amplitude mismatch that current_source_density's per-column
         # second-difference turns into a spurious horizontal line. Re-interpolate those
         # channels from their Cadzow-denoised same-column neighbours to remove it.
-        if channel_labels is not None:
+        if channel_labels is not None and not as_missing:
             dec = interpolate_bad_channels(dec, channel_labels, cx, cy, groupby_y=True)
 
     # Late mute: zero the saturated stretches on the final decimated output. The raw-rate mask
@@ -1395,6 +1401,9 @@ def resample_denoise_lfp_cbin(
         Keys are forwarded to ``ibldsp.cadzow.cadzow_denoiser`` (e.g. ``rank``, ``niter``,
         ``fmax``, ``nswx``, ``gap_threshold``, ``ppca_k``).  ``n_jobs`` is always forced to 1
         inside each worker; outer-level parallelism is controlled by *n_jobs* above.
+        The extra key ``bad_channels_as_missing=True`` (requires ``fill_grid=True``) passes
+        the dead and noisy channels of *channel_labels* to Cadzow as ``bad_channels``, which
+        estimates them from its fit; the re-interpolation after Cadzow is then skipped.
         The chunk window (CHUNK_SIZE_OUT + 2 × PAD_OUT) is kept a multiple of the canonical
         Cadzow FFT window (256 × 3 = 768) by design; PAD_OUT scales with the highpass corner
         (see _warmup_pad_out).  Default None (disabled).

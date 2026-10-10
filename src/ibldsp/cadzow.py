@@ -726,6 +726,7 @@ def cadzow_denoiser(
     fill_grid=False,
     shrinkage=None,
     shrinkage_scale=None,
+    bad_channels=None,
     n_jobs=1,
 ):
     """
@@ -795,6 +796,13 @@ def cadzow_denoiser(
         Noise-scale factor of the shrinkage.  None (default) calibrates it on
         white noise for the geometry and window parameters, see
         `calibrate_shrinkage_scale` (cached, a few seconds the first time).
+    bad_channels : ndarray (nc,) of bool, optional
+        Channels whose data is discarded (e.g. ``np.isin(channel_labels, (1, 2))``
+        for dead and noisy channels).  They are filled like the empty grid
+        positions and their output is the Cadzow estimate, consistent with the
+        low-rank fit, so no interpolation is needed before or after (an
+        interpolated bad channel does not follow the per-column curvature and
+        leaves a line in the CSD).  Requires ``fill_grid=True``.  Default None.
     n_jobs : int
         Number of parallel workers for the spatial-window loop.  ``np.linalg.svd``
         releases the GIL, so threads (``prefer='threads'``) are used.  Default 1
@@ -834,8 +842,13 @@ def cadzow_denoiser(
         shrink_scale=shrink_scale,
         n_jobs=n_jobs,
     )
+    if bad_channels is not None and not fill_grid:
+        raise ValueError("bad_channels requires fill_grid=True")
     if not fill_grid:
         return _cadzow_windows(wav, h["x"], h["y"], nswx=nswx, ovx=ovx, **kwargs)
+    good = None if bad_channels is None else ~np.asarray(bad_channels, dtype=bool)
+    if good is not None and good.shape != (ntr,):
+        raise ValueError(f"bad_channels must have shape ({ntr},), got {good.shape}")
     gx, gy, ireal = _full_grid(np.asarray(h["x"][:ntr]), np.asarray(h["y"][:ntr]))
     if gx.size % ntr:
         raise ValueError(
@@ -843,7 +856,7 @@ def cadzow_denoiser(
         )
     factor = gx.size // ntr
     out = _cadzow_windows(
-        _fill_grid(wav, gx, gy, ireal),
+        _fill_grid(wav, gx, gy, ireal, good=good),
         gx,
         gy,
         nswx=nswx * factor,

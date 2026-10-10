@@ -304,3 +304,97 @@ class TestCadzowFillGridShrinkage(unittest.TestCase):
             )
             self.assertLess(err_new, tol)
             self.assertLess(err_new, err_prod / 3)
+
+
+class TestCadzowBadChannels(unittest.TestCase):
+    H = neuropixel.trace_header(version=1)
+    HXY = {"x": H["x"], "y": H["y"]}
+    KWARGS = dict(
+        rank=5,
+        fmax=None,
+        ppca_k=2.0,
+        fill_grid=True,
+        shrinkage="gavish-donoho",
+        shrinkage_scale=2.25,
+    )
+    # dead channels spread along the probe and a cluster of noisy channels, as in a real NP1 insertion
+    BAD = np.isin(
+        np.arange(384), [36, 75, 112, 151, 173, 174, 177, 178, 181, 182, 186, 264]
+    )
+
+    def corrupt(self, wav, seed=0):
+        """Dead channels flat, the others very noisy."""
+        rng = np.random.default_rng(seed)
+        out = wav.copy()
+        out[self.BAD] = (
+            rng.standard_normal((self.BAD.sum(), wav.shape[1])) * 10 * wav.std()
+        )
+        out[[36, 75, 112, 151, 264]] = 0
+        return out
+
+    def test_bad_channels_options(self):
+        wav = np.zeros((384, 256))
+        with self.assertRaises(ValueError):
+            ibldsp.cadzow.cadzow_denoiser(
+                wav, bad_channels=self.BAD
+            )  # requires fill_grid
+        with self.assertRaises(ValueError):
+            ibldsp.cadzow.cadzow_denoiser(
+                wav, fill_grid=True, bad_channels=self.BAD[:100]
+            )
+
+    def test_bad_channels_data_is_discarded(self):
+        """The output does not depend on the data of the bad channels."""
+        wav = _laminar_field(ns=256)
+        out = ibldsp.cadzow.cadzow_denoiser(
+            self.corrupt(wav, seed=0), h=self.HXY, bad_channels=self.BAD, **self.KWARGS
+        )
+        out2 = ibldsp.cadzow.cadzow_denoiser(
+            self.corrupt(wav, seed=1), h=self.HXY, bad_channels=self.BAD, **self.KWARGS
+        )
+        np.testing.assert_array_equal(out, out2)
+
+    def test_bad_channels_csd(self):
+        """Bad channels as missing beat interpolation before/after Cadzow on the CSD around them."""
+        from ibldsp.voltage import current_source_density, interpolate_bad_channels
+
+        clean = _laminar_field()
+        noisy = (
+            clean
+            + np.random.default_rng(1).standard_normal(clean.shape) * 0.05 * clean.std()
+        )
+        corrupt = self.corrupt(noisy)
+        labels = self.BAD.astype(int)
+        x, y = self.H["x"], self.H["y"]
+        interpolated = interpolate_bad_channels(
+            ibldsp.cadzow.cadzow_denoiser(
+                interpolate_bad_channels(corrupt, labels, x, y),
+                h=self.HXY,
+                **self.KWARGS,
+            ),
+            labels,
+            x,
+            y,
+            groupby_y=True,
+        )
+        missing = ibldsp.cadzow.cadzow_denoiser(
+            corrupt, h=self.HXY, bad_channels=self.BAD, **self.KWARGS
+        )
+        reference = ibldsp.cadzow.cadzow_denoiser(noisy, h=self.HXY, **self.KWARGS)
+        # channels whose CSD involves a bad channel: same column (every 4 channels), up to 2 rows away
+        near = (
+            np.convolve(
+                self.BAD,
+                np.r_[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+                mode="same",
+            )
+            > 0
+        )
+        csd = current_source_density(clean, self.H)[near]
+
+        def err(out):
+            e = current_source_density(out.astype(np.float64), self.H)[near] - csd
+            return np.sqrt(np.mean(e**2) / np.mean(csd**2))
+
+        self.assertLess(err(missing), err(interpolated) / 2)
+        self.assertLess(err(missing), 1.5 * err(reference))
