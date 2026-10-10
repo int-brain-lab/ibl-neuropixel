@@ -551,8 +551,7 @@ def cadzow_denoiser(
         Channel-window overlap in channels.  Any value in ``[1, nswx - 1]`` is
         valid; overlaps above 50% (``ovx > nswx // 2``) use a Hann synthesis
         window with running normalisation instead of the partition-of-unity gain.
-        Default 16 (kept for backward compatibility; recommended value is
-        ``nswx // 2``, e.g. 32 for the default ``nswx=64``).
+        Default 32.
     npad : int
         Reflective channel padding on each side.  Default 0.
     gap_threshold : float, optional
@@ -710,8 +709,11 @@ def cadzow_denoiser(
     return scipy.fft.irfft(WAV_).astype(np.float32)
 
 
-# LFP defaults (lfpack): the shrinkage noise scales are calibrated on white noise for nswx=64, ovx=32
-_LFP_KWARGS = dict(rank=5, niter=1, fmax=None, nswx=64, ovx=32, ppca_k=2.0)
+# LFP defaults of the entry points below; the shrinkage noise scales are calibrated on white noise for nswx=64, ovx=32
+LFP_KWARGS_NP2 = dict(
+    rank=5, niter=1, fmax=None, nswx=64, ovx=32, ppca_k=2.0, shrinkage=1.22
+)
+LFP_KWARGS_NP1 = {**LFP_KWARGS_NP2, "fill_grid": True, "shrinkage": 2.25}
 
 
 def cadzow_denoiser_np1(wav, h=None, **kwargs):
@@ -734,8 +736,7 @@ def cadzow_denoiser_np1(wav, h=None, **kwargs):
     -------
     wav_ : ndarray (nc, ns), float32
     """
-    kwargs = {**_LFP_KWARGS, "fill_grid": True, "shrinkage": 2.25, **kwargs}
-    return cadzow_denoiser(wav, h=h, **kwargs)
+    return cadzow_denoiser(wav, h=h, **{**LFP_KWARGS_NP1, **kwargs})
 
 
 def cadzow_denoiser_np2(wav, h=None, **kwargs):
@@ -761,4 +762,4 @@ def cadzow_denoiser_np2(wav, h=None, **kwargs):
         h = {
             k: v[: wav.shape[0]] for k, v in neuropixel.trace_header(version=2).items()
         }
-    return cadzow_denoiser(wav, h=h, **{**_LFP_KWARGS, "shrinkage": 1.22, **kwargs})
+    return cadzow_denoiser(wav, h=h, **{**LFP_KWARGS_NP2, **kwargs})
