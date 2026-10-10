@@ -17,10 +17,13 @@ for N-spatial dimensions.
 }
 """
 
+import functools
 import warnings
 
 import numpy as np
 import scipy.fft
+import scipy.integrate
+import scipy.optimize
 import scipy.signal
 from iblutil.numerical import ismember2d
 
@@ -50,6 +53,95 @@ def _apply_rank_threshold(s, r, gap_threshold=None):
     r_adapt = np.clip(r_adapt, 1, r)
     idx = np.arange(s.shape[1])[np.newaxis, :]
     s[idx >= r_adapt[:, np.newaxis]] = 0.0
+
+
+@functools.lru_cache(maxsize=32)
+def _marchenko_pastur_median(beta):
+    """Median of the Marchenko-Pastur distribution of aspect ratio ``beta`` (unit variance)."""
+    lo, hi = (1 - np.sqrt(beta)) ** 2, (1 + np.sqrt(beta)) ** 2
+
+    def pdf(t):
+        return np.sqrt(max((hi - t) * (t - lo), 0.0)) / (2 * np.pi * beta * t)
+
+    return scipy.optimize.brentq(
+        lambda m: scipy.integrate.quad(pdf, lo, m)[0] - 0.5, lo, hi
+    )
+
+
+def _apply_shrinkage(s, r, shape, scale):
+    """
+    Gavish-Donoho optimal singular-value shrinkage (Frobenius loss), capped at rank ``r``, in place.
+
+    The noise level of each matrix is its median singular value over the Marchenko-Pastur median, times ``scale``.
+    The shrinkage is continuous, so neighbouring windows keep consistent fits, where a hard rank cut leaves seams.
+
+    Parameters
+    ----------
+    s : ndarray (nbins, k)
+        Singular values sorted descending per row, modified in-place.
+    r : int
+        Hard upper bound on rank.
+    shape : tuple
+        Trajectory matrix shape ``(m, n)``.
+    scale : float
+        Noise-scale factor (see `cadzow_denoiser`).
+
+    References
+    ----------
+    Gavish, M. & Donoho, D. L. (2017). Optimal shrinkage of singular values. IEEE Trans. Inf. Theory 63, 2137-2152.
+    """
+    beta = min(shape) / max(shape)
+    sigma = scale * np.median(s, axis=1, keepdims=True)
+    sigma = np.maximum(
+        sigma / np.sqrt(_marchenko_pastur_median(beta)), np.finfo(float).tiny
+    )
+    y = s / sigma
+    eta = np.sqrt(np.maximum((y**2 - beta - 1) ** 2 - 4 * beta, 0.0)) / np.maximum(
+        y, np.finfo(float).tiny
+    )
+    s[:] = np.where(y > 1 + np.sqrt(beta), eta * sigma, 0.0)
+    s[:, r:] = 0.0
+
+
+def _fill_grid(wav, x, y):
+    """
+    Place the channels on the full grid of unique lateral x depth positions and fill the empty positions.
+
+    On NP1 each 20 µm row holds 2 of the 4 lateral positions, so the trajectory of the channels alone is half zeros,
+    which the SVD treats as data. Empty positions get the mean of their known 4-neighbours, iteratively outwards.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns)
+    x, y : ndarray (nc,)
+        Channel coordinates [µm].
+
+    Returns
+    -------
+    g : ndarray (n_grid, ns)
+    gx, gy : ndarray (n_grid,)
+        Grid coordinates, ordered by depth then lateral position.
+    ireal : ndarray (nc,)
+        Grid index of each channel.
+    """
+    xu, yu = np.unique(x), np.unique(y)
+    ireal = np.searchsorted(yu, y) * xu.size + np.searchsorted(xu, x)
+    g = np.zeros((yu.size, xu.size, wav.shape[1]))
+    known = np.zeros((yu.size, xu.size), dtype=bool)
+    g.reshape(-1, wav.shape[1])[ireal] = wav
+    known.ravel()[ireal] = True
+    while not known.all():
+        gp, kp = (
+            np.pad(g * known[..., np.newaxis], ((1, 1), (1, 1), (0, 0))),
+            np.pad(known, 1),
+        )
+        acc = gp[:-2, 1:-1] + gp[2:, 1:-1] + gp[1:-1, :-2] + gp[1:-1, 2:]
+        cnt = kp[:-2, 1:-1] * 1 + kp[2:, 1:-1] + kp[1:-1, :-2] + kp[1:-1, 2:]
+        new = ~known & (cnt > 0)
+        g[new] = acc[new] / cnt[new][:, np.newaxis]
+        known |= new
+    gx, gy = np.meshgrid(xu, yu)
+    return g.reshape(-1, wav.shape[1]), gx.ravel(), gy.ravel(), ireal
 
 
 def derank(T, r):
@@ -208,7 +300,17 @@ def _safe_svd(T_batch):
 
 
 def _process_window(
-    WAV_sl, it, ic, T_shape, scatter, r, imax, niter, gap_threshold, ppca_k
+    WAV_sl,
+    it,
+    ic,
+    T_shape,
+    scatter,
+    r,
+    imax,
+    niter,
+    gap_threshold,
+    ppca_k,
+    shrinkage=None,
 ):
     """SVD rank reduction for one spatial window with precomputed trajectory geometry.
 
@@ -226,18 +328,27 @@ def _process_window(
         Precomputed scatter matrix: maps trajectory entries back to channels.
     r, imax, niter, gap_threshold, ppca_k
         Algorithm parameters (see ``denoise_fxy``).
+    shrinkage : float, optional
+        Gavish-Donoho shrinkage noise scale instead of the hard rank cut (see ``cadzow_denoiser``).
 
     Returns
     -------
     WAV_ : ndarray (nc_w, nf), complex
     """
+
+    def _threshold(s):
+        if shrinkage is None:
+            _apply_rank_threshold(s, r, gap_threshold)
+        else:
+            _apply_shrinkage(s, r, T_shape, shrinkage)
+
     WAV_ = WAV_sl.copy()
     with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
         for _ in range(niter):
             T_batch = np.zeros((imax, *T_shape), dtype=complex)
             T_batch[:, it[0], it[1]] = WAV_[ic, :imax].T
             U, s, Vh = _safe_svd(T_batch)
-            _apply_rank_threshold(s, r, gap_threshold)
+            _threshold(s)
             T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
 
             if ppca_k is not None:
@@ -250,7 +361,7 @@ def _process_window(
                 WAV_clean[mask] = WAV_rec[mask]
                 T_batch[:, it[0], it[1]] = WAV_clean[ic, :].T
                 U, s, Vh = _safe_svd(T_batch)
-                _apply_rank_threshold(s, r, gap_threshold)
+                _threshold(s)
                 T_batch_ = (U * s[:, np.newaxis, :]) @ Vh
 
             vals = T_batch_[:, it[0], it[1]]
@@ -400,6 +511,8 @@ def cadzow_denoiser(
     npad=0,
     gap_threshold=None,
     ppca_k=None,
+    fill_grid=False,
+    shrinkage=None,
     n_jobs=1,
 ):
     """
@@ -435,8 +548,7 @@ def cadzow_denoiser(
         Channel-window overlap in channels.  Any value in ``[1, nswx - 1]`` is
         valid; overlaps above 50% (``ovx > nswx // 2``) use a Hann synthesis
         window with running normalisation instead of the partition-of-unity gain.
-        Default 16 (kept for backward compatibility; recommended value is
-        ``nswx // 2``, e.g. 32 for the default ``nswx=64``).
+        Default 32.
     npad : int
         Reflective channel padding on each side.  Default 0.
     gap_threshold : float, optional
@@ -449,6 +561,18 @@ def cadzow_denoiser(
         ``median + ppca_k * MAD`` (per frequency bin) are replaced by the model
         prediction and the SVD is repeated.  Suppresses impedance-mismatch
         artefacts.  Typical values: 2–5.  None disables (default).
+    fill_grid : bool
+        Run on the full grid of unique lateral x depth positions, empty positions
+        filled with the mean of their 4-neighbours (NP1 is a checkerboard, whose
+        trajectory is otherwise half zeros).  Windows keep the same depth extent.
+        Default False.
+    shrinkage : float, optional
+        Replace the hard rank cut by Gavish-Donoho singular-value shrinkage, capped
+        at ``rank``, with this noise-scale factor; ``gap_threshold`` is ignored.  A
+        hard rank changes between neighbouring windows and leaves seams in the CSD.
+        The factor puts the largest singular value of white noise on the
+        Marchenko-Pastur bulk edge: 2.25 for NP1 with ``fill_grid=True``,
+        ``nswx=64``, ``ovx=32``.  None (default) keeps the hard rank cut.
     n_jobs : int
         Number of parallel workers for the spatial-window loop.  ``np.linalg.svd``
         releases the GIL, so threads (``prefer='threads'``) are used.  Default 1
@@ -464,6 +588,14 @@ def cadzow_denoiser(
     if h is None:
         _h = neuropixel.trace_header(version=1)
         h = {k: v[:ntr] for k, v in _h.items()}
+    if fill_grid:
+        g, gx, gy, ireal = _fill_grid(wav, h["x"][:ntr], h["y"][:ntr])
+        f = g.shape[0] // ntr  # windows of the same depth extent
+        kw = dict(fs=fs, rank=rank, niter=niter, fmax=fmax, npad=npad, ppca_k=ppca_k)
+        kw.update(gap_threshold=gap_threshold, shrinkage=shrinkage, n_jobs=n_jobs)
+        return cadzow_denoiser(g, {"x": gx, "y": gy}, nswx=nswx * f, ovx=ovx * f, **kw)[
+            ireal
+        ]
 
     nwinx = int(np.ceil((ntr + npad * 2 - ovx) / (nswx - ovx)))
     WAV = scipy.fft.rfft(wav)
@@ -541,6 +673,7 @@ def cadzow_denoiser(
                 niter,
                 gap_threshold,
                 ppca_k,
+                shrinkage,
             ),
         )
 
@@ -566,3 +699,59 @@ def cadzow_denoiser(
         npad : -npad - 1
     ]  # remove channel padding (npad=0 trims the phantom tail row)
     return scipy.fft.irfft(WAV_).astype(np.float32)
+
+
+# LFP defaults of the entry points below; the shrinkage noise scales are calibrated on white noise for nswx=64, ovx=32
+LFP_KWARGS_NP2 = dict(
+    rank=5, niter=1, fmax=None, nswx=64, ovx=32, ppca_k=2.0, shrinkage=1.22
+)
+LFP_KWARGS_NP1 = {**LFP_KWARGS_NP2, "fill_grid": True, "shrinkage": 2.25}
+
+
+def cadzow_denoiser_np1(wav, h=None, **kwargs):
+    """
+    `cadzow_denoiser` with the LFP defaults for NP1 probes (checkerboard of 4 lateral positions).
+
+    Full grid (``fill_grid=True``) and Gavish-Donoho shrinkage (``shrinkage=2.25``), ``rank=5``, ``niter=1``,
+    ``fmax=None``, ``nswx=64``, ``ovx=32``, ``ppca_k=2``.  Any keyword overrides a default; the shrinkage scale is
+    only valid for ``nswx=64``, ``ovx=32``.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns), float
+    h : dict or None
+        Probe header with keys ``'x'`` and ``'y'``.  Defaults to the NP1 geometry.
+    **kwargs
+        Forwarded to `cadzow_denoiser`.
+
+    Returns
+    -------
+    wav_ : ndarray (nc, ns), float32
+    """
+    return cadzow_denoiser(wav, h=h, **{**LFP_KWARGS_NP1, **kwargs})
+
+
+def cadzow_denoiser_np2(wav, h=None, **kwargs):
+    """
+    `cadzow_denoiser` with the LFP defaults for NP2 and any probe whose positions fill their grid (single shank).
+
+    Gavish-Donoho shrinkage (``shrinkage=1.22``), ``rank=5``, ``niter=1``, ``fmax=None``, ``nswx=64``, ``ovx=32``,
+    ``ppca_k=2``.  Any keyword overrides a default; the shrinkage scale is only valid for ``nswx=64``, ``ovx=32``.
+
+    Parameters
+    ----------
+    wav : ndarray (nc, ns), float
+    h : dict or None
+        Probe header with keys ``'x'`` and ``'y'``.  Defaults to the NP2 single-shank geometry.
+    **kwargs
+        Forwarded to `cadzow_denoiser`.
+
+    Returns
+    -------
+    wav_ : ndarray (nc, ns), float32
+    """
+    if h is None:
+        h = {
+            k: v[: wav.shape[0]] for k, v in neuropixel.trace_header(version=2).items()
+        }
+    return cadzow_denoiser(wav, h=h, **{**LFP_KWARGS_NP2, **kwargs})
