@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.14.0] - 2026-10-10
 
 ### fixed
 - `ibldsp.cadzow.cadzow_denoiser`: opt-in `fill_grid` and `shrinkage` (Gavish-Donoho) remove the CSD seams at the window boundaries; `cadzow_denoiser_np1` / `cadzow_denoiser_np2` use them as LFP defaults
