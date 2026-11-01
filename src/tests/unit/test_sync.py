@@ -1,4 +1,3 @@
-import datetime
 import unittest
 import tempfile
 from pathlib import Path
@@ -13,11 +12,12 @@ TEST_PATH = Path(__file__).parents[1].joinpath("fixtures")
 
 
 class TestSyncTimestamps(unittest.TestCase):
-    def test_deprecation(self):
-        if datetime.datetime.now() > datetime.datetime(2026, 10, 12):
-            raise NotImplementedError(
-                "Time to deprecate ibldsp.utils.sync_timestamps()"
-            )
+    def test_removed_from_utils(self):
+        """`sync_timestamps` lives in `ibldsp.sync` only: the `ibldsp.utils` alias was removed in 1.15.0."""
+        import ibldsp.utils
+
+        self.assertFalse(hasattr(ibldsp.utils, "sync_timestamps"))
+        self.assertTrue(callable(ibldsp.sync.sync_timestamps))
 
     def test_sync_timestamps_linear(self):
         ta = np.cumsum(np.abs(np.random.randn(100))) * 10

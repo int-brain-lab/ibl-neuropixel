@@ -2,47 +2,8 @@
 Window generator, front detections, rms
 """
 
-import warnings
-
 import numpy as np
 import scipy
-
-
-def sync_timestamps(tsa, tsb, tbin=0.1, return_indices=False, linear=False):
-    """
-    .. deprecated:: X.Y.Z
-        `sync_timestamps` has been moved to `ibldsp.sync` module.
-        Use `from ibldsp.sync import sync_timestamps` instead.
-        This function will be removed in version X.Y.Z.
-
-    Sync two arrays of time stamps
-
-    :param tsa: vector of timestamps
-    :param tsb: vector of timestamps
-    :param tbin: time bin length
-    :param return_indices (bool), if True returns 2 sets of indices for tsa and tsb with
-    :param linear: (bool) if True, restricts the fit to linear
-    identified matches
-    :return:
-     function: interpolation function such as fnc(tsa) = tsb
-     float: drift in ppm
-     numpy array: of indices ia (if return_indices=True)
-     numpy array: of indices ib (if return_indices=True)
-    """
-    warnings.warn(
-        "sync_timestamps has been moved to ibldsp.sync module and will be removed "
-        "from ibldsp.utils in version X.Y.Z. "
-        "Please use 'from ibldsp.sync import sync_timestamps' instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Import and delegate to the new location
-    from ibldsp.sync import sync_timestamps as _sync_timestamps
-
-    return _sync_timestamps(
-        tsa, tsb, tbin=tbin, return_indices=return_indices, linear=linear
-    )
 
 
 def parabolic_max(x):
