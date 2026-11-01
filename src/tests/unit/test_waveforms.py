@@ -588,3 +588,45 @@ def test_waveform_indices():
             ]
         ),
     )
+
+
+class TestWaveformShapeRemap(unittest.TestCase):
+    def setUp(self):
+        self.df = pd.DataFrame(
+            {
+                "peak_time_idx": [42, 30],
+                "trough_time_idx": [48, 40],
+                "tip_time_idx": [37, 28],
+                "recovery_time_idx": [53, 45],
+                "peak_val": [-1.8e-4, -2e-4],
+                "trough_val": [3.5e-5, 4e-5],
+                "tip_val": [3e-5, 1e-5],
+                "recovery_slope": [-0.04, -0.03],
+            },
+            index=[7, 9],
+        )
+
+    def test_shape_features_values(self):
+        f = waveforms.waveform_shape_features(42, 48, 37, -1.8e-4, 3.5e-5)
+        self.assertEqual(f["spike_width"], 6)
+        self.assertEqual(f["predepolarisation_width"], 5)
+        self.assertAlmostEqual(f["spike_amplitude"], 2.15e-4)
+        self.assertAlmostEqual(f["peak_to_trough_ratio_log"], np.log(1.8e-4 / 3.5e-5))
+
+    def test_remap_dataframe(self):
+        out = waveforms.remap_waveform_shape_features(self.df, fs=30000)
+        for c in waveforms.SHAPE_REMAP_DROPPED_COLUMNS:
+            self.assertNotIn(c, out.columns)
+        # untouched columns are kept, the input is not modified
+        self.assertIn("recovery_slope", out.columns)
+        self.assertIn("peak_val", self.df.columns)
+        np.testing.assert_allclose(out["spike_width_secs"], [6 / 30000, 10 / 30000])
+        np.testing.assert_allclose(
+            out["predepolarisation_width_secs"], [5 / 30000, 2 / 30000]
+        )
+        self.assertTrue(out.index.equals(self.df.index))
+        # same result as the legacy column set, i.e. the log ratio of compute_spike_features
+        np.testing.assert_allclose(
+            out["peak_to_trough_ratio_log"],
+            waveforms.peak_to_trough_ratio(self.df.copy())["peak_to_trough_ratio_log"],
+        )

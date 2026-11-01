@@ -2,6 +2,9 @@
 
 ## [1.15.0] - 2026-11-01
 
+### added
+- `ibldsp.waveforms.waveform_shape_features` and `remap_waveform_shape_features`: reparametrise the peak / trough / tip points into `spike_width_secs`, `predepolarisation_width_secs`, `spike_amplitude` and `peak_to_trough_ratio_log`, dropping the raw columns they supersede
+
 ### removed
 - `ibldsp.utils.sync_timestamps`, deprecated alias of `ibldsp.sync.sync_timestamps`
 
