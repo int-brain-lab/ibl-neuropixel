@@ -540,6 +540,85 @@ def recovery_slope(df, fs=30000):
     return df
 
 
+# Raw waveform columns made redundant by `waveform_shape_features` (dropped by the df-level remap)
+SHAPE_REMAP_DROPPED_COLUMNS = (
+    "peak_time_idx",
+    "peak_val",
+    "trough_time_idx",
+    "trough_val",
+    "tip_time_idx",
+    "recovery_time_idx",
+)
+
+
+def waveform_shape_features(peak_time, trough_time, tip_time, peak_val, trough_val):
+    """
+    Reparametrise the raw peak / trough / tip points into a sparser, more interpretable set.
+
+    Elementwise, so any container works (scalars, numpy arrays, pandas Series, 3D volumes).
+    Note that the 'peak' is the negative deflection and the 'trough' the positive rebound
+    after it, so `spike_width` is the classic trough-to-peak width despite the name order.
+
+    Parameters
+    ----------
+    peak_time, trough_time, tip_time : array_like
+        Times of the three points, in any unit; the widths are returned in the same unit.
+    peak_val, trough_val : array_like
+        Amplitudes of the peak and the trough.
+
+    Returns
+    -------
+    dict
+        spike_width: trough_time - peak_time
+        predepolarisation_width: peak_time - tip_time
+        spike_amplitude: trough_val - peak_val
+        peak_to_trough_ratio_log: log(|peak_val / trough_val|)
+    """
+    return {
+        "spike_width": trough_time - peak_time,
+        "predepolarisation_width": peak_time - tip_time,
+        "spike_amplitude": trough_val - peak_val,
+        "peak_to_trough_ratio_log": np.log(np.abs(peak_val / trough_val)),
+    }
+
+
+def remap_waveform_shape_features(df, fs=30000):
+    """
+    Remap a dataframe of spike waveform features onto the sparser shape set.
+
+    Adds `spike_width_secs`, `predepolarisation_width_secs`, `spike_amplitude` and
+    `peak_to_trough_ratio_log` (see `waveform_shape_features`) computed from the sample
+    indices / amplitudes, and drops the columns in `SHAPE_REMAP_DROPPED_COLUMNS`
+    that they supersede. All other columns (slopes, tip_val, half-peak points...) are kept.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Output of `compute_spike_features`, possibly with extra columns. Needs the
+        `*_time_idx` and `*_val` columns of the peak, trough and tip.
+    fs : float
+        Sampling rate (Hz) to convert the sample indices into seconds.
+
+    Returns
+    -------
+    pd.DataFrame
+        A new dataframe, same index; the input is not modified.
+    """
+    feats = waveform_shape_features(
+        df["peak_time_idx"] / fs,
+        df["trough_time_idx"] / fs,
+        df["tip_time_idx"] / fs,
+        df["peak_val"],
+        df["trough_val"],
+    )
+    out = df.drop(columns=list(SHAPE_REMAP_DROPPED_COLUMNS), errors="ignore")
+    out["spike_width_secs"] = feats["spike_width"]
+    out["predepolarisation_width_secs"] = feats["predepolarisation_width"]
+    out["spike_amplitude"] = feats["spike_amplitude"]
+    out["peak_to_trough_ratio_log"] = feats["peak_to_trough_ratio_log"]
+    return out
+
+
 def dist_chanel_from_peak(channel_geometry, peak_trace_idx):
     """
     Compute distance for each channel from the peak channel, for each spike
