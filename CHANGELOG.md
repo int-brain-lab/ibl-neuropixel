@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.15.0] - 2026-11-01
+
+### removed
+- `ibldsp.utils.sync_timestamps`, deprecated alias of `ibldsp.sync.sync_timestamps`
+
 ## [1.14.0] - 2026-10-10
 
 ### fixed
