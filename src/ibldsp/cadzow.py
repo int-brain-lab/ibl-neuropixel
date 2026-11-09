@@ -125,6 +125,11 @@ def _fill_grid(wav, x, y, good=None):
         Grid coordinates, ordered by depth then lateral position.
     ireal : ndarray (nc,)
         Grid index of each channel.
+
+    Raises
+    ------
+    ValueError
+        If no channel is good: there is nothing to fill the grid from.
     """
     xu, yu = np.unique(x), np.unique(y)
     ireal = np.searchsorted(yu, y) * xu.size + np.searchsorted(xu, x)
@@ -140,6 +145,8 @@ def _fill_grid(wav, x, y, good=None):
         acc = gp[:-2, 1:-1] + gp[2:, 1:-1] + gp[1:-1, :-2] + gp[1:-1, 2:]
         cnt = kp[:-2, 1:-1] * 1 + kp[2:, 1:-1] + kp[1:-1, :-2] + kp[1:-1, 2:]
         new = ~known & (cnt > 0)
+        if not new.any():  # nothing known to grow from: the loop would never end
+            raise ValueError("Cadzow grid fill: no good channel")
         g[new] = acc[new] / cnt[new][:, np.newaxis]
         known |= new
     gx, gy = np.meshgrid(xu, yu)

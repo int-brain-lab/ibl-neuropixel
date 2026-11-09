@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.15.1] - unreleased
+
+### fixed
+- `ibldsp.cadzow.cadzow_denoiser`: raises `ValueError` when every channel is in `bad_channels`, instead of hanging in the grid fill
+
 ## [1.15.0] - 2026-11-01
 
 ### added
