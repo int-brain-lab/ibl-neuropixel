@@ -333,7 +333,7 @@ class NP2Converter:
         ]
 
         # Low pass filter (acts as both anti-aliasing and LP filter)
-        butter_lp_kwargs = {"N": 2, "Wn": 1000 / self.fs_lf / 2, "btype": "lowpass"}
+        butter_lp_kwargs = {"N": 4, "Wn": 0.8 * self.fs_lf / 2, "fs": self.fs_ap, "btype": "lowpass"}
         self.sos_lp = scipy.signal.butter(**butter_lp_kwargs, output="sos")
 
         # Number of ap channels
