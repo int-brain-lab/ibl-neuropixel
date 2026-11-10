@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import uuid
 
@@ -8,6 +9,112 @@ import one.alf.io as alfio
 
 import spikeglx
 import ibldsp.utils
+
+_logger = logging.getLogger("ibllib")
+
+SYNC_QC_CRITERIA = (
+    "sync_present",
+    "same_duration",
+    "same_n_edges",
+    "regular",
+    "complete",
+)
+
+
+def spikeglx_sync_qc(
+    md_nidq, md_probe, t_nidq, t_probe, half_period=None, tol=0.01, label=""
+):
+    """
+    Check whether the imec sync edges of a probe and of the nidq can be paired one to one.
+
+    The imec sync is a periodic square wave recorded on both streams. Pairing edge `i` of the probe with
+    edge `i` of the nidq is only safe if both files hold the same, complete, regular train of edges. Five
+    criteria are evaluated, each one logs a warning when it fails:
+
+    0. `sync_present`: at least two edges on both streams.
+    1. `same_duration`: `|probe.fileTimeSecs - nidq.fileTimeSecs| < h / 2`.
+    2. `same_n_edges`: both streams hold the same number of edges.
+    3. `regular`: every interval between consecutive edges is within `[h / 2, 3 h / 2]`, on both streams.
+    4. `complete`: the first edge is within `h + tol` of the file start and the last edge within `h + tol`
+       of the file end, on both streams: no edge is missing at either end of the file.
+
+    `h` is the sync half-period, `syncSourcePeriod / 2` in the meta-data.
+
+    Parameters
+    ----------
+    md_nidq : dict
+        nidq meta-data, as returned by `spikeglx.read_meta_data`.
+    md_probe : dict
+        Probe ap meta-data, as returned by `spikeglx.read_meta_data`.
+    t_nidq : numpy.ndarray
+        Times (s) of the imec sync edges (rising and falling) on the nidq, from the start of the nidq file.
+    t_probe : numpy.ndarray
+        Times (s) of the imec sync edges (rising and falling) on the probe, from the start of the probe file.
+    half_period : float, optional
+        Sync half-period `h` (s). Defaults to half the nidq `syncSourcePeriod`, or 0.5 s if absent.
+    tol : float, optional
+        Tolerance (s) added to `h` for the `complete` criterion, default 0.01.
+    label : str, optional
+        Prefix of the warning messages, for example the session path and probe name.
+
+    Returns
+    -------
+    dict
+        One boolean per criterion in `SYNC_QC_CRITERIA`, `passed` (all criteria pass) and the measured values:
+        `half_period`, `dT` (probe minus nidq `fileTimeSecs`, s), `dn_edges` (probe minus nidq edge count),
+        `k` (`dT / h` rounded: number of half-periods by which the durations differ), and per stream
+        (`<s>` in `nidq`, `probe`): `<s>_n_edges`, `<s>_min_interval`, `<s>_max_interval`, `<s>_head`
+        (time of the first edge) and `<s>_tail` (`fileTimeSecs` minus time of the last edge), in s.
+    """
+    t = {
+        "nidq": np.asarray(t_nidq, dtype=float),
+        "probe": np.asarray(t_probe, dtype=float),
+    }
+    md = {"nidq": md_nidq, "probe": md_probe}
+    h = half_period or float(md_nidq.get("syncSourcePeriod", 1.0)) / 2
+    out = {"half_period": h}
+    for s, ts in t.items():
+        dt = np.diff(ts)
+        out[f"{s}_n_edges"] = ts.size
+        out[f"{s}_min_interval"] = dt.min() if dt.size else np.nan
+        out[f"{s}_max_interval"] = dt.max() if dt.size else np.nan
+        out[f"{s}_head"] = ts[0] if ts.size else np.nan
+        out[f"{s}_tail"] = float(md[s]["fileTimeSecs"]) - ts[-1] if ts.size else np.nan
+    out["dT"] = float(md_probe["fileTimeSecs"]) - float(md_nidq["fileTimeSecs"])
+    out["k"] = int(np.round(out["dT"] / h))
+    out["dn_edges"] = out["probe_n_edges"] - out["nidq_n_edges"]
+    # NaN comparisons are False: criteria 3 and 4 fail when the sync is absent
+    out["sync_present"] = out["nidq_n_edges"] >= 2 and out["probe_n_edges"] >= 2
+    out["same_duration"] = abs(out["dT"]) < h / 2
+    out["same_n_edges"] = out["dn_edges"] == 0
+    out["regular"] = all(
+        out[f"{s}_min_interval"] >= h / 2 and out[f"{s}_max_interval"] <= 3 * h / 2
+        for s in t
+    )
+    out["complete"] = all(
+        out[f"{s}_head"] <= h + tol and out[f"{s}_tail"] <= h + tol for s in t
+    )
+    out["passed"] = all(out[c] for c in SYNC_QC_CRITERIA)
+
+    messages = {
+        "sync_present": f"imec sync edges missing: nidq {out['nidq_n_edges']}, probe {out['probe_n_edges']}",
+        "same_duration": f"probe and nidq file durations differ by {out['dT']:.3f} s ({out['k']} half-periods)",
+        "same_n_edges": f"probe and nidq edge counts differ by {out['dn_edges']} "
+        f"(nidq {out['nidq_n_edges']}, probe {out['probe_n_edges']})",
+        "regular": "irregular sync edge intervals (s): "
+        + ", ".join(
+            f"{s} [{out[f'{s}_min_interval']:.3f}, {out[f'{s}_max_interval']:.3f}]"
+            for s in t
+        ),
+        "complete": "sync edges missing at the file start or end (s): "
+        + ", ".join(
+            f"{s} head {out[f'{s}_head']:.3f} tail {out[f'{s}_tail']:.3f}" for s in t
+        ),
+    }
+    for c in SYNC_QC_CRITERIA:
+        if not out[c]:
+            _logger.warning(f"{label} {messages[c]}".strip())
+    return out
 
 
 def extract_spikeglx_sync(raw_ephys_apfile, output_path=None, save=False, parts=""):
