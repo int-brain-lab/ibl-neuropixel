@@ -317,6 +317,14 @@ class TestCadzowBadChannels(unittest.TestCase):
         )
         np.testing.assert_array_equal(out, out2)
 
+    def test_all_bad_channels_raise(self):
+        """All channels bad leaves nothing to fill the grid from: raise rather than loop forever."""
+        wav = _laminar_field(ns=64)
+        with self.assertRaisesRegex(ValueError, "no good channel"):
+            ibldsp.cadzow.cadzow_denoiser(
+                wav, h=self.HXY, bad_channels=np.ones(384, dtype=bool), **self.KWARGS
+            )
+
     def test_bad_channels_csd(self):
         """Bad channels as missing beat interpolation before/after Cadzow on the CSD around them."""
         from ibldsp.voltage import current_source_density, interpolate_bad_channels

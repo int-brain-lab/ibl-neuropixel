@@ -102,3 +102,57 @@ class TestSyncSpikeGlx:
             np.testing.assert_equal(
                 len(df_sync["channels"].unique()), sync_depth + len(csel)
             )
+
+
+class TestSpikeglxSyncQC(unittest.TestCase):
+    """spikeglx_sync_qc on synthetic 1 Hz sync trains (one edge every 0.5 s)."""
+
+    def setUp(self):
+        self.t = 0.145 + np.arange(200) * 0.5  # last edge at 99.645 s
+        self.md = {"fileTimeSecs": 100.0, "syncSourcePeriod": 1.0}
+
+    def qc(self, t_probe, md_probe=None):
+        return ibldsp.sync.spikeglx_sync_qc(
+            self.md, md_probe or self.md, self.t, t_probe
+        )
+
+    def assert_failures(self, out, failures):
+        self.assertEqual(
+            {c for c in ibldsp.sync.SYNC_QC_CRITERIA if not out[c]}, set(failures)
+        )
+        self.assertEqual(out["passed"], len(failures) == 0)
+
+    def test_good_probe(self):
+        with self.assertNoLogs("ibllib", level="WARNING"):
+            out = self.qc(self.t + 0.003)
+        self.assert_failures(out, [])
+        self.assertEqual(out["half_period"], 0.5)
+
+    def test_missing_edges_at_start(self):
+        # the nidq file starts one second late: its first two edges are missing, the durations differ by k = 2
+        out = ibldsp.sync.spikeglx_sync_qc(
+            self.md, {"fileTimeSecs": 101.0}, self.t, np.r_[0.145, 0.645, self.t + 1]
+        )
+        self.assert_failures(out, ["same_duration", "same_n_edges"])
+        self.assertEqual((out["k"], out["dn_edges"]), (2, 2))
+
+    def test_incomplete_start_and_end(self):
+        with self.assertLogs("ibllib", level="WARNING") as log:
+            self.assert_failures(self.qc(self.t[2:]), ["same_n_edges", "complete"])
+        self.assertIn("missing at the file start or end", log.output[-1])
+        self.assert_failures(self.qc(self.t[:-2]), ["same_n_edges", "complete"])
+
+    def test_irregular(self):
+        self.assert_failures(
+            self.qc(np.delete(self.t, 100)), ["same_n_edges", "regular"]
+        )
+        self.assert_failures(
+            self.qc(self.t + np.where(np.arange(self.t.size) == 100, 0.3, 0)),
+            ["regular"],
+        )
+
+    def test_no_sync(self):
+        self.assert_failures(
+            self.qc(np.array([])),
+            ["sync_present", "same_n_edges", "regular", "complete"],
+        )
