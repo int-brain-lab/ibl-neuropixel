@@ -240,16 +240,49 @@ def _make_synthetic_slowness_wave(slowness_true, fs=30_000.0, n_channels=5, dy_u
 
 
 def test_compute_slowness_recovers_known_value():
-    for slowness_true in (-0.4, 0.0, 0.3):
-        arr, channel_geometry, peak_idx = _make_synthetic_slowness_wave(slowness_true)
-        df = waveforms.find_peak(arr)
-        assert df["peak_trace_idx"].iloc[0] == peak_idx
+    for moving_window in (True, False):
+        for slowness_true in (-0.4, 0.0, 0.3):
+            arr, channel_geometry, peak_idx = _make_synthetic_slowness_wave(
+                slowness_true
+            )
+            df = waveforms.find_peak(arr)
+            assert df["peak_trace_idx"].iloc[0] == peak_idx
 
-        df = waveforms.compute_slowness(arr, df, channel_geometry)
-        # Sub-sample pick + a 5-channel fit (much less averaging than a real ~20-30
-        # channel neighbourhood) leaves more estimation noise than the ~0.1-sample RMSE
-        # measured on real data (see compute_slowness's docstring), hence the loose delta.
-        np.testing.assert_allclose(df["slowness_s_per_m"].iloc[0], slowness_true, atol=0.1)
+            df = waveforms.compute_slowness(
+                arr, df, channel_geometry, moving_window=moving_window
+            )
+            # Sub-sample pick + a 5-channel fit (much less averaging than a real ~20-30
+            # channel neighbourhood) leaves more estimation noise than the ~0.1-sample
+            # RMSE measured on real data, hence the loose delta.
+            np.testing.assert_allclose(
+                df["slowness_s_per_m"].iloc[0], slowness_true, atol=0.1
+            )
+
+
+def test_compute_slowness_moving_window_reduces_bias():
+    """Slow propagation over a 40-channel NP1 neighbourhood: with a fixed window, the
+    arrival on distant channels slides into the taper edge and the slowness is pulled
+    towards zero (~4.7 s/m for a true 6 s/m at 0.5 ms); the moving window follows the
+    arrival and recovers it within ~7%."""
+    th = trace_header(version=1)
+    ichan = np.arange(150, 190)
+    wxy = np.c_[th["x"][ichan], th["y"][ichan], np.zeros(ichan.size)]
+    for slowness_true in (-6.0, 6.0):
+        # generate_waveform's `vertical_velocity_mps` is a slowness in s/m
+        wav = generate_waveform(
+            sxy=np.r_[wxy[20, :2], 0.0], wxy=wxy, vertical_velocity_mps=slowness_true
+        )
+        arr = np.zeros((1, 128, ichan.size))
+        arr[0, 40:, :] = wav[:, : 128 - 40].T
+        df = waveforms.find_peak(arr)
+        s_moving, s_fixed = (
+            waveforms.compute_slowness(
+                arr, df.copy(), wxy[np.newaxis].copy(), moving_window=mw
+            )["slowness_s_per_m"].iloc[0]
+            for mw in (True, False)
+        )
+        np.testing.assert_allclose(s_moving, slowness_true, rtol=0.1)
+        assert abs(s_fixed) < abs(s_moving) < abs(slowness_true) * 1.05
 
 
 def test_compute_slowness_too_few_channels_is_nan():

@@ -5,6 +5,9 @@
 ### added
 - `ibldsp.sync.spikeglx_sync_qc`: checks from the meta-data and the imec sync edges whether probe and nidq edges can be paired one to one (sync present, same `fileTimeSecs`, same edge count, regular intervals, complete at both file ends) and logs a warning per failing criterion
 
+### changed
+- `ibldsp.waveforms.compute_slowness`: the Hanning window now follows the arrival along the neighbour-to-neighbour chain (new `moving_chained_xcorr_pick`), reducing the bias towards zero for slow propagation; this changes `slowness_s_per_m` values. `moving_window=False` reproduces the previous fixed-window results
+
 ### fixed
 - `ibldsp.cadzow.cadzow_denoiser`: raises `ValueError` when every channel is in `bad_channels`, instead of hanging in the grid fill
 
