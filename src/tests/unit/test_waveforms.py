@@ -260,10 +260,8 @@ def test_compute_slowness_recovers_known_value():
 
 
 def test_compute_slowness_moving_window_reduces_bias():
-    """Slow propagation over a 40-channel NP1 neighbourhood: with a fixed window, the
-    arrival on distant channels slides into the taper edge and the slowness is pulled
-    towards zero (~4.7 s/m for a true 6 s/m at 0.5 ms); the moving window follows the
-    arrival and recovers it within ~7%."""
+    """At 6 s/m over 40 NP1 channels, the fixed window underestimates (~4.7 s/m), the
+    moving window recovers it within 10%."""
     th = trace_header(version=1)
     ichan = np.arange(150, 190)
     wxy = np.c_[th["x"][ichan], th["y"][ichan], np.zeros(ichan.size)]
