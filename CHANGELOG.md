@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.15.1] - unreleased
+## [1.15.1] - 2026-11-13
 
 ### added
 - `ibldsp.sync.spikeglx_sync_qc`: checks from the meta-data and the imec sync edges whether probe and nidq edges can be paired one to one (sync present, same `fileTimeSecs`, same edge count, regular intervals, complete at both file ends) and logs a warning per failing criterion
