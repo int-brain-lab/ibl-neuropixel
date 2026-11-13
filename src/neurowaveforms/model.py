@@ -16,7 +16,8 @@ def generate_waveform(
     :param sxy: 3 elements np.array containing coordinates of the spike
     :param wxy: ntraces by 3 np.array containing the generated traces coordinates
     :param fs: sampling frequency
-    :param vertical_velocity_mps: vertical velocity of the spike in m/s
+    :param vertical_velocity_mps: despite its name, the vertical *slowness* of the spike
+     in s/m: traces are delayed by dy (m) * vertical_velocity_mps seconds
     :param decay_exponent: the spike amplitude is scaled down
     :return: the generated waveform ns by ntraces
     """

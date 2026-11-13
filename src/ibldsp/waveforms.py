@@ -4,6 +4,8 @@ Throughout the code, the convention is to have 2D waveforms in the (time, traces
 For efficiency, several wavforms are fed in a memory contiguous manner: (iwaveform, time, traces)
 """
 
+import itertools
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -847,6 +849,56 @@ def weighted_lstsq_plane(x, y, z, w):
     return beta[0], beta[1]
 
 
+def moving_chained_xcorr_pick(wav, t_ref, ref_row, order, half_win, hann):
+    """
+    Same as `chained_xcorr_pick`, but each link is tapered around the arrival accumulated
+    along the chain instead of around the reference peak.
+
+    Parameters
+    ----------
+    wav : np.ndarray
+        (n_samples, n_channels) untapered waveform.
+    t_ref : int
+        Peak sample of the reference channel.
+    ref_row : int
+        Column index of the reference channel.
+    order : np.ndarray
+        Walk order of the channels, must include `ref_row`.
+    half_win : int
+        Half-width of the Hanning window, in samples.
+    hann : np.ndarray
+        np.hanning(2 * half_win + 1) taper.
+
+    Returns
+    -------
+    dt_samples : np.ndarray
+        (n_channels,) arrival relative to the reference channel; NaN if not reached.
+    weight : np.ndarray
+        (n_channels,) weakest correlation coefficient along the path; 0 if not reached.
+    """
+    ncw = wav.shape[1]
+    dt = np.full(ncw, np.nan)
+    weight = np.zeros(ncw)
+    dt[ref_row] = 0.0
+    weight[ref_row] = 1.0
+
+    order = np.asarray(order)
+    ref_pos = int(np.flatnonzero(order == ref_row)[0])
+    for chain in (order[ref_pos::-1], order[ref_pos:]):
+        for a, b in itertools.pairwise(chain):
+            # both channels of a link share one window, centred on channel a's arrival
+            centre = int(np.round(t_ref + dt[a]))
+            seg, _, _ = hanning_window_segment(
+                wav[np.newaxis][:, :, [a, b]], 0, centre, half_win, hann
+            )
+            if seg is None:
+                break
+            lag, w = pairwise_xcorr_pick(seg, np.array([0]), np.array([1]))
+            dt[b] = dt[a] + lag[0]
+            weight[b] = min(weight[a], w[0])
+    return dt, weight
+
+
 def compute_slowness(
     arr,
     df,
@@ -855,6 +907,7 @@ def compute_slowness(
     half_window_ms=0.5,
     min_channels=4,
     min_weight_frac=0.1,
+    moving_window=False,
 ):
     """
     Compute the signed slowness of a set of multi-channel waveforms and add it to `df`.
@@ -864,6 +917,10 @@ def compute_slowness(
     chained, neighbour-to-neighbour pick is used instead of `xcorr_pick` against a single
     fixed reference channel (gradual spatial drift in waveform shape can make the latter
     lock onto the wrong cycle of an oscillatory waveform at long range).
+
+    The fixed window biases the slowness towards zero for slow propagation, as the
+    arrival on distant channels slides into the taper; `moving_window=True` uses
+    `moving_chained_xcorr_pick` instead.
 
     The picks are then fit with a full 3D (`weighted_lstsq_plane`) weighted linear fit,
     `dt = slowness_x * dx + slowness_y * dy + t0`, but only the axial term
@@ -900,6 +957,8 @@ def compute_slowness(
     :param min_weight_frac: channels with a weight below this fraction of the
      neighbourhood's max are dropped before fitting (keeps the fit local to channels with
      a real pick, not noise floor)
+    :param moving_window: if True, the window follows the arrival along the chain;
+     False (default) keeps one window for all channels
     :return: df, with an added 'slowness_s_per_m' column (N(spikes),), NaN where a fit
      couldn't be attempted
     """
@@ -912,9 +971,10 @@ def compute_slowness(
 
     slowness = np.full(n_spikes, np.nan)
     for i in range(n_spikes):
-        seg, _, _ = hanning_window_segment(arr, i, peak_time[i], half_win, hann)
-        if seg is None:
-            continue
+        if not moving_window:
+            seg, _, _ = hanning_window_segment(arr, i, peak_time[i], half_win, hann)
+            if seg is None:
+                continue
         x = channel_geometry[i, :, 0]
         y = channel_geometry[i, :, 1]
         valid_ch = np.isfinite(x) & np.isfinite(y)
@@ -923,7 +983,12 @@ def compute_slowness(
 
         order = np.flatnonzero(valid_ch)
         order = order[np.argsort(y[order])]
-        lag, weight = chained_xcorr_pick(seg, peak_trace[i], order)
+        if moving_window:
+            lag, weight = moving_chained_xcorr_pick(
+                arr[i], peak_time[i], peak_trace[i], order, half_win, hann
+            )
+        else:
+            lag, weight = chained_xcorr_pick(seg, peak_trace[i], order)
         dt = lag / fs
         dx = x - x[peak_trace[i]]
         dy = y - y[peak_trace[i]]
