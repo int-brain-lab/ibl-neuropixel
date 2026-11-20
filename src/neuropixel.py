@@ -71,7 +71,8 @@ CHANNEL_GRID = {
     2: dict(DX=32, X0=27, DY=15, Y0=20),
     "NPultra": dict(DX=6, X0=0, DY=6, Y0=0),
     "NP2QB": dict(DX=32, X0=27, DY=15, Y0=20),
-    "NHPlong": dict(DX=87 / 2, X0=27, DY=15, Y0=20),
+    # ProbeTable NP1030: 87 um pitch, 16 um stagger, columns 0, 1, 87/16, 87/16 + 1 (mirrored)
+    "NHPlong": dict(DX=16, X0=11, DY=20, Y0=20),
 }
 
 
@@ -142,8 +143,10 @@ def dense_layout(version=1, nshank=1, nc=NC):
         "row": np.floor(np.arange(nc) / 2),
         "shank": np.zeros(nc),
     }
-    if version in [1, "NHPlong"]:  # version 1 has a dense layout, checkerboard pattern
+    if version == 1:  # version 1 has a dense layout, checkerboard pattern
         ch.update({"col": np.tile(np.array([2, 0, 3, 1]), int(nc / 4))})
+    elif version == "NHPlong":  # same checkerboard, the second site of a row is 87 um away
+        ch.update({"col": np.tile(np.array([87 / 16, 0, 87 / 16 + 1, 1]), int(nc / 4))})
     elif version == "NPultra":  # NPultra has 8 columns with square grid spacing
         ch.update({"row": np.floor(np.arange(nc) / 8)})
         ch.update({"col": np.tile(np.arange(8), int(nc / 8))})

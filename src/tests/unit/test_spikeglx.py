@@ -399,6 +399,13 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
             )
             self.assert_read_glx(bin_3b)
 
+    def test_NHP_geometry(self):
+        md = spikeglx.read_meta_data(self.workdir / "sampleNHPlong_prototype.ap.meta")
+        th = spikeglx.geometry_from_meta(md)
+        np.testing.assert_array_equal(np.unique(th["x"]), [11, 27, 98, 114])
+        np.testing.assert_array_equal(np.unique(th["col"]), [0, 1, 87 / 16, 87 / 16 + 1])
+        np.testing.assert_array_equal(np.unique(np.diff(np.unique(th["y"]))), [20])
+
     def test_read_NP21(self):
         with tempfile.TemporaryDirectory(prefix="glx_test") as tdir:
             bin_3b = spikeglx._mock_spikeglx_file(

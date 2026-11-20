@@ -857,14 +857,19 @@ def geometry_from_meta(meta_data, return_index=False, nc=384, sort=True):
     if "x" in cm.keys():
         # the spike sorting channel maps have a flipped version of the channel map
         # there is a 20um offset between the probe tip and the first site in the coordinate conversion
-        if major_version == 1:
-            th["x"] = 70 - (th["x"])
+        match major_version:
+            case 1:
+                th["x"] = 70 - th["x"]
+            case "NHPlong":
+                th["x"] = 125 - th["x"]
         th["y"] += 20
         th.update(neuropixel.xy2rc(th["x"], th["y"], version=major_version))
     else:
         # the spike sorting channel maps have a flipped version of the channel map
         if major_version in [1, "NHPlong"]:
             th["col"] = -cm["col"] * 2 + 2 + np.mod(cm["row"], 2)
+            if major_version == "NHPlong":
+                th["col"] = np.array([0, 1, 87 / 16, 87 / 16 + 1])[th["col"].astype(int)]
         th.update(neuropixel.rc2xy(th["row"], th["col"], version=major_version))
     th["sample_shift"], th["adc"] = neuropixel.adc_shifts(version=major_version)
     th = _split_geometry_into_shanks(th, meta_data)
