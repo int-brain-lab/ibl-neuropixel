@@ -6,6 +6,11 @@ Collection of tools to handle Neuropixel 1.0 and 2.0 data
 Minimum Python version supported is 3.10
 `uv pip install ibl-neuropixel`
 
+## Probe geometry
+`neuropixel.trace_header(version)` returns the default channel map of a probe, and `spikeglx.geometry_from_meta` the one recorded in a SpikeGLX meta file.
+Columns and rows map to coordinates in um with `x = X0 + col * DX` and `y = Y0 + row * DY` (`neuropixel.CHANNEL_GRID`, `neuropixel.rc2xy` and `neuropixel.xy2rc`).
+
+![Default channel maps](./docs/default_channel_maps.webp "Default channel maps")
 
 ## Destriping
 ### Getting started

@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### fixed
+- NHP long (NP1030) geometry follows the SpikeGLX ProbeTable: 87 um column pitch, 20 um row pitch, mirrored on the 125 um shank
+
 ## [1.15.1] - 2026-11-13
 
 ### added
